@@ -1,0 +1,42 @@
+# Node dependencies
+node_modules/
+**/node_modules/
+
+# Environment variables
+.env
+backend/.env
+frontend/.env
+
+# Log files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+logs/
+*.log
+
+# IDE / OS files
+.DS_Store
+Thumbs.db
+
+# Build output
+frontend/build/
+
+# Backend runtime data
+backend/data/*.xlsx
+
+# Ignore npm package lock files only if generated in node_modules (keep root locks)
+**/package-lock.json
+**/yarn.lock
+**/pnpm-lock.yaml
+
+# Local caches
+**/.cache/
+**/.parcel-cache/
+
+# Coverage
+coverage/
+
+# Editor folders
+.vscode/
+.idea/
