@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
+import { apiClient } from '../api';
 
 const AuthContext = createContext(null);
 
@@ -13,35 +14,37 @@ export function AuthProvider({ children }) {
     if (token && savedUser) {
       setUser(JSON.parse(savedUser));
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     }
     setLoading(false);
   }, []);
 
   const login = async (username, password) => {
-    const { data } = await axios.post('/api/auth/login', { username, password });
+    const { data } = await apiClient.post('/api/auth/login', { username, password });
     localStorage.setItem('cims_token', data.token);
     localStorage.setItem('cims_user', JSON.stringify(data.user));
     axios.defaults.headers.common['Authorization'] = `Bearer ${data.token}`;
+    apiClient.defaults.headers.common['Authorization'] = `Bearer ${data.token}`;
     setUser(data.user);
     return data.user;
   };
 
   const refreshProfile = async () => {
-    const { data } = await axios.get('/api/auth/profile');
+    const { data } = await apiClient.get('/api/auth/profile');
     localStorage.setItem('cims_user', JSON.stringify(data.user));
     setUser(data.user);
     return data.user;
   };
 
   const updateProfile = async (payload) => {
-    const { data } = await axios.put('/api/auth/profile', payload);
+    const { data } = await apiClient.put('/api/auth/profile', payload);
     localStorage.setItem('cims_user', JSON.stringify(data.user));
     setUser(data.user);
     return data.user;
   };
 
   const register = async (payload) => {
-    const { data } = await axios.post('/api/auth/register', payload);
+    const { data } = await apiClient.post('/api/auth/register', payload);
     return data;
   };
 
