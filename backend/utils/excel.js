@@ -1,21 +1,25 @@
+console.log('excel.js loaded');
+
 const ExcelJS = require('exceljs');
 const path = require('path');
 const fs = require('fs/promises');
+const fsSync = require('fs');
+const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
+const { CENTERS, getCenterById, requireCenter } = require('./centers');
+console.log('__dirname:', __dirname);
 
 const DATA_DIR = path.join(__dirname, '../data');
+const getUsersFile = (centerId) => path.join(DATA_DIR, centerId, 'users.xlsx');
 
 const FILES = {
-  inventory: path.join(DATA_DIR, 'inventory.xlsx'),
-  orders: path.join(DATA_DIR, 'orders.xlsx'),
-  users: path.join(DATA_DIR, 'users.xlsx'),
-  logs: path.join(DATA_DIR, 'activity_logs.xlsx'),
-  whatsapp: path.join(DATA_DIR, 'whatsapp_messages.xlsx'),
-  orderMeta: path.join(DATA_DIR, 'order_meta.json'),
+  dataDir: DATA_DIR,
 };
 
 const INVENTORY_COLUMNS = [
   { header: 'Component ID', key: 'id', width: 18 },
+  { header: 'Center ID', key: 'centerId', width: 18 },
+  { header: 'Center Name', key: 'centerName', width: 28 },
   { header: 'Name', key: 'name', width: 28 },
   { header: 'Category', key: 'category', width: 20 },
   { header: 'Description', key: 'description', width: 40 },
@@ -32,6 +36,8 @@ const INVENTORY_COLUMNS = [
 
 const ORDER_COLUMNS = [
   { header: 'Order ID', key: 'orderId', width: 20 },
+  { header: 'Center ID', key: 'centerId', width: 18 },
+  { header: 'Center Name', key: 'centerName', width: 28 },
   { header: 'Date & Time', key: 'createdAt', width: 20 },
   { header: 'Student Name', key: 'studentName', width: 22 },
   { header: 'Username', key: 'username', width: 18 },
@@ -64,6 +70,8 @@ const ORDER_COLUMNS = [
 
 const USER_COLUMNS = [
   { header: 'User ID', key: 'id', width: 18 },
+  { header: 'Center ID', key: 'centerId', width: 18 },
+  { header: 'Center Name', key: 'centerName', width: 28 },
   { header: 'Username', key: 'username', width: 20 },
   { header: 'Password Hash', key: 'passwordHash', width: 65 },
   { header: 'Full Name', key: 'fullName', width: 25 },
@@ -74,7 +82,7 @@ const USER_COLUMNS = [
   { header: 'Year of Graduation', key: 'graduationYear', width: 16 },
   { header: 'Degree', key: 'degree', width: 16 },
   { header: 'Department', key: 'department', width: 18 },
-  { header: 'Role', key: 'role', width: 12 },
+  { header: 'Role', key: 'role', width: 14 },
   { header: 'Active', key: 'active', width: 10 },
   { header: 'Created At', key: 'createdAt', width: 20 },
   { header: 'Source', key: 'source', width: 14 },
@@ -82,6 +90,8 @@ const USER_COLUMNS = [
 
 const LOG_COLUMNS = [
   { header: 'Timestamp', key: 'ts', width: 22 },
+  { header: 'Center ID', key: 'centerId', width: 18 },
+  { header: 'Center Name', key: 'centerName', width: 28 },
   { header: 'User', key: 'user', width: 20 },
   { header: 'Role', key: 'role', width: 12 },
   { header: 'Action', key: 'action', width: 25 },
@@ -90,6 +100,8 @@ const LOG_COLUMNS = [
 
 const WHATSAPP_COLUMNS = [
   { header: 'Message ID', key: 'messageId', width: 40 },
+  { header: 'Center ID', key: 'centerId', width: 18 },
+  { header: 'Center Name', key: 'centerName', width: 28 },
   { header: 'Timestamp', key: 'ts', width: 22 },
   { header: 'Direction', key: 'direction', width: 12 },
   { header: 'From', key: 'from', width: 24 },
@@ -101,34 +113,44 @@ const WHATSAPP_COLUMNS = [
   { header: 'Status', key: 'status', width: 18 },
 ];
 
-// ─── WORKBOOK HELPERS ───────────────────────────────────────────────────────
+async function ensureDir(dirPath) {
+  await fs.mkdir(dirPath, { recursive: true });
+}
+
+function getCenterPaths(centerId) {
+  const center = requireCenter(centerId);
+  const baseDir = path.join(DATA_DIR, center.id);
+  return {
+    baseDir,
+    inventory: path.join(baseDir, `${center.id}_inventory.xlsx`),
+    orders: path.join(baseDir, `${center.id}_orders.xlsx`),
+    logs: path.join(baseDir, `${center.id}_logs.xlsx`),
+    whatsapp: path.join(baseDir, `${center.id}_whatsapp_messages.xlsx`),
+  };
+}
+
+function getOrderMetaPath(centerId) {
+  return path.join(getCenterPaths(centerId).baseDir, `${centerId}_order_meta.json`);
+}
+
+function getWorkbookFile(type, centerId) {
+  if (type === 'users') return getUsersFile(centerId);
+  return getCenterPaths(centerId)[type];
+}
 
 async function loadWorkbook(filePath) {
-  const wb = new ExcelJS.Workbook();
+  const workbook = new ExcelJS.Workbook();
   try {
-    await wb.xlsx.readFile(filePath);
+    await workbook.xlsx.readFile(filePath);
   } catch {
-    // File doesn't exist yet — blank workbook
+    // first run
   }
-  return wb;
+  return workbook;
 }
 
-async function saveWorkbook(wb, filePath) {
-  await wb.xlsx.writeFile(filePath);
-}
-
-async function loadOrderMetaStore() {
-  try {
-    const raw = await fs.readFile(FILES.orderMeta, 'utf8');
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-async function saveOrderMetaStore(store) {
-  await fs.writeFile(FILES.orderMeta, JSON.stringify(store, null, 2), 'utf8');
+async function saveWorkbook(workbook, filePath) {
+  await ensureDir(path.dirname(filePath));
+  await workbook.xlsx.writeFile(filePath);
 }
 
 function normalizeCellValue(value) {
@@ -146,25 +168,16 @@ function normalizeBoolean(value) {
   return normalized === true || normalized === 'true' || normalized === 1 || normalized === '1';
 }
 
-function applyWorksheetColumns(ws, columns) {
-  ws.columns = columns;
-  styleHeader(ws.getRow(1));
-}
-
-function createStyledWorksheet(wb, name, columns, options = {}) {
-  const ws = wb.addWorksheet(name, options);
-  applyWorksheetColumns(ws, columns);
-  return ws;
-}
-
 function styleHeader(row) {
   row.eachCell(cell => {
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A237E' } };
     cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
     cell.alignment = { horizontal: 'center', vertical: 'middle' };
     cell.border = {
-      top: { style: 'thin' }, left: { style: 'thin' },
-      bottom: { style: 'thin' }, right: { style: 'thin' }
+      top: { style: 'thin' },
+      left: { style: 'thin' },
+      bottom: { style: 'thin' },
+      right: { style: 'thin' },
     };
   });
   row.height = 22;
@@ -173,287 +186,48 @@ function styleHeader(row) {
 function styleDataRow(row, isEven) {
   row.eachCell(cell => {
     cell.fill = {
-      type: 'pattern', pattern: 'solid',
-      fgColor: { argb: isEven ? 'FFF5F5F5' : 'FFFFFFFF' }
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: isEven ? 'FFF5F5F5' : 'FFFFFFFF' },
     };
     cell.alignment = { vertical: 'middle', wrapText: true };
     cell.border = {
-      top: { style: 'hair' }, left: { style: 'hair' },
-      bottom: { style: 'hair' }, right: { style: 'hair' }
+      top: { style: 'hair' },
+      left: { style: 'hair' },
+      bottom: { style: 'hair' },
+      right: { style: 'hair' },
     };
   });
 }
 
-function createUsersWorksheet(wb) {
-  return createStyledWorksheet(wb, 'Users', USER_COLUMNS, { views: [{ state: 'frozen', ySplit: 1 }] });
+function applyWorksheetColumns(sheet, columns) {
+  sheet.columns = columns;
+  styleHeader(sheet.getRow(1));
 }
 
-function createWhatsappWorksheet(wb) {
-  return createStyledWorksheet(wb, 'WhatsApp Messages', WHATSAPP_COLUMNS, { views: [{ state: 'frozen', ySplit: 1 }] });
+function createStyledWorksheet(workbook, name, columns, options = {}) {
+  const sheet = workbook.addWorksheet(name, options);
+  applyWorksheetColumns(sheet, columns);
+  return sheet;
 }
 
-// ─── INVENTORY ──────────────────────────────────────────────────────────────
-
-async function initInventory() {
-  const wb = new ExcelJS.Workbook();
-  const ws = createStyledWorksheet(wb, 'Inventory', INVENTORY_COLUMNS, { views: [{ state: 'frozen', ySplit: 1 }] });
-
-  const dummyComponents = [
-    { id: uuidv4(), name: 'Arduino Uno R3', category: 'Microcontroller', description: 'ATmega328P based microcontroller board, 14 digital I/O pins, 6 analog inputs', stock: 25, totalProcured: 25, totalIssued: 0, unit: 'pcs', location: 'Bin-A1', addedDate: new Date(), image: '', active: true },
-    { id: uuidv4(), name: 'Raspberry Pi 4 (4GB)', category: 'Single Board Computer', description: 'Quad-core ARM Cortex-A72, 4GB RAM, dual HDMI, USB 3.0', stock: 10, totalProcured: 10, totalIssued: 0, unit: 'pcs', location: 'Bin-A2', addedDate: new Date(), image: '', active: true },
-    { id: uuidv4(), name: 'ESP32 Dev Board', category: 'Microcontroller', description: 'Dual-core Xtensa LX6, WiFi + Bluetooth, 38 GPIO pins', stock: 30, totalProcured: 30, totalIssued: 0, unit: 'pcs', location: 'Bin-A3', addedDate: new Date(), image: '', active: true },
-    { id: uuidv4(), name: 'NodeMCU ESP8266', category: 'Microcontroller', description: 'WiFi enabled microcontroller, 11 digital GPIO pins, suitable for IoT projects', stock: 20, totalProcured: 20, totalIssued: 0, unit: 'pcs', location: 'Bin-A4', addedDate: new Date(), image: '', active: true },
-    { id: uuidv4(), name: 'Breadboard 830 Tie', category: 'Prototyping', description: 'Full-size solderless breadboard with 830 tie points', stock: 40, totalProcured: 40, totalIssued: 0, unit: 'pcs', location: 'Bin-B1', addedDate: new Date(), image: '', active: true },
-    { id: uuidv4(), name: 'Jumper Wires (M-M)', category: 'Prototyping', description: 'Male-Male dupont jumper wires, 20cm length, pack of 40', stock: 50, totalProcured: 50, totalIssued: 0, unit: 'packs', location: 'Bin-B2', addedDate: new Date(), image: '', active: true },
-    { id: uuidv4(), name: 'Jumper Wires (M-F)', category: 'Prototyping', description: 'Male-Female dupont jumper wires, 20cm length, pack of 40', stock: 50, totalProcured: 50, totalIssued: 0, unit: 'packs', location: 'Bin-B3', addedDate: new Date(), image: '', active: true },
-    { id: uuidv4(), name: 'HC-SR04 Ultrasonic Sensor', category: 'Sensors', description: 'Ultrasonic distance sensor, range 2cm - 400cm, 5V operation', stock: 20, totalProcured: 20, totalIssued: 0, unit: 'pcs', location: 'Bin-C1', addedDate: new Date(), image: '', active: true },
-    { id: uuidv4(), name: 'DHT11 Temp & Humidity', category: 'Sensors', description: 'Digital temperature and humidity sensor, range 0-50°C, 20-90% RH', stock: 25, totalProcured: 25, totalIssued: 0, unit: 'pcs', location: 'Bin-C2', addedDate: new Date(), image: '', active: true },
-    { id: uuidv4(), name: 'PIR Motion Sensor', category: 'Sensors', description: 'Passive infrared motion detector module, 3-7m range, 120° angle', stock: 18, totalProcured: 18, totalIssued: 0, unit: 'pcs', location: 'Bin-C3', addedDate: new Date(), image: '', active: true },
-    { id: uuidv4(), name: 'LDR Light Sensor', category: 'Sensors', description: 'Light dependent resistor module with digital and analog output', stock: 30, totalProcured: 30, totalIssued: 0, unit: 'pcs', location: 'Bin-C4', addedDate: new Date(), image: '', active: true },
-    { id: uuidv4(), name: 'MQ-2 Gas Sensor', category: 'Sensors', description: 'Smoke and combustible gas detection sensor module', stock: 15, totalProcured: 15, totalIssued: 0, unit: 'pcs', location: 'Bin-C5', addedDate: new Date(), image: '', active: true },
-    { id: uuidv4(), name: 'Servo Motor SG90', category: 'Actuators', description: '9g micro servo motor, 180° rotation, 4.8-6V, 1.8 kg/cm torque', stock: 20, totalProcured: 20, totalIssued: 0, unit: 'pcs', location: 'Bin-D1', addedDate: new Date(), image: '', active: true },
-    { id: uuidv4(), name: 'DC Gear Motor 12V', category: 'Actuators', description: '12V DC gear motor with metal gearbox, 150 RPM, 1.5 kg/cm', stock: 15, totalProcured: 15, totalIssued: 0, unit: 'pcs', location: 'Bin-D2', addedDate: new Date(), image: '', active: true },
-    { id: uuidv4(), name: 'L298N Motor Driver', category: 'Motor Drivers', description: 'Dual H-Bridge motor driver, 2A per channel, 5-35V, supports 2 DC or 1 stepper motor', stock: 15, totalProcured: 15, totalIssued: 0, unit: 'pcs', location: 'Bin-D3', addedDate: new Date(), image: '', active: true },
-    { id: uuidv4(), name: '16x2 LCD Display', category: 'Display', description: 'Character LCD with I2C backpack, blue backlight, 5V operation', stock: 12, totalProcured: 12, totalIssued: 0, unit: 'pcs', location: 'Bin-E1', addedDate: new Date(), image: '', active: true },
-    { id: uuidv4(), name: 'OLED 0.96" I2C', category: 'Display', description: '128x64 OLED display module, I2C interface, 3.3-5V, SSD1306 driver', stock: 12, totalProcured: 12, totalIssued: 0, unit: 'pcs', location: 'Bin-E2', addedDate: new Date(), image: '', active: true },
-    { id: uuidv4(), name: 'Resistor Kit (600pcs)', category: 'Passive Components', description: 'Assorted resistors 10Ω to 1MΩ, 1/4W, 1% tolerance, 30 values × 20pcs', stock: 20, totalProcured: 20, totalIssued: 0, unit: 'kits', location: 'Bin-F1', addedDate: new Date(), image: '', active: true },
-    { id: uuidv4(), name: 'Capacitor Kit (300pcs)', category: 'Passive Components', description: 'Ceramic and electrolytic capacitors assortment, 0.1µF to 1000µF', stock: 15, totalProcured: 15, totalIssued: 0, unit: 'kits', location: 'Bin-F2', addedDate: new Date(), image: '', active: true },
-    { id: uuidv4(), name: 'LED Assortment (100pcs)', category: 'Passive Components', description: '5mm LEDs in 5 colors (Red, Green, Blue, Yellow, White), 20 each', stock: 25, totalProcured: 25, totalIssued: 0, unit: 'packs', location: 'Bin-F3', addedDate: new Date(), image: '', active: true },
-    { id: uuidv4(), name: 'Push Button Assortment', category: 'Input Devices', description: '12x12mm tactile push buttons, 4-pin, PCB mount, pack of 25', stock: 30, totalProcured: 30, totalIssued: 0, unit: 'packs', location: 'Bin-G1', addedDate: new Date(), image: '', active: true },
-    { id: uuidv4(), name: 'Potentiometer 10K', category: 'Input Devices', description: '10K ohm rotary potentiometer, B10K, panel mount, linear taper', stock: 30, totalProcured: 30, totalIssued: 0, unit: 'pcs', location: 'Bin-G2', addedDate: new Date(), image: '', active: true },
-    { id: uuidv4(), name: '4x4 Matrix Keypad', category: 'Input Devices', description: 'Membrane keypad 4x4 matrix, 16 keys, 8-pin connector', stock: 10, totalProcured: 10, totalIssued: 0, unit: 'pcs', location: 'Bin-G3', addedDate: new Date(), image: '', active: true },
-    { id: uuidv4(), name: 'USB Type-A Cable', category: 'Cables & Power', description: 'USB-A to USB-B cable, 1m, for Arduino programming and power', stock: 20, totalProcured: 20, totalIssued: 0, unit: 'pcs', location: 'Bin-H1', addedDate: new Date(), image: '', active: true },
-    { id: uuidv4(), name: '9V Battery Snap', category: 'Cables & Power', description: '9V battery connector with wire leads, 15cm length', stock: 40, totalProcured: 40, totalIssued: 0, unit: 'pcs', location: 'Bin-H2', addedDate: new Date(), image: '', active: true },
+function buildSeedInventory(center) {
+  const prefix = center.code;
+  return [
+    { id: uuidv4(), centerId: center.id, centerName: center.name, name: `Arduino Uno R3 - ${prefix}`, category: 'Microcontroller', description: 'ATmega328P based microcontroller board', stock: 25, totalProcured: 25, totalIssued: 0, unit: 'pcs', location: 'Bin-A1', addedDate: new Date(), image: '', active: true, damagedCount: 0 },
+    { id: uuidv4(), centerId: center.id, centerName: center.name, name: `ESP32 Dev Board - ${prefix}`, category: 'Microcontroller', description: 'Dual-core WiFi + Bluetooth development board', stock: 30, totalProcured: 30, totalIssued: 0, unit: 'pcs', location: 'Bin-A2', addedDate: new Date(), image: '', active: true, damagedCount: 0 },
+    { id: uuidv4(), centerId: center.id, centerName: center.name, name: `Breadboard 830 Tie - ${prefix}`, category: 'Prototyping', description: 'Full-size solderless breadboard', stock: 40, totalProcured: 40, totalIssued: 0, unit: 'pcs', location: 'Bin-B1', addedDate: new Date(), image: '', active: true, damagedCount: 0 },
+    { id: uuidv4(), centerId: center.id, centerName: center.name, name: `Servo Motor SG90 - ${prefix}`, category: 'Actuators', description: '9g micro servo motor', stock: 20, totalProcured: 20, totalIssued: 0, unit: 'pcs', location: 'Bin-C1', addedDate: new Date(), image: '', active: true, damagedCount: 0 },
+    { id: uuidv4(), centerId: center.id, centerName: center.name, name: `Ultrasonic Sensor HC-SR04 - ${prefix}`, category: 'Sensors', description: 'Ultrasonic distance sensor module', stock: 18, totalProcured: 18, totalIssued: 0, unit: 'pcs', location: 'Bin-D1', addedDate: new Date(), image: '', active: true, damagedCount: 0 },
   ];
-
-  dummyComponents.forEach((comp, i) => {
-    const row = ws.addRow(comp);
-    styleDataRow(row, i % 2 === 0);
-  });
-
-  await wb.xlsx.writeFile(FILES.inventory);
-  return dummyComponents;
 }
 
-async function getInventory() {
-  const wb = await loadWorkbook(FILES.inventory);
-  const ws = wb.getWorksheet('Inventory');
-  if (!ws) return [];
-  const items = [];
-  ws.eachRow((row, rowNum) => {
-    if (rowNum === 1) return;
-    const val = v => normalizeCellValue(row.getCell(v).value);
-    items.push({
-      id: val(1), name: val(2), category: val(3), description: val(4),
-      stock: Number(val(5)) || 0, totalProcured: Number(val(6)) || 0,
-      totalIssued: Number(val(7)) || 0, unit: val(8), location: val(9),
-      addedDate: val(10), image: val(11) || '',
-      active: normalizeBoolean(row.getCell(12).value),
-      damagedCount: Number(val(13)) || 0,
-    });
-  });
-  return items.filter(i => i.id);
-}
-
-async function updateInventoryItem(id, updates) {
-  const wb = await loadWorkbook(FILES.inventory);
-  const ws = wb.getWorksheet('Inventory');
-  let found = false;
-  ws.eachRow((row, rowNum) => {
-    if (rowNum === 1) return;
-    if (row.getCell(1).value === id) {
-      if (updates.name !== undefined) row.getCell(2).value = updates.name;
-      if (updates.category !== undefined) row.getCell(3).value = updates.category;
-      if (updates.description !== undefined) row.getCell(4).value = updates.description;
-      if (updates.stock !== undefined) row.getCell(5).value = Number(updates.stock);
-      if (updates.totalProcured !== undefined) row.getCell(6).value = Number(updates.totalProcured);
-      if (updates.totalIssued !== undefined) row.getCell(7).value = Number(updates.totalIssued);
-      if (updates.unit !== undefined) row.getCell(8).value = updates.unit;
-      if (updates.location !== undefined) row.getCell(9).value = updates.location;
-      if (updates.image !== undefined) row.getCell(11).value = updates.image;
-      if (updates.active !== undefined) row.getCell(12).value = updates.active;
-      if (updates.damagedCount !== undefined) row.getCell(13).value = Number(updates.damagedCount);
-      found = true;
-    }
-  });
-  if (found) await saveWorkbook(wb, FILES.inventory);
-  return found;
-}
-
-async function addInventoryItem(item) {
-  const wb = await loadWorkbook(FILES.inventory);
-  let ws = wb.getWorksheet('Inventory');
-  if (!ws) {
-    ws = createStyledWorksheet(wb, 'Inventory', INVENTORY_COLUMNS);
-  } else {
-    applyWorksheetColumns(ws, INVENTORY_COLUMNS);
-  }
-  const newItem = { id: uuidv4(), ...item, totalIssued: 0, addedDate: new Date(), damagedCount: Number(item.damagedCount) || 0 };
-  const row = ws.addRow(newItem);
-  const rowCount = ws.rowCount;
-  styleDataRow(row, rowCount % 2 === 0);
-  await saveWorkbook(wb, FILES.inventory);
-  return newItem;
-}
-
-async function deleteInventoryItem(id) {
-  const wb = await loadWorkbook(FILES.inventory);
-  const ws = wb.getWorksheet('Inventory');
-  let rowToDelete = null;
-  ws.eachRow((row, rowNum) => {
-    if (rowNum > 1 && row.getCell(1).value === id) rowToDelete = rowNum;
-  });
-  if (rowToDelete) {
-    ws.spliceRows(rowToDelete, 1);
-    await saveWorkbook(wb, FILES.inventory);
-    return true;
-  }
-  return false;
-}
-
-// ─── ORDERS ─────────────────────────────────────────────────────────────────
-
-async function saveOrder(order) {
-  const wb = await loadWorkbook(FILES.orders);
-  let ws = wb.getWorksheet('Orders');
-  if (!ws) {
-    ws = createStyledWorksheet(wb, 'Orders', ORDER_COLUMNS, { views: [{ state: 'frozen', ySplit: 1 }] });
-  } else {
-    applyWorksheetColumns(ws, ORDER_COLUMNS);
-  }
-
-  const componentSummary = order.items.map(i => `${i.name}(x${i.qty})`).join(', ');
-  const row = ws.addRow({
-    orderId: order.orderId,
-    createdAt: new Date(order.createdAt),
-    studentName: order.studentDetails.studentName,
-    username: order.username,
-    mobile: order.studentDetails.mobile,
-    college: order.studentDetails.college,
-    department: order.studentDetails.department,
-    courseName: order.studentDetails.courseName,
-    projectName: order.studentDetails.projectName,
-    teamName: order.studentDetails.teamName,
-    facultyGuide: order.studentDetails.facultyGuide,
-    purpose: order.studentDetails.purpose,
-    components: componentSummary,
-    totalItems: order.items.reduce((s, i) => s + i.qty, 0),
-    status: order.status,
-    adminRemarks: '',
-    resolvedAt: '',
-    studentEmail: order.studentEmail || '',
-    itemsJson: JSON.stringify(order.items || []),
-    stockReserved: order.stockReserved === true,
-    issuedCounted: order.issuedCounted === true,
-    reservedAt: order.reservedAt ? new Date(order.reservedAt) : '',
-    issuedAt: order.issuedAt ? new Date(order.issuedAt) : '',
-    returnRequestedAt: order.returnRequestedAt ? new Date(order.returnRequestedAt) : '',
-    returnedAt: order.returnedAt ? new Date(order.returnedAt) : '',
-    returnSummaryJson: order.returnSummaryJson || '',
-    lastReturnAt: order.lastReturnAt ? new Date(order.lastReturnAt) : '',
-  });
-  styleDataRow(row, ws.rowCount % 2 === 0);
-  await saveWorkbook(wb, FILES.orders);
-
-  const orderMetaStore = await loadOrderMetaStore();
-  orderMetaStore[order.orderId] = {
-    ...(orderMetaStore[order.orderId] || {}),
-    expectedReturnDate: order.expectedReturnDate || '',
-    reminderSentAt: order.reminderSentAt || '',
-  };
-  await saveOrderMetaStore(orderMetaStore);
-}
-
-async function getOrders() {
-  const wb = await loadWorkbook(FILES.orders);
-  const ws = wb.getWorksheet('Orders');
-  if (!ws) return [];
-  const orderMetaStore = await loadOrderMetaStore();
-  const orders = [];
-  ws.eachRow((row, rowNum) => {
-    if (rowNum === 1) return;
-    const val = (n) => normalizeCellValue(row.getCell(n).value);
-    const baseOrder = {
-      orderId: val(1), createdAt: val(2), studentName: val(3), username: val(4),
-      mobile: val(5), college: val(6), department: val(7), courseName: val(8),
-      projectName: val(9), teamName: val(10), facultyGuide: val(11), purpose: val(12),
-      components: val(13), totalItems: val(14), status: val(15),
-      adminRemarks: val(16), resolvedAt: val(17),
-      studentEmail: val(18), itemsJson: val(19),
-      stockReserved: normalizeBoolean(row.getCell(20).value),
-      issuedCounted: normalizeBoolean(row.getCell(21).value),
-      reservedAt: val(22), issuedAt: val(23), returnRequestedAt: val(24), returnedAt: val(25),
-      returnSummaryJson: val(26), lastReturnAt: val(27),
-    };
-    const meta = orderMetaStore[baseOrder.orderId] || {};
-    orders.push({
-      ...baseOrder,
-      expectedReturnDate: meta.expectedReturnDate || null,
-      reminderSentAt: meta.reminderSentAt || null,
-    });
-  });
-  return orders.filter(o => o.orderId);
-}
-
-async function updateOrderStatus(orderId, status, remarks, meta = {}) {
-  const wb = await loadWorkbook(FILES.orders);
-  const ws = wb.getWorksheet('Orders');
-  let found = false;
-  ws.eachRow((row, rowNum) => {
-    if (rowNum === 1) return;
-    const cellVal = row.getCell(1).value;
-    if (cellVal === orderId) {
-      row.getCell(15).value = status;
-      if (remarks !== undefined) row.getCell(16).value = remarks;
-      row.getCell(17).value = meta.resolvedAt ? new Date(meta.resolvedAt) : new Date();
-      if (meta.studentEmail !== undefined) row.getCell(18).value = meta.studentEmail;
-      if (meta.itemsJson !== undefined) row.getCell(19).value = meta.itemsJson;
-      if (meta.stockReserved !== undefined) row.getCell(20).value = meta.stockReserved;
-      if (meta.issuedCounted !== undefined) row.getCell(21).value = meta.issuedCounted;
-      if (meta.reservedAt !== undefined) row.getCell(22).value = meta.reservedAt ? new Date(meta.reservedAt) : '';
-      if (meta.issuedAt !== undefined) row.getCell(23).value = meta.issuedAt ? new Date(meta.issuedAt) : '';
-      if (meta.returnRequestedAt !== undefined) row.getCell(24).value = meta.returnRequestedAt ? new Date(meta.returnRequestedAt) : '';
-      if (meta.returnedAt !== undefined) row.getCell(25).value = meta.returnedAt ? new Date(meta.returnedAt) : '';
-      if (meta.returnSummaryJson !== undefined) row.getCell(26).value = meta.returnSummaryJson;
-      if (meta.lastReturnAt !== undefined) row.getCell(27).value = meta.lastReturnAt ? new Date(meta.lastReturnAt) : '';
-      const statusCell = row.getCell(15);
-      statusCell.fill = {
-        type: 'pattern', pattern: 'solid',
-        fgColor: {
-          argb:
-            status === 'Approved' ? 'FFE8F5E9' :
-            status === 'Rejected' ? 'FFFCE4EC' :
-            status === 'Return Requested' ? 'FFFFF3E0' :
-            status === 'Partially Returned' ? 'FFE8F0FE' :
-            status === 'Returned' ? 'FFE3F2FD' :
-            'FFFFF9C4'
-        }
-      };
-      found = true;
-    }
-  });
-  if (found) {
-    await saveWorkbook(wb, FILES.orders);
-    if (meta.expectedReturnDate !== undefined || meta.reminderSentAt !== undefined) {
-      const orderMetaStore = await loadOrderMetaStore();
-      orderMetaStore[orderId] = {
-        ...(orderMetaStore[orderId] || {}),
-        ...(meta.expectedReturnDate !== undefined ? { expectedReturnDate: meta.expectedReturnDate || '' } : {}),
-        ...(meta.reminderSentAt !== undefined ? { reminderSentAt: meta.reminderSentAt || '' } : {}),
-      };
-      await saveOrderMetaStore(orderMetaStore);
-    }
-  }
-  return found;
-}
-
-// ─── USERS ──────────────────────────────────────────────────────────────────
-
-const bcrypt = require('bcryptjs');
-
-function userFromRow(row) {
+function legacyUserFromRow(row) {
+  const firstCenter = CENTERS[0];
   return {
     id: normalizeCellValue(row.getCell(1).value),
+    centerId: firstCenter.id,
+    centerName: firstCenter.name,
     username: normalizeCellValue(row.getCell(2).value),
     passwordHash: normalizeCellValue(row.getCell(3).value),
     fullName: normalizeCellValue(row.getCell(4).value),
@@ -471,85 +245,598 @@ function userFromRow(row) {
   };
 }
 
-async function initUsers() {
-  const wb = new ExcelJS.Workbook();
-  const ws = createUsersWorksheet(wb);
-  const adminHash = await bcrypt.hash('admin123', 10);
-  const s1Hash = await bcrypt.hash('student123', 10);
-  const s2Hash = await bcrypt.hash('pass123', 10);
-  ws.addRow({ id: uuidv4(), username: 'admin', passwordHash: adminHash, fullName: 'System Administrator', email: 'admin@cims.edu', role: 'admin', active: true, createdAt: new Date(), source: 'manual' });
-  ws.addRow({ id: uuidv4(), username: 'student1', passwordHash: s1Hash, fullName: 'Ravi Kumar', email: 'ravi.kumar@cims.edu', role: 'student', active: true, createdAt: new Date(), source: 'manual' });
-  ws.addRow({ id: uuidv4(), username: 'student2', passwordHash: s2Hash, fullName: 'Priya Sharma', email: 'priya.sharma@cims.edu', role: 'student', active: true, createdAt: new Date(), source: 'manual' });
-  await wb.xlsx.writeFile(FILES.users);
-}
-
-async function findUser(username) {
-  const wb = await loadWorkbook(FILES.users);
-  const ws = wb.getWorksheet('Users');
-  if (!ws) return null;
-  let user = null;
-  const needle = String(username || '').trim().toLowerCase();
-  ws.eachRow((row, rowNum) => {
-    if (rowNum === 1) return;
-    const rowUsername = String(normalizeCellValue(row.getCell(2).value) || '').trim().toLowerCase();
-    const rowEmail = String(normalizeCellValue(row.getCell(5).value) || '').trim().toLowerCase();
-    if (rowUsername === needle || rowEmail === needle) {
-      user = userFromRow(row);
-    }
+async function rewriteUsersWorkbook(users, centerId) {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = createStyledWorksheet(workbook, 'Users', USER_COLUMNS, { views: [{ state: 'frozen', ySplit: 1 }] });
+  users.forEach((user, index) => {
+    const row = sheet.addRow(user);
+    styleDataRow(row, index % 2 === 0);
   });
-  return user;
+  await saveWorkbook(workbook, getUsersFile(centerId));
 }
 
-async function findUserById(userId) {
-  const wb = await loadWorkbook(FILES.users);
-  const ws = wb.getWorksheet('Users');
-  if (!ws) return null;
-  let user = null;
-  ws.eachRow((row, rowNum) => {
-    if (rowNum === 1) return;
-    if (normalizeCellValue(row.getCell(1).value) === userId) {
-      user = userFromRow(row);
-    }
-  });
-  return user;
-}
-
-async function getUsers() {
-  const wb = await loadWorkbook(FILES.users);
-  const ws = wb.getWorksheet('Users');
-  if (!ws) return [];
+async function buildDefaultUsers(centerId) {
+  const center = requireCenter(centerId);
   const users = [];
-  ws.eachRow((row, rowNum) => {
+
+  // Add super_admin to the first center
+  if (centerId === CENTERS[0].id) {
+    users.push({
+      id: uuidv4(),
+      centerId: centerId,
+      centerName: center.name,
+      username: 'superadmin',
+      passwordHash: await bcrypt.hash('superadmin123', 10),
+      fullName: 'Central Super Admin',
+      email: 'superadmin@cims.edu',
+      mobile: '',
+      altMobile: '',
+      college: '',
+      graduationYear: '',
+      degree: '',
+      department: '',
+      role: 'super_admin',
+      active: true,
+      createdAt: new Date(),
+      source: 'manual',
+    });
+  }
+
+  users.push({
+    id: uuidv4(),
+    centerId: center.id,
+    centerName: center.name,
+    username: `${center.id}_admin`,
+    passwordHash: await bcrypt.hash('admin123', 10),
+    fullName: `${center.name} Admin`,
+    email: `${center.id}@cims.edu`,
+    mobile: '',
+    altMobile: '',
+    college: center.name,
+    graduationYear: '',
+    degree: '',
+    department: '',
+    role: 'admin',
+    active: true,
+    createdAt: new Date(),
+    source: 'manual',
+  });
+
+  // Add sample students
+  users.push({
+    id: uuidv4(),
+    centerId: center.id,
+    centerName: center.name,
+    username: `${center.id}_student1`,
+    passwordHash: await bcrypt.hash('student123', 10),
+    fullName: 'Sample Student 1',
+    email: `student1@${center.id}.cims.edu`,
+    mobile: '',
+    altMobile: '',
+    college: center.name,
+    graduationYear: '',
+    degree: '',
+    department: '',
+    role: 'student',
+    active: true,
+    createdAt: new Date(),
+    source: 'manual',
+  });
+
+  return users;
+}
+
+async function ensureInventoryWorkbook(centerId) {
+  const center = requireCenter(centerId);
+  const filePath = getWorkbookFile('inventory', center.id);
+  if (fsSync.existsSync(filePath)) return;
+
+  const workbook = new ExcelJS.Workbook();
+  const sheet = createStyledWorksheet(workbook, 'Inventory', INVENTORY_COLUMNS, { views: [{ state: 'frozen', ySplit: 1 }] });
+  buildSeedInventory(center).forEach((item, index) => {
+    const row = sheet.addRow(item);
+    styleDataRow(row, index % 2 === 0);
+  });
+  await saveWorkbook(workbook, filePath);
+}
+
+async function ensureUsersWorkbook(centerId) {
+  const filePath = getUsersFile(centerId);
+  if (!fsSync.existsSync(filePath)) {
+    await rewriteUsersWorkbook(await buildDefaultUsers(centerId), centerId);
+    return;
+  }
+
+  const workbook = await loadWorkbook(filePath);
+  const sheet = workbook.getWorksheet('Users');
+  if (!sheet) {
+    await rewriteUsersWorkbook(await buildDefaultUsers(centerId), centerId);
+    return;
+  }
+  // Users file already exists with Users sheet, no need to recreate
+}
+
+async function initInventory(centerId) {
+  await ensureInventoryWorkbook(centerId);
+  return getInventory(centerId);
+}
+
+async function initUsers() {
+  await ensureUsersWorkbook();
+  return getUsers();
+}
+
+async function initCenterFiles(centerId) {
+  const paths = getCenterPaths(centerId);
+  await ensureDir(paths.baseDir);
+  await ensureInventoryWorkbook(centerId);
+}
+
+async function initAllCenterData() {
+  console.log('CENTERS length:', CENTERS.length);
+  console.log('First center:', CENTERS[0]);
+  await ensureDir(DATA_DIR);
+  for (const center of CENTERS) {
+    console.log('Processing center:', center.id);
+    await ensureUsersWorkbook(center.id);
+    await initCenterFiles(center.id);
+  }
+}
+
+async function getInventory(centerId) {
+  const center = requireCenter(centerId);
+  await ensureInventoryWorkbook(center.id);
+  const workbook = await loadWorkbook(getWorkbookFile('inventory', center.id));
+  const sheet = workbook.getWorksheet('Inventory');
+  if (!sheet) return [];
+
+  const items = [];
+  sheet.eachRow((row, rowNum) => {
+    if (rowNum === 1) return;
+    try {
+      const value = index => normalizeCellValue(row.getCell(index).value);
+
+      // Validate that we have required fields in correct positions
+      const id = value(1);
+      if (!id) return; // Skip rows without an ID
+
+      // Check if this is old format (missing Center ID/Name columns)
+      const col2Value = value(2);
+      const col3Value = value(3);
+      const col4Value = value(4);
+
+      let item;
+
+      // If col2 looks like a real center ID, it's new format
+      if (col2Value && typeof col2Value === 'string' &&
+          (col2Value.includes('_') || ['jp_nagar', 'yelahanka', 'gopalan_mall', 'mysore', 'tumkur', 'mangalore', 'hubballi', 'belagavi', 'kalaburagi'].includes(col2Value))) {
+        // New format: cols 2,3 are centerId, centerName
+        item = {
+          id,
+          centerId: col2Value || center.id,
+          centerName: col3Value || center.name,
+          name: col4Value,
+          category: value(5),
+          description: value(6),
+          stock: Number(value(7)) || 0,
+          totalProcured: Number(value(8)) || 0,
+          totalIssued: Number(value(9)) || 0,
+          unit: value(10) || 'pcs',
+          location: value(11) || '',
+          addedDate: value(12),
+          image: value(13) || '',
+          active: normalizeBoolean(row.getCell(14).value),
+          damagedCount: Number(value(15)) || 0,
+        };
+      } else {
+        // Old format: col2 is name (no centerId/centerName columns)
+        item = {
+          id,
+          centerId: center.id,
+          centerName: center.name,
+          name: col2Value,
+          category: col3Value,
+          description: col4Value,
+          stock: Number(value(5)) || 0,
+          totalProcured: Number(value(6)) || 0,
+          totalIssued: Number(value(7)) || 0,
+          unit: value(8) || 'pcs',
+          location: value(9) || '',
+          addedDate: value(10),
+          image: value(11) || '',
+          active: normalizeBoolean(row.getCell(12).value),
+          damagedCount: Number(value(13)) || 0,
+        };
+      }
+
+      if (item.name) {
+        items.push(item);
+      }
+    } catch (err) {
+      console.error(`Error reading row ${rowNum} for ${center.id}:`, err.message);
+    }
+  });
+  return items.filter(item => item.id && item.name);
+}
+
+async function addInventoryItem(item, centerId) {
+  const center = requireCenter(centerId);
+  await ensureInventoryWorkbook(center.id);
+  const filePath = getWorkbookFile('inventory', center.id);
+  const workbook = await loadWorkbook(filePath);
+  let sheet = workbook.getWorksheet('Inventory');
+  if (!sheet) {
+    sheet = createStyledWorksheet(workbook, 'Inventory', INVENTORY_COLUMNS, { views: [{ state: 'frozen', ySplit: 1 }] });
+  } else {
+    applyWorksheetColumns(sheet, INVENTORY_COLUMNS);
+  }
+
+  const newItem = {
+    id: uuidv4(),
+    centerId: center.id,
+    centerName: center.name,
+    name: item.name,
+    category: item.category,
+    description: item.description || '',
+    stock: Number(item.stock) || 0,
+    totalProcured: Number(item.totalProcured ?? item.stock) || 0,
+    totalIssued: 0,
+    unit: item.unit || 'pcs',
+    location: item.location || '',
+    addedDate: new Date(),
+    image: item.image || '',
+    active: item.active !== false,
+    damagedCount: Number(item.damagedCount) || 0,
+  };
+
+  const row = sheet.addRow(newItem);
+  styleDataRow(row, sheet.rowCount % 2 === 0);
+  await saveWorkbook(workbook, filePath);
+  return newItem;
+}
+
+async function updateInventoryItem(id, updates, centerId) {
+  const center = requireCenter(centerId);
+  const filePath = getWorkbookFile('inventory', center.id);
+  const workbook = await loadWorkbook(filePath);
+  const sheet = workbook.getWorksheet('Inventory');
+  if (!sheet) return false;
+
+  let found = false;
+  sheet.eachRow((row, rowNum) => {
+    if (rowNum === 1) return;
+    if (normalizeCellValue(row.getCell(1).value) !== id) return;
+    if (updates.name !== undefined) row.getCell(4).value = updates.name;
+    if (updates.category !== undefined) row.getCell(5).value = updates.category;
+    if (updates.description !== undefined) row.getCell(6).value = updates.description;
+    if (updates.stock !== undefined) row.getCell(7).value = Number(updates.stock) || 0;
+    if (updates.totalProcured !== undefined) row.getCell(8).value = Number(updates.totalProcured) || 0;
+    if (updates.totalIssued !== undefined) row.getCell(9).value = Number(updates.totalIssued) || 0;
+    if (updates.unit !== undefined) row.getCell(10).value = updates.unit;
+    if (updates.location !== undefined) row.getCell(11).value = updates.location;
+    if (updates.image !== undefined) row.getCell(13).value = updates.image;
+    if (updates.active !== undefined) row.getCell(14).value = !!updates.active;
+    if (updates.damagedCount !== undefined) row.getCell(15).value = Number(updates.damagedCount) || 0;
+    found = true;
+  });
+
+  if (found) await saveWorkbook(workbook, filePath);
+  return found;
+}
+
+async function deleteInventoryItem(id, centerId) {
+  const center = requireCenter(centerId);
+  const filePath = getWorkbookFile('inventory', center.id);
+  const workbook = await loadWorkbook(filePath);
+  const sheet = workbook.getWorksheet('Inventory');
+  if (!sheet) return false;
+
+  let rowToDelete = null;
+  sheet.eachRow((row, rowNum) => {
+    if (rowNum > 1 && normalizeCellValue(row.getCell(1).value) === id) {
+      rowToDelete = rowNum;
+    }
+  });
+  if (!rowToDelete) return false;
+
+  sheet.spliceRows(rowToDelete, 1);
+  await saveWorkbook(workbook, filePath);
+  return true;
+}
+
+async function loadOrderMetaStore(centerId) {
+  try {
+    const raw = await fs.readFile(getOrderMetaPath(centerId), 'utf8');
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+async function saveOrderMetaStore(centerId, store) {
+  await ensureDir(path.dirname(getOrderMetaPath(centerId)));
+  await fs.writeFile(getOrderMetaPath(centerId), JSON.stringify(store, null, 2), 'utf8');
+}
+
+async function saveOrder(order) {
+  const center = requireCenter(order.centerId);
+  const filePath = getWorkbookFile('orders', center.id);
+  const workbook = await loadWorkbook(filePath);
+  let sheet = workbook.getWorksheet('Orders');
+  if (!sheet) {
+    sheet = createStyledWorksheet(workbook, 'Orders', ORDER_COLUMNS, { views: [{ state: 'frozen', ySplit: 1 }] });
+  } else {
+    applyWorksheetColumns(sheet, ORDER_COLUMNS);
+  }
+
+  const componentSummary = (order.items || []).map(item => `${item.name}(x${item.qty})`).join(', ');
+  const row = sheet.addRow({
+    orderId: order.orderId,
+    centerId: center.id,
+    centerName: center.name,
+    createdAt: new Date(order.createdAt),
+    studentName: order.studentDetails.studentName,
+    username: order.username,
+    mobile: order.studentDetails.mobile,
+    college: order.studentDetails.college,
+    department: order.studentDetails.department,
+    courseName: order.studentDetails.courseName,
+    projectName: order.studentDetails.projectName,
+    teamName: order.studentDetails.teamName,
+    facultyGuide: order.studentDetails.facultyGuide,
+    purpose: order.studentDetails.purpose,
+    components: componentSummary,
+    totalItems: (order.items || []).reduce((sum, item) => sum + (item.qty || 0), 0),
+    status: order.status,
+    adminRemarks: order.adminRemarks || '',
+    resolvedAt: '',
+    studentEmail: order.studentEmail || '',
+    itemsJson: JSON.stringify(order.items || []),
+    stockReserved: order.stockReserved === true,
+    issuedCounted: order.issuedCounted === true,
+    reservedAt: order.reservedAt ? new Date(order.reservedAt) : '',
+    issuedAt: order.issuedAt ? new Date(order.issuedAt) : '',
+    returnRequestedAt: order.returnRequestedAt ? new Date(order.returnRequestedAt) : '',
+    returnedAt: order.returnedAt ? new Date(order.returnedAt) : '',
+    returnSummaryJson: order.returnSummaryJson || '',
+    lastReturnAt: order.lastReturnAt ? new Date(order.lastReturnAt) : '',
+    expectedReturnDate: order.expectedReturnDate ? new Date(order.expectedReturnDate) : '',
+    reminderSentAt: order.reminderSentAt ? new Date(order.reminderSentAt) : '',
+  });
+  styleDataRow(row, sheet.rowCount % 2 === 0);
+  await saveWorkbook(workbook, filePath);
+
+  const store = await loadOrderMetaStore(center.id);
+  store[order.orderId] = {
+    expectedReturnDate: order.expectedReturnDate || '',
+    reminderSentAt: order.reminderSentAt || '',
+  };
+  await saveOrderMetaStore(center.id, store);
+}
+
+function orderFromRow(row) {
+  const value = index => normalizeCellValue(row.getCell(index).value);
+  return {
+    orderId: value(1),
+    centerId: value(2),
+    centerName: value(3),
+    createdAt: value(4),
+    studentName: value(5),
+    username: value(6),
+    mobile: value(7),
+    college: value(8),
+    department: value(9),
+    courseName: value(10),
+    projectName: value(11),
+    teamName: value(12),
+    facultyGuide: value(13),
+    purpose: value(14),
+    components: value(15),
+    totalItems: Number(value(16)) || 0,
+    status: value(17),
+    adminRemarks: value(18),
+    resolvedAt: value(19),
+    studentEmail: value(20),
+    itemsJson: value(21),
+    stockReserved: normalizeBoolean(row.getCell(22).value),
+    issuedCounted: normalizeBoolean(row.getCell(23).value),
+    reservedAt: value(24),
+    issuedAt: value(25),
+    returnRequestedAt: value(26),
+    returnedAt: value(27),
+    returnSummaryJson: value(28),
+    lastReturnAt: value(29),
+    expectedReturnDate: value(30),
+    reminderSentAt: value(31),
+  };
+}
+
+async function getOrders(centerId) {
+  const centerIds = centerId ? [requireCenter(centerId).id] : CENTERS.map(center => center.id);
+  const orders = [];
+
+  for (const currentCenterId of centerIds) {
+    const filePath = getWorkbookFile('orders', currentCenterId);
+    if (!fsSync.existsSync(filePath)) continue;
+    const workbook = await loadWorkbook(filePath);
+    let sheet = workbook.getWorksheet('Orders');
+    if (!sheet) sheet = workbook.worksheets[0];
+    if (!sheet) continue;
+
+    sheet.eachRow((row, rowNum) => {
+      if (rowNum === 1) return;
+      orders.push(orderFromRow(row));
+    });
+
+    const store = await loadOrderMetaStore(currentCenterId);
+    orders.forEach(order => {
+      if (order.centerId !== currentCenterId) return;
+      const meta = store[order.orderId] || {};
+      if (!order.expectedReturnDate) order.expectedReturnDate = meta.expectedReturnDate || null;
+      if (!order.reminderSentAt) order.reminderSentAt = meta.reminderSentAt || null;
+    });
+  }
+
+  return orders.filter(order => order.orderId);
+}
+
+async function updateOrderStatus(orderId, status, remarks, meta = {}, centerId) {
+  if (!centerId) {
+    const allOrders = await getOrders();
+    const found = allOrders.find(order => order.orderId === orderId);
+    if (!found) return false;
+    centerId = found.centerId;
+  }
+
+  const center = requireCenter(centerId);
+  const filePath = getWorkbookFile('orders', center.id);
+  const workbook = await loadWorkbook(filePath);
+  const sheet = workbook.getWorksheet('Orders');
+  if (!sheet) return false;
+
+  let found = false;
+  sheet.eachRow((row, rowNum) => {
+    if (rowNum === 1) return;
+    if (normalizeCellValue(row.getCell(1).value) !== orderId) return;
+    row.getCell(17).value = status;
+    if (remarks !== undefined) row.getCell(18).value = remarks;
+    row.getCell(19).value = meta.resolvedAt ? new Date(meta.resolvedAt) : new Date();
+    if (meta.studentEmail !== undefined) row.getCell(20).value = meta.studentEmail;
+    if (meta.itemsJson !== undefined) row.getCell(21).value = meta.itemsJson;
+    if (meta.stockReserved !== undefined) row.getCell(22).value = meta.stockReserved;
+    if (meta.issuedCounted !== undefined) row.getCell(23).value = meta.issuedCounted;
+    if (meta.reservedAt !== undefined) row.getCell(24).value = meta.reservedAt ? new Date(meta.reservedAt) : '';
+    if (meta.issuedAt !== undefined) row.getCell(25).value = meta.issuedAt ? new Date(meta.issuedAt) : '';
+    if (meta.returnRequestedAt !== undefined) row.getCell(26).value = meta.returnRequestedAt ? new Date(meta.returnRequestedAt) : '';
+    if (meta.returnedAt !== undefined) row.getCell(27).value = meta.returnedAt ? new Date(meta.returnedAt) : '';
+    if (meta.returnSummaryJson !== undefined) row.getCell(28).value = meta.returnSummaryJson;
+    if (meta.lastReturnAt !== undefined) row.getCell(29).value = meta.lastReturnAt ? new Date(meta.lastReturnAt) : '';
+    if (meta.expectedReturnDate !== undefined) row.getCell(30).value = meta.expectedReturnDate ? new Date(meta.expectedReturnDate) : '';
+    if (meta.reminderSentAt !== undefined) row.getCell(31).value = meta.reminderSentAt ? new Date(meta.reminderSentAt) : '';
+    found = true;
+  });
+
+  if (!found) return false;
+
+  await saveWorkbook(workbook, filePath);
+  if (meta.expectedReturnDate !== undefined || meta.reminderSentAt !== undefined) {
+    const store = await loadOrderMetaStore(center.id);
+    store[orderId] = {
+      ...(store[orderId] || {}),
+      ...(meta.expectedReturnDate !== undefined ? { expectedReturnDate: meta.expectedReturnDate || '' } : {}),
+      ...(meta.reminderSentAt !== undefined ? { reminderSentAt: meta.reminderSentAt || '' } : {}),
+    };
+    await saveOrderMetaStore(center.id, store);
+  }
+  return true;
+}
+
+function userFromRow(row) {
+  const centerId = normalizeCellValue(row.getCell(2).value) || '';
+  const centerName = normalizeCellValue(row.getCell(3).value) || (getCenterById(centerId)?.name || '');
+  return {
+    id: normalizeCellValue(row.getCell(1).value),
+    centerId,
+    centerName,
+    username: normalizeCellValue(row.getCell(4).value),
+    passwordHash: normalizeCellValue(row.getCell(5).value),
+    fullName: normalizeCellValue(row.getCell(6).value),
+    email: normalizeCellValue(row.getCell(7).value),
+    mobile: normalizeCellValue(row.getCell(8).value),
+    altMobile: normalizeCellValue(row.getCell(9).value),
+    college: normalizeCellValue(row.getCell(10).value),
+    graduationYear: normalizeCellValue(row.getCell(11).value),
+    degree: normalizeCellValue(row.getCell(12).value),
+    department: normalizeCellValue(row.getCell(13).value),
+    role: normalizeCellValue(row.getCell(14).value),
+    active: normalizeBoolean(row.getCell(15).value),
+    createdAt: normalizeCellValue(row.getCell(16).value),
+    source: normalizeCellValue(row.getCell(17).value) || 'manual',
+  };
+}
+
+async function getUsers(options = {}) {
+  if (options.centerId) {
+    return await getUsersForCenter(options.centerId);
+  }
+  return await getAllUsers();
+}
+
+async function getUsersForCenter(centerId) {
+  await ensureUsersWorkbook(centerId);
+  const workbook = await loadWorkbook(getUsersFile(centerId));
+  let sheet = workbook.getWorksheet('Users');
+  if (!sheet) sheet = workbook.worksheets[0];
+  if (!sheet) return [];
+
+  const users = [];
+  sheet.eachRow((row, rowNum) => {
     if (rowNum === 1) return;
     users.push(userFromRow(row));
   });
-  return users.filter(u => u.id);
+
+  return users.filter(user => user.id);
+}
+
+async function getAllUsers() {
+  const all = [];
+  for (const center of CENTERS) {
+    try {
+      const users = await getUsersForCenter(center.id);
+      all.push(...users);
+    } catch (e) {
+      // ignore if file not exists
+    }
+  }
+  return all;
+}
+
+async function findUser(loginId) {
+  const users = await getAllUsers();
+  const needle = String(loginId || '').trim().toLowerCase();
+  return users.find(user => {
+    const username = String(user.username || '').trim().toLowerCase();
+    const email = String(user.email || '').trim().toLowerCase();
+    return username === needle || email === needle;
+  }) || null;
+}
+
+async function findUserById(userId) {
+  const users = await getAllUsers();
+  return users.find(user => user.id === userId) || null;
 }
 
 async function addUser(userData) {
-  const wb = await loadWorkbook(FILES.users);
-  let ws = wb.getWorksheet('Users');
-  if (!ws) {
-    ws = createUsersWorksheet(wb);
+  const centerId = String(userData.centerId || '').trim();
+  await ensureUsersWorkbook(centerId);
+  const workbook = await loadWorkbook(getUsersFile(centerId));
+  let sheet = workbook.getWorksheet('Users');
+  if (!sheet) {
+    sheet = createStyledWorksheet(workbook, 'Users', USER_COLUMNS, { views: [{ state: 'frozen', ySplit: 1 }] });
   } else {
-    applyWorksheetColumns(ws, USER_COLUMNS);
+    applyWorksheetColumns(sheet, USER_COLUMNS);
   }
+
   const username = String(userData.username || '').trim();
   const fullName = String(userData.fullName || '').trim();
   const email = String(userData.email || '').trim();
   const password = String(userData.password || '');
+  const role = userData.role || 'student';
+  const centerName = centerId ? requireCenter(centerId).name : 'All Centers';
 
-  if (!username || !fullName || !password) {
-    throw new Error('Username, full name and password are required');
-  }
+  if (!username || !fullName || !password) throw new Error('Username, full name and password are required');
+  if (role !== 'super_admin' && !centerId) throw new Error('Center is required');
 
   const existing = await findUser(username);
   if (existing) throw new Error('Username already exists');
-  const hash = await bcrypt.hash(password, 10);
-  const row = ws.addRow({
+
+  const row = sheet.addRow({
     id: uuidv4(),
+    centerId,
+    centerName,
     username,
-    passwordHash: hash,
+    passwordHash: await bcrypt.hash(password, 10),
     fullName,
     email,
     mobile: userData.mobile || '',
@@ -558,119 +845,156 @@ async function addUser(userData) {
     graduationYear: userData.graduationYear || '',
     degree: userData.degree || '',
     department: userData.department || '',
-    role: userData.role || 'student',
+    role,
     active: userData.active !== undefined ? !!userData.active : true,
     createdAt: new Date(),
     source: userData.source || 'manual',
   });
-  styleDataRow(row, ws.rowCount % 2 === 0);
-  await saveWorkbook(wb, FILES.users);
+  styleDataRow(row, sheet.rowCount % 2 === 0);
+  await saveWorkbook(workbook, getUsersFile(centerId));
 }
 
 async function updateUser(userId, userData) {
-  const wb = await loadWorkbook(FILES.users);
-  const ws = wb.getWorksheet('Users');
-  if (!ws) throw new Error('Users sheet not found');
-  applyWorksheetColumns(ws, USER_COLUMNS);
-
   const target = await findUserById(userId);
   if (!target) throw new Error('User not found');
 
+  const centerId = target.centerId;
+  const workbook = await loadWorkbook(getUsersFile(centerId));
+  const sheet = workbook.getWorksheet('Users');
+  if (!sheet) throw new Error('Users sheet not found');
+  applyWorksheetColumns(sheet, USER_COLUMNS);
+
+  const nextRole = userData.role !== undefined ? userData.role : target.role;
+  const nextCenterId = nextRole === 'super_admin'
+    ? ''
+    : (userData.centerId !== undefined ? String(userData.centerId || '').trim() : target.centerId);
+
+  if (nextRole !== 'super_admin' && !nextCenterId) throw new Error('Center is required');
+
   const username = userData.username !== undefined ? String(userData.username || '').trim() : target.username;
   const fullName = userData.fullName !== undefined ? String(userData.fullName || '').trim() : target.fullName;
-  const email = userData.email !== undefined ? String(userData.email || '').trim() : target.email;
-  const mobile = userData.mobile !== undefined ? String(userData.mobile || '').trim() : target.mobile || '';
-  const altMobile = userData.altMobile !== undefined ? String(userData.altMobile || '').trim() : target.altMobile || '';
-  const college = userData.college !== undefined ? String(userData.college || '').trim() : target.college || '';
-  const graduationYear = userData.graduationYear !== undefined ? String(userData.graduationYear || '').trim() : target.graduationYear || '';
-  const degree = userData.degree !== undefined ? String(userData.degree || '').trim() : target.degree || '';
-  const department = userData.department !== undefined ? String(userData.department || '').trim() : target.department || '';
-
-  if (!username || !fullName) {
-    throw new Error('Username and full name are required');
-  }
+  if (!username || !fullName) throw new Error('Username and full name are required');
 
   const existing = await findUser(username);
-  if (existing && existing.id !== userId) {
-    throw new Error('Username already exists');
-  }
+  if (existing && existing.id !== userId) throw new Error('Username already exists');
 
   let updated = null;
-  for (let rowNum = 2; rowNum <= ws.rowCount; rowNum += 1) {
-    const row = ws.getRow(rowNum);
+  for (let rowNum = 2; rowNum <= sheet.rowCount; rowNum += 1) {
+    const row = sheet.getRow(rowNum);
     if (normalizeCellValue(row.getCell(1).value) !== userId) continue;
-
-    row.getCell(2).value = username;
-    row.getCell(4).value = fullName;
-    row.getCell(5).value = email;
-    row.getCell(6).value = mobile;
-    row.getCell(7).value = altMobile;
-    row.getCell(8).value = college;
-    row.getCell(9).value = graduationYear;
-    row.getCell(10).value = degree;
-    row.getCell(11).value = department;
-    if (userData.role !== undefined) row.getCell(12).value = userData.role;
-    if (userData.active !== undefined) row.getCell(13).value = !!userData.active;
-    if (userData.source !== undefined) row.getCell(15).value = userData.source;
-    if (userData.password) {
-      row.getCell(3).value = await bcrypt.hash(String(userData.password), 10);
-    }
-
+    row.getCell(2).value = nextCenterId;
+    row.getCell(3).value = nextCenterId ? requireCenter(nextCenterId).name : 'All Centers';
+    row.getCell(4).value = username;
+    row.getCell(6).value = fullName;
+    row.getCell(7).value = userData.email !== undefined ? String(userData.email || '').trim() : target.email;
+    row.getCell(8).value = userData.mobile !== undefined ? String(userData.mobile || '').trim() : target.mobile;
+    row.getCell(9).value = userData.altMobile !== undefined ? String(userData.altMobile || '').trim() : target.altMobile;
+    row.getCell(10).value = userData.college !== undefined ? String(userData.college || '').trim() : target.college;
+    row.getCell(11).value = userData.graduationYear !== undefined ? String(userData.graduationYear || '').trim() : target.graduationYear;
+    row.getCell(12).value = userData.degree !== undefined ? String(userData.degree || '').trim() : target.degree;
+    row.getCell(13).value = userData.department !== undefined ? String(userData.department || '').trim() : target.department;
+    row.getCell(14).value = nextRole;
+    if (userData.active !== undefined) row.getCell(15).value = !!userData.active;
+    if (userData.source !== undefined) row.getCell(17).value = userData.source;
+    if (userData.password) row.getCell(5).value = await bcrypt.hash(String(userData.password), 10);
     updated = userFromRow(row);
     break;
   }
 
-  await saveWorkbook(wb, FILES.users);
+  await saveWorkbook(workbook, getUsersFile(centerId));
   return updated;
 }
 
 async function deleteUser(userId) {
-  const wb = await loadWorkbook(FILES.users);
-  const ws = wb.getWorksheet('Users');
-  if (!ws) return false;
+  const target = await findUserById(userId);
+  if (!target) return false;
+
+  const centerId = target.centerId;
+  const workbook = await loadWorkbook(getUsersFile(centerId));
+  const sheet = workbook.getWorksheet('Users');
+  if (!sheet) return false;
 
   let rowToDelete = null;
-  ws.eachRow((row, rowNum) => {
+  sheet.eachRow((row, rowNum) => {
     if (rowNum > 1 && normalizeCellValue(row.getCell(1).value) === userId) {
       rowToDelete = rowNum;
     }
   });
-
-  if (rowToDelete) {
-    ws.spliceRows(rowToDelete, 1);
-    await saveWorkbook(wb, FILES.users);
-    return true;
-  }
-
-  return false;
+  if (!rowToDelete) return false;
+  sheet.spliceRows(rowToDelete, 1);
+  await saveWorkbook(workbook, getUsersFile(centerId));
+  return true;
 }
 
-// ─── ACTIVITY LOG ───────────────────────────────────────────────────────────
+async function logActivity(action, user, details = {}) {
+  const centerId = details.centerId || '';
+  if (!centerId) return;
 
-async function logActivity(action, user, details) {
-  const wb = await loadWorkbook(FILES.logs);
-  let ws = wb.getWorksheet('Activity Log');
-  if (!ws) {
-    ws = createStyledWorksheet(wb, 'Activity Log', LOG_COLUMNS);
+  const centerName = requireCenter(centerId).name;
+  const filePath = getWorkbookFile('logs', centerId);
+  const workbook = await loadWorkbook(filePath);
+  let sheet = workbook.getWorksheet('Activity Log');
+  if (!sheet) {
+    sheet = createStyledWorksheet(workbook, 'Activity Log', LOG_COLUMNS, { views: [{ state: 'frozen', ySplit: 1 }] });
   } else {
-    applyWorksheetColumns(ws, LOG_COLUMNS);
+    applyWorksheetColumns(sheet, LOG_COLUMNS);
   }
-  const row = ws.addRow({ ts: new Date(), user, role: details.role || '', action, details: details.info || '' });
-  styleDataRow(row, ws.rowCount % 2 === 0);
-  await saveWorkbook(wb, FILES.logs);
+
+  const row = sheet.addRow({
+    ts: new Date(),
+    centerId,
+    centerName,
+    user,
+    role: details.role || '',
+    action,
+    details: details.info || '',
+  });
+  styleDataRow(row, sheet.rowCount % 2 === 0);
+  await saveWorkbook(workbook, filePath);
+}
+
+async function getLogs(centerId) {
+  const center = requireCenter(centerId);
+  const filePath = getWorkbookFile('logs', center.id);
+  if (!fsSync.existsSync(filePath)) return [];
+  const workbook = await loadWorkbook(filePath);
+  const sheet = workbook.getWorksheet('Activity Log');
+  if (!sheet) return [];
+
+  const logs = [];
+  sheet.eachRow((row, rowNum) => {
+    if (rowNum === 1) return;
+    logs.push({
+      ts: normalizeCellValue(row.getCell(1).value),
+      centerId: normalizeCellValue(row.getCell(2).value) || center.id,
+      centerName: normalizeCellValue(row.getCell(3).value) || center.name,
+      user: normalizeCellValue(row.getCell(4).value),
+      role: normalizeCellValue(row.getCell(5).value),
+      action: normalizeCellValue(row.getCell(6).value),
+      details: normalizeCellValue(row.getCell(7).value),
+    });
+  });
+  return logs;
 }
 
 async function saveWhatsappMessage(message) {
-  const wb = await loadWorkbook(FILES.whatsapp);
-  let ws = wb.getWorksheet('WhatsApp Messages');
-  if (!ws) {
-    ws = createWhatsappWorksheet(wb);
+  const centerId = String(message.centerId || '').trim();
+  if (!centerId) return message;
+
+  const center = requireCenter(centerId);
+  const filePath = getWorkbookFile('whatsapp', center.id);
+  const workbook = await loadWorkbook(filePath);
+  let sheet = workbook.getWorksheet('WhatsApp Messages');
+  if (!sheet) {
+    sheet = createStyledWorksheet(workbook, 'WhatsApp Messages', WHATSAPP_COLUMNS, { views: [{ state: 'frozen', ySplit: 1 }] });
   } else {
-    applyWorksheetColumns(ws, WHATSAPP_COLUMNS);
+    applyWorksheetColumns(sheet, WHATSAPP_COLUMNS);
   }
 
-  const row = ws.addRow({
+  const row = sheet.addRow({
     messageId: message.messageId || uuidv4(),
+    centerId: center.id,
+    centerName: center.name,
     ts: message.ts ? new Date(message.ts) : new Date(),
     direction: message.direction || 'inbound',
     from: message.from || '',
@@ -681,40 +1005,92 @@ async function saveWhatsappMessage(message) {
     orderId: message.orderId || '',
     status: message.status || '',
   });
-  styleDataRow(row, ws.rowCount % 2 === 0);
-  await saveWorkbook(wb, FILES.whatsapp);
+  styleDataRow(row, sheet.rowCount % 2 === 0);
+  await saveWorkbook(workbook, filePath);
   return message;
 }
 
-async function getWhatsappMessages() {
-  const wb = await loadWorkbook(FILES.whatsapp);
-  const ws = wb.getWorksheet('WhatsApp Messages');
-  if (!ws) return [];
+async function getWhatsappMessages(centerId) {
+  const center = requireCenter(centerId);
+  const filePath = getWorkbookFile('whatsapp', center.id);
+  if (!fsSync.existsSync(filePath)) return [];
+  const workbook = await loadWorkbook(filePath);
+  const sheet = workbook.getWorksheet('WhatsApp Messages');
+  if (!sheet) return [];
 
   const messages = [];
-  ws.eachRow((row, rowNum) => {
+  sheet.eachRow((row, rowNum) => {
     if (rowNum === 1) return;
-    const val = n => normalizeCellValue(row.getCell(n).value);
+    const value = index => normalizeCellValue(row.getCell(index).value);
     messages.push({
-      messageId: val(1),
-      ts: val(2),
-      direction: val(3),
-      from: val(4),
-      to: val(5),
-      profileName: val(6),
-      body: val(7),
-      channel: val(8),
-      orderId: val(9),
-      status: val(10),
+      messageId: value(1),
+      centerId: value(2) || center.id,
+      centerName: value(3) || center.name,
+      ts: value(4),
+      direction: value(5),
+      from: value(6),
+      to: value(7),
+      profileName: value(8),
+      body: value(9),
+      channel: value(10),
+      orderId: value(11),
+      status: value(12),
     });
   });
-
   return messages.filter(message => message.messageId);
 }
 
+async function getAnalytics() {
+  const stats = {
+    totalUsers: 0,
+    totalOrders: 0,
+    totalInventory: 0,
+    centers: {}
+  };
+
+  for (const center of CENTERS) {
+    const users = await getUsers({ centerId: center.id });
+    const orders = await getOrders(center.id);
+    const inventory = await getInventory(center.id);
+    stats.centers[center.id] = {
+      name: center.name,
+      users: users.length,
+      orders: orders.length,
+      inventory: inventory.length,
+    };
+    stats.totalUsers += users.length;
+    stats.totalOrders += orders.length;
+    stats.totalInventory += inventory.length;
+  }
+
+  return stats;
+}
+
 module.exports = {
-  FILES, initInventory, getInventory, updateInventoryItem, addInventoryItem, deleteInventoryItem,
-  saveOrder, getOrders, updateOrderStatus,
-  initUsers, findUser, findUserById, getUsers, addUser, updateUser, deleteUser, logActivity,
-  saveWhatsappMessage, getWhatsappMessages,
+  CENTERS,
+  DATA_DIR,
+  FILES,
+  addInventoryItem,
+  addUser,
+  deleteInventoryItem,
+  deleteUser,
+  findUser,
+  findUserById,
+  getCenterPaths,
+  getInventory,
+  getLogs,
+  getOrders,
+  getUsers,
+  getWhatsappMessages,
+  getWorkbookFile,
+  initAllCenterData,
+  initInventory,
+  initUsers,
+  logActivity,
+  saveOrder,
+  saveWhatsappMessage,
+  updateInventoryItem,
+  updateOrderStatus,
+  updateUser,
+  getAnalytics,
 };
