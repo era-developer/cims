@@ -1,6 +1,7 @@
 require('dotenv').config();
 
 const { saveWhatsappMessage } = require('./excel');
+const { readCenterSpecificEnv } = require('./email');
 
 function readEnv(name) {
   const value = process.env[name];
@@ -14,6 +15,16 @@ function normalizePhone(value) {
   const digits = trimmed.replace(/[^\d+]/g, '');
   if (!digits) return '';
   return digits.startsWith('+') ? digits : `+${digits}`;
+}
+
+function getAdminWhatsAppRecipient(centerId) {
+  // Try to get center-specific WhatsApp number first
+  const centerWhatsapp = readCenterSpecificEnv(centerId, 'WHATSAPP_ADMIN_TO');
+  if (centerWhatsapp) {
+    return normalizePhone(centerWhatsapp);
+  }
+  // Fallback to the general admin number if center-specific is not found
+  return normalizePhone(readEnv('N8N_WHATSAPP_ADMIN_TO'));
 }
 
 function getWhatsAppConfig() {
@@ -55,6 +66,8 @@ function buildOrderEvent(order) {
   return {
     eventType: 'order_created',
     orderId: order.orderId,
+    centerId: order.centerId || '',
+    centerName: order.centerName || '',
     status: order.status || 'Pending',
     student: {
       username: order.username || '',
@@ -80,7 +93,7 @@ function buildOrderEvent(order) {
       moreCount,
     },
     recipients: {
-      admin: getWhatsAppConfig().adminTo,
+      admin: getAdminWhatsAppRecipient(order.centerId), // Use the new function
       student: getStudentRecipient(order),
     },
     source: 'cims',
@@ -92,6 +105,8 @@ function buildStatusEvent(order, status, remarks) {
   return {
     eventType: 'order_status_changed',
     orderId: order.orderId,
+    centerId: order.centerId || '',
+    centerName: order.centerName || '',
     status,
     remarks: remarks || '',
     student: {
@@ -111,7 +126,7 @@ function buildStatusEvent(order, status, remarks) {
       moreCount,
     },
     recipients: {
-      admin: getWhatsAppConfig().adminTo,
+      admin: getAdminWhatsAppRecipient(order.centerId), // Use the new function
       student: getStudentRecipient(order),
     },
     source: 'cims',
@@ -176,6 +191,7 @@ async function logOutboundWhatsapp(payload, result) {
   const targets = [recipients.admin, recipients.student].filter(Boolean).join(', ');
   await saveWhatsappMessage({
     messageId: '',
+    centerId: payload.centerId || '',
     ts: new Date(),
     direction: 'outbound',
     from: 'cims-via-n8n',
@@ -221,9 +237,11 @@ async function recordIncomingWhatsAppMessage(payload) {
   const to = normalizePhone(payload.to || payload.recipient || '');
   const profileName = String(payload.profileName || payload.name || '').trim();
   const orderId = extractOrderId(body || payload.orderId || '');
+  const centerId = String(payload.centerId || '').trim();
 
   await saveWhatsappMessage({
     messageId: String(payload.messageId || payload.id || ''),
+    centerId,
     ts: payload.ts || payload.timestamp || new Date(),
     direction: 'inbound',
     from,
@@ -237,6 +255,7 @@ async function recordIncomingWhatsAppMessage(payload) {
 
   return {
     ok: true,
+    centerId,
     from,
     to,
     profileName,
@@ -248,6 +267,7 @@ async function recordIncomingWhatsAppMessage(payload) {
 module.exports = {
   extractOrderId,
   getWhatsAppConfig,
+  getAdminWhatsAppRecipient, // Export the new function
   isAuthorizedInboundRequest,
   recordIncomingWhatsAppMessage,
   sendOrderWhatsAppNotifications,

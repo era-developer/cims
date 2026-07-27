@@ -2,27 +2,37 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { APP_LONG_NAME, APP_SHORT_NAME, APP_SUBTITLE } from '../brand';
+import { CENTERS } from '../centers';
+import { useAuth } from '../context/AuthContext';
 import useViewport from '../hooks/useViewport';
 
 export default function AdminDashboard() {
   const { isMobile } = useViewport();
+  const { user } = useAuth();
   const [stats, setStats] = useState(null);
   const [recentOrders, setRecentOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [centerId, setCenterId] = useState('');
   const navigate = useNavigate();
+  const isSuperAdmin = user?.role === 'super_admin';
+
+  useEffect(() => {
+    setCenterId(isSuperAdmin ? '' : (user?.centerId || ''));
+  }, [isSuperAdmin, user]);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [centerId]);
 
   const [ordersDateFrom, setOrdersDateFrom] = useState('');
   const [ordersDateTo, setOrdersDateTo] = useState('');
 
   async function fetchData() {
     try {
+      const params = centerId ? { centerId } : {};
       const [statsRes, ordersRes] = await Promise.all([
-        axios.get('/api/admin/stats'),
-        axios.get('/api/orders'),
+        axios.get('/api/admin/stats', { params }),
+        axios.get('/api/orders', { params }),
       ]);
       setStats(statsRes.data);
       setRecentOrders(ordersRes.data.slice(-5).reverse());
@@ -39,12 +49,13 @@ export default function AdminDashboard() {
     const link = document.createElement('a');
 
     let query = '';
+    const params = new URLSearchParams();
+    if (centerId) params.set('centerId', centerId);
     if (type === 'orders' && (ordersDateFrom || ordersDateTo)) {
-      const params = new URLSearchParams();
       if (ordersDateFrom) params.set('startDate', ordersDateFrom);
       if (ordersDateTo) params.set('endDate', ordersDateTo);
-      query = `?${params.toString()}`;
     }
+    query = params.toString() ? `?${params.toString()}` : '';
 
     link.href = `/api/admin/download/${type}${query}`;
     const headers = new Headers({ Authorization: `Bearer ${token}` });
@@ -80,11 +91,13 @@ export default function AdminDashboard() {
     { title: 'Inventory', description: 'Add components, manage stock, and upload component photos.', path: '/admin/inventory', color: '#17355f' },
     { title: 'Orders', description: 'Approve requests, confirm returns, and monitor issue status.', path: '/admin/orders', color: '#ef6c00' },
     { title: 'Users', description: 'Approve student registrations, edit users, and maintain access.', path: '/admin/users', color: '#8e24aa' },
+    ...(isSuperAdmin ? [{ title: 'Analytics', description: 'View system-wide statistics and charts.', path: '/admin/analytics', color: '#1a237e' }] : []),
   ];
 
   const downloads = [
     { type: 'inventory', label: 'Inventory Report', note: 'Components, stock, photos, and locations' },
     { type: 'orders', label: 'Orders Report', note: 'Requests, issue status, and returns' },
+    { type: 'transfers', label: 'Center Transfer Report', note: 'Requested + sent center-to-center movement details' },
     { type: 'users', label: 'Users Report', note: 'Manual users and self-registered students' },
     { type: 'logs', label: 'Activity Logs', note: 'System activity and audit trail' },
   ];
@@ -93,16 +106,28 @@ export default function AdminDashboard() {
     <div style={{ ...styles.page, ...(isMobile ? styles.pageMobile : {}) }}>
       <div style={styles.container}>
         <div style={{ ...styles.hero, ...(isMobile ? styles.heroMobile : {}) }}>
-          <div>
-            <div style={styles.kicker}>{APP_SUBTITLE}</div>
-            <h1 style={{ ...styles.title, ...(isMobile ? styles.titleMobile : {}) }}>Admin Dashboard</h1>
-            <p style={styles.subtitle}>{APP_LONG_NAME}</p>
-          </div>
+            <div>
+              <div style={styles.kicker}>{APP_SUBTITLE}</div>
+              <h1 style={{ ...styles.title, ...(isMobile ? styles.titleMobile : {}) }}>Admin Dashboard</h1>
+              <p style={styles.subtitle}>{isSuperAdmin && centerId ? `${APP_LONG_NAME} - ${CENTERS.find(center => center.id === centerId)?.name || ''}` : APP_LONG_NAME}</p>
+            </div>
           <div style={{ ...styles.heroActions, ...(isMobile ? styles.heroActionsStack : {}) }}>
             <button style={{ ...styles.primaryAction, ...(isMobile ? styles.fullWidthBtn : {}) }} onClick={() => navigate('/admin/users')}>Review Registrations</button>
             <button style={{ ...styles.secondaryAction, ...(isMobile ? styles.fullWidthBtn : {}) }} onClick={() => navigate('/admin/inventory')}>Manage Inventory</button>
           </div>
         </div>
+
+        {isSuperAdmin && (
+          <div style={styles.superBar}>
+            <label style={styles.superLabel}>
+              View center
+              <select value={centerId} onChange={event => setCenterId(event.target.value)} style={styles.superSelect}>
+                <option value="">All Centers</option>
+                {CENTERS.map(center => <option key={center.id} value={center.id}>{center.name}</option>)}
+              </select>
+            </label>
+          </div>
+        )}
 
         <div style={styles.statsGrid}>
           {statCards.map(card => (
@@ -112,6 +137,39 @@ export default function AdminDashboard() {
             </div>
           ))}
         </div>
+
+        {isSuperAdmin && !centerId && Array.isArray(stats?.byCenter) && (
+          <div style={styles.section}>
+            <div style={styles.sectionHeader}>
+              <div>
+                <h2 style={styles.sectionTitle}>Center Overview</h2>
+                <p style={styles.sectionText}>Live activity across all nine centers.</p>
+              </div>
+            </div>
+            <div style={styles.tableWrap}>
+              <div style={styles.tableScroller}>
+                <div style={styles.tableHead}>
+                  <span>Center</span>
+                  <span>Components</span>
+                  <span>Stock</span>
+                  <span>Pending Orders</span>
+                  <span>Approved Orders</span>
+                  <span>Students</span>
+                </div>
+                {stats.byCenter.map(center => (
+                  <div key={center.centerId} style={styles.tableRow}>
+                    <span style={styles.orderId}>{center.centerName}</span>
+                    <span>{center.totalComponents}</span>
+                    <span>{center.totalStock}</span>
+                    <span>{center.pendingOrders}</span>
+                    <span>{center.approvedOrders}</span>
+                    <span>{center.students}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         <div style={styles.quickGrid}>
           {quickLinks.map(link => (
@@ -243,6 +301,9 @@ const styles = {
   quickDescription: { fontSize: '13px', color: '#64748b', lineHeight: 1.6, marginBottom: '14px' },
   quickCta: { fontSize: '13px', fontWeight: 700 },
   section: { background: '#fff', borderRadius: '18px', padding: '24px', marginBottom: '24px', boxShadow: '0 2px 12px rgba(26,35,126,0.07)' },
+  superBar: { background: '#fff', borderRadius: '16px', padding: '16px 18px', marginBottom: '18px', boxShadow: '0 2px 12px rgba(26,35,126,0.07)' },
+  superLabel: { display: 'inline-flex', flexDirection: 'column', gap: '8px', fontSize: '12px', color: '#334155', fontWeight: 700 },
+  superSelect: { minWidth: '260px', padding: '10px 12px', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '13px', background: '#fff' },
   sectionHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', marginBottom: '18px', flexWrap: 'wrap' },
   sectionTitle: { fontFamily: "'DM Sans', sans-serif", fontSize: '20px', fontWeight: 800, color: '#1a1a2e' },
   sectionText: { fontSize: '13px', color: '#64748b', marginTop: '6px' },

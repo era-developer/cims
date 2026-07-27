@@ -13,12 +13,19 @@ import AdminDashboard from './pages/AdminDashboard';
 import AdminInventory from './pages/AdminInventory';
 import AdminOrders from './pages/AdminOrders';
 import AdminUsers from './pages/AdminUsers';
+import AdminAnalytics from './pages/AdminAnalytics';
+import AdminTransfers from './pages/AdminTransfers';
+import MyCenter from './pages/MyCenter';
+import RegisterLanding from './pages/RegisterLanding';
 
 function PrivateRoute({ children, role }) {
   const { user, loading } = useAuth();
   if (loading) return <div style={{ padding: '80px', textAlign: 'center', color: '#6b7280', fontFamily: "'DM Sans', sans-serif" }}>Loading CIMS...</div>;
   if (!user) return <Navigate to="/" replace />;
-  if (role && user.role !== role) return <Navigate to={user.role === 'admin' ? '/admin' : '/dashboard'} replace />;
+  const allowedRoles = Array.isArray(role) ? role : role ? [role] : [];
+  if (allowedRoles.length && !allowedRoles.includes(user.role)) {
+    return <Navigate to={['admin', 'super_admin'].includes(user.role) ? '/admin' : '/dashboard'} replace />;
+  }
   return children;
 }
 
@@ -66,25 +73,41 @@ export default function App() {
 
             {/* Admin Routes */}
             <Route path="/admin" element={
-              <PrivateRoute role="admin">
+              <PrivateRoute role={['admin', 'super_admin']}>
                 <AppLayout><AdminDashboard /></AppLayout>
               </PrivateRoute>
             } />
             <Route path="/admin/inventory" element={
-              <PrivateRoute role="admin">
+              <PrivateRoute role={['admin', 'super_admin']}>
                 <AppLayout><AdminInventory /></AppLayout>
               </PrivateRoute>
             } />
             <Route path="/admin/orders" element={
-              <PrivateRoute role="admin">
+              <PrivateRoute role={['admin', 'super_admin']}>
                 <AppLayout><AdminOrders /></AppLayout>
               </PrivateRoute>
             } />
+            <Route path="/admin/transfers" element={
+              <PrivateRoute role="super_admin">
+                <AppLayout><AdminTransfers /></AppLayout>
+              </PrivateRoute>
+            } />
             <Route path="/admin/users" element={
-              <PrivateRoute role="admin">
+              <PrivateRoute role={['admin', 'super_admin']}>
                 <AppLayout><AdminUsers /></AppLayout>
               </PrivateRoute>
             } />
+            <Route path="/admin/analytics" element={
+              <PrivateRoute role="super_admin">
+                <AppLayout><AdminAnalytics /></AppLayout>
+              </PrivateRoute>
+            } />
+            <Route path="/admin/my-center" element={
+              <PrivateRoute role={['admin', 'super_admin']}>
+                <AppLayout><MyCenter /></AppLayout>
+              </PrivateRoute>
+            } />
+            <Route path="/register/:centerId" element={<RegisterLanding />} />
 
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

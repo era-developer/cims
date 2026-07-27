@@ -5,8 +5,23 @@ import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import useViewport from '../hooks/useViewport';
 
-const ADMIN_WHATSAPP_NUMBER = '919148964106';
-const ADMIN_LOGIN_URL = 'http://192.168.0.139:5000';
+// Center-specific admin WhatsApp numbers
+const ADMIN_WHATSAPP_NUMBERS = {
+  jp_nagar: '+918951955093',      // JP Nagar admin
+  yelahanka: '+918951955092',     // Yelahanka admin
+  gopalan_mall: '+919876543212',  // Gopalan Mall admin
+  mysore: '+918951955095',        // Mysore admin
+  tumkur: '+918951955094',        // Tumkur admin
+  mangalore: '+918951955096',     // Mangalore admin
+  hubballi: '+918951717352',      // Hubballi admin
+  belagavi: '+918951955097',      // Belagavi admin
+  kalaburagi: '+918951955098',    // Kalaburagi admin
+};
+
+// Fallback number if center not found
+const DEFAULT_ADMIN_WHATSAPP_NUMBER = '911234567890';
+
+const ADMIN_LOGIN_URL = 'https://bit.ly/comedkares_ims';
 
 const INITIAL_DETAILS = {
   studentName: '',
@@ -77,7 +92,7 @@ export default function Cart() {
     }, 1000);
 
     const timeout = setTimeout(() => {
-      const whatsappLink = buildAdminWhatsAppLink(submittedOrder);
+      const whatsappLink = buildAdminWhatsAppLink(submittedOrder, user);
       autoRedirectedRef.current = true;
 
       const popup = window.open(whatsappLink, '_blank', 'noopener,noreferrer');
@@ -136,7 +151,7 @@ export default function Cart() {
   }
 
   if (step === 3) {
-    const whatsappLink = buildAdminWhatsAppLink(submittedOrder);
+    const whatsappLink = buildAdminWhatsAppLink(submittedOrder, user);
     return (
       <div style={{ ...styles.page, ...(isMobile ? styles.pageMobile : {}) }}>
         <div style={{ ...styles.successCard, ...(isMobile ? styles.successCardMobile : {}) }}>
@@ -291,9 +306,12 @@ export default function Cart() {
   );
 }
 
-function buildAdminWhatsAppLink(order) {
+function buildAdminWhatsAppLink(order, user) {
+  // Get center-specific admin number, fallback to default
+  const adminNumber = ADMIN_WHATSAPP_NUMBERS[user?.centerId] || DEFAULT_ADMIN_WHATSAPP_NUMBER;
+
   if (!order?.orderId) {
-    return `https://wa.me/${ADMIN_WHATSAPP_NUMBER}`;
+    return `https://wa.me/${adminNumber}`;
   }
 
   const details = order.details || {};
@@ -318,7 +336,7 @@ function buildAdminWhatsAppLink(order) {
     ADMIN_LOGIN_URL,
   ].join('\n');
 
-  return `https://wa.me/${ADMIN_WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
+  return `https://wa.me/${adminNumber}?text=${encodeURIComponent(message)}`;
 }
 
 function Field({ label, name, value, onChange, placeholder, textarea, fullWidth, type = 'text', min }) {

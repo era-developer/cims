@@ -14,6 +14,7 @@ router.post('/whatsapp', async (req, res) => {
     const details = await recordIncomingWhatsAppMessage(req.body || {});
     await logActivity('WHATSAPP_INBOUND', details.from || 'whatsapp', {
       role: 'external',
+      centerId: details.centerId,
       info: `Incoming WhatsApp message${details.orderId ? ` for ${details.orderId}` : ''}: ${details.body.slice(0, 80)}`,
     });
 

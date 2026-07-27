@@ -1,6 +1,7 @@
 const express = require('express');
 const { getInventory, addInventoryItem, updateInventoryItem, deleteInventoryItem, logActivity } = require('../utils/excel');
 const { authMiddleware, adminOnly } = require('../middleware/auth');
+const { CENTERS } = require('../utils/centers');
 
 const router = express.Router();
 const ALLOWED_IMAGE_HOSTS = new Set([
@@ -44,13 +45,42 @@ router.get('/image', async (req, res) => {
   }
 });
 
+function getRequestedCenterId(req) {
+  if (req.user.role === 'super_admin') {
+    return String(req.query.centerId || req.body.centerId || '').trim();
+  }
+  return req.user.centerId;
+}
+
 // GET all components (all authenticated users)
 router.get('/', authMiddleware, async (req, res) => {
   try {
-    const items = await getInventory();
-    const active = req.user.role === 'student' ? items.filter(i => i.active) : items;
+    let centerId = getRequestedCenterId(req);
+    
+    // Default to user's center if not specified, or first center for super_admin if no center selected
+    if (!centerId) {
+      if (req.user.role === 'super_admin') {
+        // For super_admin, use first center if none specified
+        centerId = CENTERS.length > 0 ? CENTERS[0].id : '';
+      } else {
+        // For other admins, use their own center
+        centerId = req.user.centerId || '';
+      }
+    }
+    
+    if (!centerId) return res.json([]);
+    
+    let items = [];
+    try {
+      items = (await getInventory(centerId)) || [];
+    } catch (err) {
+      console.error(`Inventory read error for ${centerId}:`, err.message);
+    }
+    
+    const active = req.user.role === 'student' ? items.filter(i => i?.active) : items;
     res.json(active);
   } catch (err) {
+    console.error('Error fetching inventory:', err);
     res.status(500).json({ message: 'Error fetching inventory' });
   }
 });
@@ -58,8 +88,9 @@ router.get('/', authMiddleware, async (req, res) => {
 // POST add component (admin only)
 router.post('/', authMiddleware, adminOnly, async (req, res) => {
   try {
-    const item = await addInventoryItem(req.body);
-    await logActivity('ADD_COMPONENT', req.user.username, { role: 'admin', info: `Added: ${item.name}` });
+    const centerId = getRequestedCenterId(req);
+    const item = await addInventoryItem(req.body, centerId);
+    await logActivity('ADD_COMPONENT', req.user.username, { role: req.user.role, centerId, info: `Added: ${item.name}` });
     res.status(201).json(item);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -69,9 +100,10 @@ router.post('/', authMiddleware, adminOnly, async (req, res) => {
 // PUT update component (admin only)
 router.put('/:id', authMiddleware, adminOnly, async (req, res) => {
   try {
-    const ok = await updateInventoryItem(req.params.id, req.body);
+    const centerId = getRequestedCenterId(req);
+    const ok = await updateInventoryItem(req.params.id, req.body, centerId);
     if (!ok) return res.status(404).json({ message: 'Component not found' });
-    await logActivity('UPDATE_COMPONENT', req.user.username, { role: 'admin', info: `Updated ID: ${req.params.id}` });
+    await logActivity('UPDATE_COMPONENT', req.user.username, { role: req.user.role, centerId, info: `Updated ID: ${req.params.id}` });
     res.json({ message: 'Updated successfully' });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -81,9 +113,10 @@ router.put('/:id', authMiddleware, adminOnly, async (req, res) => {
 // DELETE component (admin only)
 router.delete('/:id', authMiddleware, adminOnly, async (req, res) => {
   try {
-    const ok = await deleteInventoryItem(req.params.id);
+    const centerId = getRequestedCenterId(req);
+    const ok = await deleteInventoryItem(req.params.id, centerId);
     if (!ok) return res.status(404).json({ message: 'Component not found' });
-    await logActivity('DELETE_COMPONENT', req.user.username, { role: 'admin', info: `Deleted ID: ${req.params.id}` });
+    await logActivity('DELETE_COMPONENT', req.user.username, { role: req.user.role, centerId, info: `Deleted ID: ${req.params.id}` });
     res.json({ message: 'Deleted successfully' });
   } catch (err) {
     res.status(500).json({ message: err.message });

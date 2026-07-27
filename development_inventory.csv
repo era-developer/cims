@@ -1,0 +1,53 @@
+Category,Name,Path,Status,Notes
+Backend,Server,backend/server.js,Built,Express entry point
+Backend,Auth middleware,backend/middleware/auth.js,Built,Authentication middleware
+Backend,Auth routes,backend/routes/auth.js,Built,Login/register/token endpoints
+Backend,Admin routes,backend/routes/admin.js,Built,Admin management endpoints
+Backend,Components routes,backend/routes/components.js,Built,Component catalog endpoints
+Backend,Orders routes,backend/routes/orders.js,Built,Order CRUD and metadata
+Backend,Transfers routes,backend/routes/transfers.js,Built,Inventory transfer endpoints
+Backend,Webhooks routes,backend/routes/webhooks.js,Built,Webhook handlers (external integrations)
+Backend,Centers util (legacy),backend/utils/centers_old.js,Built,Old centers defs
+Backend,Centers util,backend/utils/centers.js,Built,Current centers defs
+Backend,Excel util,backend/utils/excel.js,Built,Excel read/write helpers
+Backend,Email util,backend/utils/email.js,Built,Email sending
+Backend,Reminders util,backend/utils/reminders.js,Built,Reminder scheduling/logic
+Backend,WhatsApp util,backend/utils/whatsapp.js,Built,WhatsApp notification helpers
+Backend,Scripts - import ref inventory,backend/scripts/importReferenceInventory.js,Built,Reference data import
+Backend,Scripts - reset fresh launch,backend/scripts/reset-fresh-launch.js,Built,Reset environment script
+Backend,Scripts - sync inventories,backend/scripts/sync-inventories.js,Built,Inventory sync job
+Backend,Scripts - update Gopalan inventory,backend/scripts/updateGopalanInventory.js,Built,Site-specific update script
+Backend,Data - global order meta,backend/data/order_meta.json,Built,Global order metadata
+Backend,Data - jp_nagar order meta,backend/data/jp_nagar/jp_nagar_order_meta.json,Built,Center-specific order meta
+Backend,Data - gopalan_mall order meta,backend/data/gopalan_mall/gopalan_mall_order_meta.json,Built,Center-specific order meta
+Backend,Data - mangalore order meta,backend/data/mangalore/mangalore_order_meta.json,Built,Center-specific order meta
+Frontend,Package manifest,frontend/package.json,Built,Frontend deps & scripts
+Frontend,API helper,frontend/src/api.js,Built,Dynamic API URL detection
+Frontend,App entry,frontend/src/App.js,Built,Top-level React app
+Frontend,Index,frontend/src/index.js,Built,React DOM mount
+Frontend,Brand config,frontend/src/brand.js,Built,Branding constants
+Frontend,Centers config,frontend/src/centers.js,Built,Centers list & config
+Frontend,Pages - AdminInventory,frontend/src/pages/AdminInventory.jsx,Built,Inventory management UI
+Frontend,Pages - AdminDashboard,frontend/src/pages/AdminDashboard.jsx,Built,Admin overview dashboard
+Frontend,Pages - AdminAnalytics,frontend/src/pages/AdminAnalytics.jsx,Built,Analytics UI
+Frontend,Pages - AdminOrders,frontend/src/pages/AdminOrders.jsx,Built,Admin order list
+Frontend,Pages - AdminTransfers,frontend/src/pages/AdminTransfers.jsx,Built,Transfer management UI
+Frontend,Pages - AdminUsers,frontend/src/pages/AdminUsers.jsx,Built,User management UI
+Frontend,Pages - StudentDashboard,frontend/src/pages/StudentDashboard.jsx,Built,Student-facing dashboard
+Frontend,Pages - RegisterLanding,frontend/src/pages/RegisterLanding.jsx,Built,Registration landing page
+Frontend,Pages - Login,frontend/src/pages/Login.jsx,Built,Login UI
+Frontend,Pages - MyProfile,frontend/src/pages/MyProfile.jsx,Built,Profile page
+Frontend,Pages - MyOrders,frontend/src/pages/MyOrders.jsx,Built,User order list
+Frontend,Pages - MyCenter,frontend/src/pages/MyCenter.jsx,Built,Center-specific view
+Frontend,Pages - ComponentDetails,frontend/src/pages/ComponentDetails.jsx,Built,Component detail view
+Frontend,Pages - Cart,frontend/src/pages/Cart.jsx,Built,Shopping cart UI
+Frontend,Components - BrandLogo,frontend/src/components/BrandLogo.jsx,Built,Logo component
+Frontend,Components - Navbar,frontend/src/components/Navbar.jsx,Built,Top navigation
+Frontend,Components - SmartImage,frontend/src/components/SmartImage.jsx,Built,Image helper component
+Frontend,Context - Auth,frontend/src/context/AuthContext.jsx,Built,Auth provider & hooks
+Frontend,Context - Cart,frontend/src/context/CartContext.jsx,Built,Cart state provider
+Frontend,Hooks - useViewport,frontend/src/hooks/useViewport.js,Built,Viewport helper hook
+Frontend,Build output,frontend/build/index.html,Built,Prebuilt production assets present
+Root,Start scripts,start.bat / start-server.bat / start.sh,Built,Convenience start scripts in repo root
+Docs,Readme & guides,README.md / DEPLOYMENT_GUIDE.md etc,Built,Project docs and deployment notes
+Other,Verification & tests,backend/verify-system.js / backend/test-email-config.js,Built,Verification/test utilities

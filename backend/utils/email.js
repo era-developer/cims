@@ -55,7 +55,20 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-function getAdminRecipient() {
+function readCenterSpecificEnv(centerId, keySuffix) {
+  if (!centerId) return '';
+  const key = `${centerId.toUpperCase().replace(/-/g, '_')}_${keySuffix}`;
+  return readEnv(key);
+}
+
+function getAdminRecipient(centerId) {
+  // Try to get center-specific email first
+  const centerEmail = readCenterSpecificEnv(centerId, 'EMAIL');
+  if (centerEmail) {
+    return centerEmail;
+  }
+  
+  // Fallback to general center email or SMTP user
   return readEnv('CENTER_EMAIL') || readEnv('SMTP_USER') || '';
 }
 
@@ -399,14 +412,14 @@ async function ensureEmailReady(contextLabel) {
   return true;
 }
 
-async function sendOrderNotification(order) {
+async function sendOrderNotification(order, centerId) {
   if (!(await ensureEmailReady(`Order ${order.orderId}`))) {
     return;
   }
 
   const config = getSmtpConfig();
   const transporter = createTransporter();
-  const adminRecipient = getAdminRecipient();
+  const adminRecipient = getAdminRecipient(centerId || order.centerId);
   const studentRecipient = order.studentEmail;
   const details = getStudentDetails(order);
   const items = getItems(order);
@@ -436,8 +449,6 @@ async function sendOrderNotification(order) {
       <p style="margin:0 0 4px;"><strong>Faculty Guide:</strong> ${escapeHtml(details.facultyGuide)}</p>
       ${expectedReturnDate ? `<p style="margin:0 0 12px;"><strong>Expected return date:</strong> ${escapeHtml(expectedReturnDate)}</p>` : ''}
       <h3 style="margin:20px 0 8px;color:#1a237e;">Requested items</h3>
-      <p style="margin:0 0 10px;color:#334155;"><strong>Component summary:</strong> ${escapeHtml(componentSummaryText(items))}</p>
-      ${componentBulletList(items)}
       ${componentTable(items)}
       ${details.purpose ? `<div style="margin-top:16px;padding:14px 16px;background:#fff9c4;border-radius:8px;"><strong>Purpose:</strong> ${escapeHtml(details.purpose)}</div>` : ''}
       <div style="margin-top:16px;padding:14px 16px;background:#f8fafc;border:1px solid #dbe3f0;border-radius:10px;">
@@ -459,8 +470,6 @@ async function sendOrderNotification(order) {
       ${expectedReturnDate ? `<p style="margin:0 0 12px;color:#475569;"><strong>Expected return date:</strong> ${escapeHtml(expectedReturnDate)}</p>` : ''}
       <p style="margin:0 0 12px;color:#475569;">The requested stock has been reserved for review. You will receive another email when the admin approves, rejects, or completes the return.</p>
       <h3 style="margin:20px 0 8px;color:#1a237e;">Requested items</h3>
-      <p style="margin:0 0 10px;color:#334155;"><strong>Component summary:</strong> ${escapeHtml(componentSummaryText(items))}</p>
-      ${componentBulletList(items)}
       ${componentTable(items)}
       ${details.projectName ? `<p style="margin:16px 0 0;"><strong>Project:</strong> ${escapeHtml(details.projectName)}</p>` : ''}
       <div style="margin-top:16px;padding:14px 16px;background:#f8fafc;border:1px solid #dbe3f0;border-radius:10px;">
@@ -493,14 +502,73 @@ async function sendOrderNotification(order) {
   await Promise.allSettled(tasks);
 }
 
-async function sendStatusUpdate(order, status, remarks) {
+async function sendTransferNotification({ transfer, type, recipients = [] }) {
+  if (!recipients.length) return;
+  if (!(await ensureEmailReady(`Transfer ${transfer.id}`))) {
+    return;
+  }
+
+  const config = getSmtpConfig();
+  const transporter = createTransporter();
+
+  const typeLabels = {
+    request: 'New transfer request',
+    approved: 'Transfer approved',
+    'return-request': 'Return requested',
+    returned: 'Transfer returned',
+  };
+  const subject = typeLabels[type]
+    ? `[CIMS] ${typeLabels[type]}: ${transfer.id}`
+    : `[CIMS] Transfer update: ${transfer.id}`;
+
+  const summary = `
+    <p style="margin:0 0 8px;"><strong>Requesting center:</strong> ${escapeHtml(transfer.requestingCenterName)}</p>
+    <p style="margin:0 0 8px;"><strong>Program name:</strong> ${escapeHtml(transfer.programName || 'N/A')}</p>
+    <p style="margin:0 0 8px;"><strong>Purpose:</strong> ${escapeHtml(transfer.purpose || 'N/A')}</p>
+    <p style="margin:0 0 8px;"><strong>Responsible:</strong> ${escapeHtml(transfer.responsiblePerson || 'N/A')} (${escapeHtml(transfer.responsibleEmail || 'N/A')})</p>
+  `;
+
+  const footerNote = type === 'request'
+    ? 'This request awaits super admin approval.'
+    : type === 'approved'
+      ? `Supplied from ${escapeHtml(transfer.supplyCenterName || 'another center')}.`
+      : type === 'return-request'
+        ? 'A return has been requested; the supplying center will mark it received once the parts are back.'
+        : 'Components have been returned to the supplying center.';
+
+  const bodyHtml = `
+    ${summary}
+    <h3 style="margin:16px 0 8px;color:#1a237e;">Requested components</h3>
+    ${componentTable(transfer.components || [])}
+    <p style="margin-top:12px;color:#475569;">${escapeHtml(footerNote)}</p>
+  `;
+
+  const html = wrapEmail(
+    `Transfer ${transfer.id}`,
+    typeLabels[type] || 'Component transfer update',
+    bodyHtml,
+  );
+
+  const to = recipients.filter(Boolean).join(', ');
+  if (!to) return;
+
+  await sendMessage(transporter, {
+    from: `"CIMS System" <${config.user}>`,
+    to,
+    replyTo: buildReplyTo(config.user, ''),
+    subject,
+    html,
+  });
+}
+
+async function sendStatusUpdate(order, status, remarks, centerId) {
   if (!(await ensureEmailReady(`Status ${order.orderId} ${status}`))) {
     return;
   }
 
   const config = getSmtpConfig();
   const transporter = createTransporter();
-  const adminRecipient = getAdminRecipient();
+  const adminRecipient = getAdminRecipient(centerId || order.centerId);
   const studentRecipient = order.studentEmail;
   const details = getStudentDetails(order);
   const items = getItems(order);
@@ -510,15 +578,32 @@ async function sendStatusUpdate(order, status, remarks) {
   const expectedReturnDate = formatDateOnly(details.expectedReturnDate || order.expectedReturnDate);
   const adminNotes = buildPolicyNotes(status, 'admin');
   const studentNotes = buildPolicyNotes(status, 'student');
-  const itemHeading = status === 'Approved' || status === 'Return Requested' || status === 'Partially Returned' || status === 'Returned'
-    ? 'Components issued'
-    : 'Requested components';
-  const componentSection = `
-    <h3 style="margin:20px 0 8px;color:#1a237e;">${escapeHtml(itemHeading)}</h3>
-    <p style="margin:0 0 10px;color:#334155;"><strong>Component summary:</strong> ${escapeHtml(componentSummaryText(items))}</p>
-    ${status === 'Returned' ? '' : componentBulletList(items)}
-    ${componentTable(items)}
-  `;
+  const rejectedItems = Array.isArray(order.rejectedItems) ? order.rejectedItems : [];
+  const rejectedItemsHtml = rejectedItems.length
+    ? `
+      <div style="margin-top:12px;padding:12px 14px;background:#fff4f1;border:1px solid #f0c2bf;border-radius:8px;">
+        <strong style="color:#c62828;">Components not issued</strong>
+        ${componentBulletList(rejectedItems)}
+      </div>
+    `
+    : '';
+
+  const RETURN_FLOW_STATUSES = new Set(['Return Requested', 'Partially Returned', 'Returned']);
+  const showReturnSummary = RETURN_FLOW_STATUSES.has(status) && returnSummary.length > 0;
+
+  let itemsSectionHtml = '';
+  if (showReturnSummary) {
+    itemsSectionHtml = `
+      <h3 style="margin:20px 0 8px;color:#1a237e;">Return Summary</h3>
+      ${returnSummaryTable(returnSummary)}
+    `;
+  } else {
+    const itemHeading = status === 'Approved' ? 'Components Issued' : 'Requested Components';
+    itemsSectionHtml = `
+      <h3 style="margin:20px 0 8px;color:#1a237e;">${escapeHtml(itemHeading)}</h3>
+      ${componentTable(items)}
+    `;
+  }
 
   const sharedBlock = (audienceNotes) => `
     <div style="padding:14px 16px;background:${theme.bg};border-left:4px solid ${theme.color};border-radius:8px;margin-bottom:20px;">
@@ -527,8 +612,8 @@ async function sendStatusUpdate(order, status, remarks) {
       ${expectedReturnDate ? `<br><span style="color:#475569;">Expected return date: ${escapeHtml(expectedReturnDate)}</span>` : ''}
       ${note}
     </div>
-    ${componentSection}
-    ${returnSummary.length ? `<h3 style="margin:20px 0 8px;color:#1a237e;">Return summary</h3>${returnSummaryTable(returnSummary)}` : ''}
+    ${itemsSectionHtml}
+    ${rejectedItemsHtml}
     <div style="margin-top:16px;padding:14px 16px;background:#f8fafc;border:1px solid #dbe3f0;border-radius:10px;">
       <strong style="color:#1a237e;">${escapeHtml(audienceNotes.title)}</strong>
       ${audienceNotes.html}
@@ -579,7 +664,7 @@ async function sendStatusUpdate(order, status, remarks) {
   await Promise.allSettled(tasks);
 }
 
-async function sendReturnReminder(order) {
+async function sendReturnReminder(order, centerId) {
   if (!(await ensureEmailReady(`Return reminder ${order.orderId}`))) {
     return { ok: false, skipped: true };
   }
@@ -591,7 +676,7 @@ async function sendReturnReminder(order) {
     return { ok: false, skipped: true };
   }
 
-  const adminRecipient = getAdminRecipient();
+  const adminRecipient = getAdminRecipient(centerId || order.centerId);
   const details = getStudentDetails(order);
   const items = getItems(order);
   const expectedReturnDate = formatDateOnly(details.expectedReturnDate || order.expectedReturnDate);
@@ -606,8 +691,6 @@ async function sendReturnReminder(order) {
       </div>
       <p style="margin:0 0 12px;color:#475569;">This is a reminder to return the issued components by the expected date to help the lab keep inventory accurate for other students.</p>
       <h3 style="margin:20px 0 8px;color:#1a237e;">Components issued</h3>
-      <p style="margin:0 0 10px;color:#334155;"><strong>Component summary:</strong> ${escapeHtml(componentSummaryText(items))}</p>
-      ${componentBulletList(items)}
       ${componentTable(items)}
       <div style="margin-top:16px;padding:14px 16px;background:#f8fafc;border:1px solid #dbe3f0;border-radius:10px;">
         <strong style="color:#1a237e;">Return notes and policy</strong>
@@ -630,9 +713,17 @@ async function sendReturnReminder(order) {
 }
 
 module.exports = {
+  buildReplyTo,
+  ensureEmailReady,
+  getAdminRecipient,
+  getSiteUrl,
+  readCenterSpecificEnv,
+  readEnv,
   getSmtpConfig,
+  sendMessage,
   sendOrderNotification,
   sendStatusUpdate,
+  sendTransferNotification,
   sendReturnReminder,
   verifyEmailConnection,
 };

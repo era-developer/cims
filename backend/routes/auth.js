@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { addUser, findUser, findUserById, updateUser, logActivity } = require('../utils/excel');
+const { getCenterById } = require('../utils/centers');
 const { authMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
@@ -19,6 +20,8 @@ function serializeUser(user) {
     graduationYear: user.graduationYear || '',
     degree: user.degree || '',
     department: user.department || '',
+    centerId: user.centerId || '',
+    centerName: user.centerName || '',
     source: user.source,
     active: user.active,
   };
@@ -36,19 +39,22 @@ router.post('/register', async (req, res) => {
       graduationYear: String(req.body.graduationYear || '').trim(),
       degree: String(req.body.degree || req.body.stream || '').trim(),
       department: String(req.body.department || '').trim(),
+      centerId: String(req.body.centerId || '').trim(),
       password: String(req.body.password || ''),
       role: 'student',
       active: false,
       source: 'self',
     };
 
-    if (!payload.username || !payload.fullName || !payload.email || !payload.password || !payload.mobile || !payload.college) {
-      return res.status(400).json({ message: 'Username, full name, email, password, mobile, and college are required' });
+    if (!payload.username || !payload.fullName || !payload.email || !payload.password || !payload.mobile || !payload.college || !payload.centerId) {
+      return res.status(400).json({ message: 'Username, full name, email, password, mobile, college, and center are required' });
     }
+    if (!getCenterById(payload.centerId)) return res.status(400).json({ message: 'Invalid center selected' });
 
     await addUser(payload);
     await logActivity('REGISTER_REQUEST', payload.username, {
       role: 'student',
+      centerId: payload.centerId,
       info: 'Student self-registration submitted for admin approval',
     });
 
@@ -80,12 +86,23 @@ router.post('/login', async (req, res) => {
     if (!match) return res.status(401).json({ message: 'Invalid credentials' });
 
     const token = jwt.sign(
-      { id: user.id, username: user.username, role: user.role, fullName: user.fullName },
+      {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        fullName: user.fullName,
+        centerId: user.centerId || '',
+        centerName: user.centerName || '',
+      },
       process.env.JWT_SECRET || 'cims_secret',
       { expiresIn: '8h' }
     );
 
-    await logActivity('LOGIN', user.username, { role: user.role, info: 'Logged in successfully' });
+    await logActivity('LOGIN', user.username, {
+      role: user.role,
+      centerId: user.centerId,
+      info: 'Logged in successfully',
+    });
     res.json({
       token,
       user: serializeUser(user),
@@ -126,6 +143,7 @@ router.put('/profile', authMiddleware, async (req, res) => {
     const updated = await updateUser(req.user.id, updates);
     await logActivity('UPDATE_PROFILE', req.user.username, {
       role: req.user.role,
+      centerId: user.centerId,
       info: 'Student profile updated from checkout/profile flow',
     });
     res.json({ message: 'Profile updated', user: serializeUser(updated) });

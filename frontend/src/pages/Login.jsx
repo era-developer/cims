@@ -3,8 +3,13 @@ import QRCode from 'react-qr-code';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import BrandLogo from '../components/BrandLogo';
 import { APP_EXPANDED_NAME, APP_SUBTITLE, REGISTRATION_QUERY } from '../brand';
+import { CENTERS } from '../centers';
 import { useAuth } from '../context/AuthContext';
 import useViewport from '../hooks/useViewport';
+import { getCurrentCenter } from '../centers';
+
+const currentCenter = getCurrentCenter();
+const STUDENT_USER_GUIDE_URL = 'https://docs.google.com/document/d/e/2PACX-1vTmEzNIgJYwf4Uiu2q8Eqnhr_rEWKimLR1i4W4oORtBIzBTmR4Nv6jZmM9Qwl74RvC5Y3qB8FcaRs3X/pub';
 
 const INITIAL_REGISTER_FORM = {
   username: '',
@@ -16,6 +21,7 @@ const INITIAL_REGISTER_FORM = {
   graduationYear: '',
   degree: '',
   department: '',
+  centerId: currentCenter?.id || CENTERS[0].id,
   password: '',
   confirmPassword: '',
 };
@@ -36,6 +42,10 @@ export default function Login() {
 
   useEffect(() => {
     setMode(searchParams.get('register') === '1' ? 'register' : 'login');
+    const centerId = searchParams.get('centerId');
+    if (centerId) {
+      setRegisterForm(prev => ({ ...prev, centerId }));
+    }
   }, [searchParams]);
 
   useEffect(() => {
@@ -63,7 +73,7 @@ export default function Login() {
     setLoading(true);
     try {
       const user = await login(loginForm.username.trim(), loginForm.password);
-      navigate(user.role === 'admin' ? '/admin' : '/dashboard');
+      navigate(['admin', 'super_admin'].includes(user.role) ? '/admin' : '/dashboard');
     } catch (err) {
       setMessageType('error');
       setMessage(err.response?.data?.message || 'Login failed. Check your credentials.');
@@ -86,12 +96,13 @@ export default function Login() {
       graduationYear: registerForm.graduationYear.trim(),
       degree: registerForm.degree.trim(),
       department: registerForm.department.trim(),
+      centerId: registerForm.centerId,
       password: registerForm.password,
     };
 
-    if (!payload.username || !payload.fullName || !payload.email || !payload.password || !payload.mobile || !payload.college) {
+    if (!payload.username || !payload.fullName || !payload.email || !payload.password || !payload.mobile || !payload.college || !payload.centerId) {
       setMessageType('error');
-      setMessage('Username, full name, email, password, mobile, and college are required.');
+      setMessage('Username, full name, email, password, mobile, college, and center are required.');
       return;
     }
 
@@ -172,9 +183,8 @@ export default function Login() {
                 autoFocus
                 placeholder="Enter your username or email"
               />
-              <Field
+              <PasswordField
                 label="Password"
-                type="password"
                 value={loginForm.password}
                 onChange={value => setLoginForm(current => ({ ...current, password: value }))}
                 autoComplete="current-password"
@@ -193,11 +203,17 @@ export default function Login() {
                 <Field label="Mobile (WhatsApp)" value={registerForm.mobile} onChange={value => setRegisterForm(current => ({ ...current, mobile: value }))} placeholder="10-digit mobile" />
                 <Field label="Alternative Mobile" value={registerForm.altMobile} onChange={value => setRegisterForm(current => ({ ...current, altMobile: value }))} placeholder="Alt mobile (optional)" />
                 <Field label="College" value={registerForm.college} onChange={value => setRegisterForm(current => ({ ...current, college: value }))} placeholder="College/institution name" />
+                <SelectField
+                  label="Center"
+                  value={registerForm.centerId}
+                  onChange={value => setRegisterForm(current => ({ ...current, centerId: value }))}
+                  options={CENTERS}
+                />
                 <Field label="Year of Graduation" value={registerForm.graduationYear} onChange={value => setRegisterForm(current => ({ ...current, graduationYear: value }))} placeholder="2024" />
                 <Field label="Degree" value={registerForm.degree} onChange={value => setRegisterForm(current => ({ ...current, degree: value }))} placeholder="B.Tech / B.Sc / MBA" />
                 <Field label="Department" value={registerForm.department} onChange={value => setRegisterForm(current => ({ ...current, department: value }))} placeholder="ECE / CSE / Mechanical" />
-                <Field label="Password" type="password" value={registerForm.password} onChange={value => setRegisterForm(current => ({ ...current, password: value }))} placeholder="Create a password" />
-                <Field label="Confirm Password" type="password" value={registerForm.confirmPassword} onChange={value => setRegisterForm(current => ({ ...current, confirmPassword: value }))} placeholder="Repeat password" />
+                <PasswordField label="Password" value={registerForm.password} onChange={value => setRegisterForm(current => ({ ...current, password: value }))} placeholder="Create a password" />
+                <PasswordField label="Confirm Password" value={registerForm.confirmPassword} onChange={value => setRegisterForm(current => ({ ...current, confirmPassword: value }))} placeholder="Repeat password" />
               </div>
               <button type="submit" style={{ ...styles.primaryBtn, opacity: loading ? 0.7 : 1 }} disabled={loading}>
                 {loading ? 'Submitting...' : 'Submit Registration'}
@@ -220,6 +236,14 @@ export default function Login() {
             </div>
             <div style={styles.linkBox}>{registrationLink || 'Open this page in the browser to generate the registration link.'}</div>
             <button style={styles.secondaryBtn} onClick={copyRegistrationLink}>Copy Registration Link</button>
+            <a
+              href={STUDENT_USER_GUIDE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={styles.secondaryLinkBtn}
+            >
+              Students User Guide
+            </a>
           </div>
         </aside>
       </div>
@@ -240,6 +264,47 @@ function Field({ label, value, onChange, placeholder, type = 'text', autoComplet
         autoComplete={autoComplete}
         autoFocus={autoFocus}
       />
+    </div>
+  );
+}
+
+function PasswordField({ label, value, onChange, placeholder, autoComplete, fullWidth }) {
+  const [showPassword, setShowPassword] = useState(false);
+
+  return (
+    <div style={{ ...styles.field, gridColumn: fullWidth ? '1 / -1' : undefined }}>
+      <label style={styles.label}>{label}</label>
+      <div style={styles.passwordContainer}>
+        <input
+          style={{ ...styles.input, paddingRight: '50px' }}
+          type={showPassword ? 'text' : 'password'}
+          value={value}
+          onChange={event => onChange(event.target.value)}
+          placeholder={placeholder}
+          autoComplete={autoComplete}
+        />
+        <button
+          type="button"
+          style={styles.togglePasswordBtn}
+          onClick={() => setShowPassword(!showPassword)}
+          title={showPassword ? 'Hide password' : 'Show password'}
+        >
+          {showPassword ? '🙈 Hide' : '👁️ Show'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SelectField({ label, value, onChange, options, fullWidth }) {
+  return (
+    <div style={{ ...styles.field, gridColumn: fullWidth ? '1 / -1' : undefined }}>
+      <label style={styles.label}>{label}</label>
+      <select style={styles.input} value={value} onChange={event => onChange(event.target.value)}>
+        {options.map(option => (
+          <option key={option.id} value={option.id}>{option.name}</option>
+        ))}
+      </select>
     </div>
   );
 }
@@ -279,6 +344,8 @@ const styles = {
   field: { marginBottom: '16px' },
   label: { display: 'block', fontSize: '13px', fontWeight: 700, color: '#334155', marginBottom: '6px' },
   input: { width: '100%', padding: '12px 14px', border: '1.5px solid #dbe3f0', borderRadius: '10px', fontSize: '14px', fontFamily: "'DM Sans', sans-serif", color: '#102548', outline: 'none', background: '#fff' },
+  passwordContainer: { position: 'relative', display: 'flex', alignItems: 'center' },
+  togglePasswordBtn: { position: 'absolute', right: '10px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', padding: '4px 8px', color: '#1a237e', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px', transition: 'all 0.2s ease' },
   primaryBtn: { width: '100%', padding: '14px', background: 'linear-gradient(135deg, #1a237e, #234d81)', border: 'none', borderRadius: '12px', color: '#fff', fontFamily: "'DM Sans', sans-serif", fontSize: '15px', fontWeight: 800, cursor: 'pointer', marginTop: '8px' },
   hint: { marginTop: '22px', padding: '14px 16px', background: '#f8fafc', borderRadius: '12px', fontSize: '12px', color: '#64748b', lineHeight: 1.8 },
   sidePanel: { display: 'flex' },
@@ -290,4 +357,5 @@ const styles = {
   qrWrap: { background: '#fff', borderRadius: '18px', padding: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' },
   linkBox: { background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.18)', color: 'rgba(255,255,255,0.92)', borderRadius: '12px', padding: '12px', fontSize: '12px', lineHeight: 1.6, wordBreak: 'break-word', marginBottom: '14px' },
   secondaryBtn: { width: '100%', padding: '12px 14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.24)', background: 'rgba(255,255,255,0.14)', color: '#fff', fontFamily: "'DM Sans', sans-serif", fontSize: '14px', fontWeight: 700, cursor: 'pointer' },
+  secondaryLinkBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', padding: '12px 14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.24)', background: 'rgba(255,255,255,0.14)', color: '#fff', fontFamily: "'DM Sans', sans-serif", fontSize: '14px', fontWeight: 700, cursor: 'pointer', textDecoration: 'none', marginTop: '12px', boxSizing: 'border-box' },
 };

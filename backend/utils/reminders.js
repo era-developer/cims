@@ -29,7 +29,7 @@ async function processReturnReminders() {
 
   for (const order of candidates) {
     try {
-      const result = await sendReturnReminder(order);
+      const result = await sendReturnReminder(order, order.centerId);
       if (!result?.ok) continue;
 
       await updateOrderStatus(order.orderId, order.status, order.adminRemarks, {

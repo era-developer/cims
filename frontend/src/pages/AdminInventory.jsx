@@ -2,13 +2,30 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useSearchParams } from 'react-router-dom';
 import SmartImage from '../components/SmartImage';
+import { CENTERS } from '../centers';
+import { useAuth } from '../context/AuthContext';
 import useViewport from '../hooks/useViewport';
 
-const EMPTY_FORM = { name: '', category: '', description: '', stock: '', totalProcured: '', unit: 'pcs', location: '', image: '', active: true };
+const EMPTY_FORM = {
+  name: '',
+  category: '',
+  description: '',
+  stock: '',
+  totalProcured: '',
+  unit: 'pcs',
+  location: '',
+  image: '',
+  invoiceNumber: '',
+  vendorName: '',
+  purchasePurpose: '',
+  purchasedFor: '',
+  active: true,
+};
 
 export default function AdminInventory() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { isMobile } = useViewport();
+  const { user } = useAuth();
   const [items, setItems] = useState([]);
   const [filtered, setFiltered] = useState([]);
   const [search, setSearch] = useState('');
@@ -19,6 +36,10 @@ export default function AdminInventory() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
   const [nameSuggestions, setNameSuggestions] = useState([]);
+  const [centerId, setCenterId] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('All');
+  const [showCustomCategoryInput, setShowCustomCategoryInput] = useState(false);
+  const isSuperAdmin = user?.role === 'super_admin';
 
   function updateNameSuggestions(name) {
     const normalized = name.trim().toLowerCase();
@@ -33,6 +54,15 @@ export default function AdminInventory() {
     setNameSuggestions(matches);
   }
 
+
+  useEffect(() => {
+    // For super admin, initialize with first center. For regular admin, use their center.
+    if (isSuperAdmin) {
+      setCenterId(CENTERS.length > 0 ? CENTERS[0].id : '');
+    } else {
+      setCenterId(user?.centerId || '');
+    }
+  }, [isSuperAdmin, user]);
 
   useEffect(() => {
     fetchItems();
@@ -50,7 +80,7 @@ export default function AdminInventory() {
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, []);
+  }, [centerId]);
 
   useEffect(() => {
     setSearch(searchParams.get('q') || '');
@@ -58,17 +88,28 @@ export default function AdminInventory() {
 
   useEffect(() => {
     const query = search.toLowerCase();
-    setFiltered(query
-      ? items.filter(item =>
-          item.name?.toLowerCase().includes(query) ||
-          item.category?.toLowerCase().includes(query) ||
-          item.location?.toLowerCase().includes(query))
-      : items);
-  }, [search, items]);
+    let next = items;
+    if (categoryFilter !== 'All') {
+      next = next.filter(item => (item.category || 'Uncategorized') === categoryFilter);
+    }
+    if (query) {
+      next = next.filter(item =>
+        item.name?.toLowerCase().includes(query) ||
+        item.category?.toLowerCase().includes(query) ||
+        item.location?.toLowerCase().includes(query));
+    }
+    setFiltered(next);
+  }, [search, items, categoryFilter]);
+
+  useEffect(() => {
+    if (categoryFilter === 'All') return;
+    const exists = items.some(item => (item.category || 'Uncategorized') === categoryFilter);
+    if (!exists) setCategoryFilter('All');
+  }, [items, categoryFilter]);
 
   async function fetchItems() {
     try {
-      const { data } = await axios.get('/api/components');
+      const { data } = await axios.get('/api/components', { params: centerId ? { centerId } : {} });
       setItems(data);
     } catch {
       setItems([]);
@@ -90,6 +131,7 @@ export default function AdminInventory() {
     setEditId(null);
     setMsg('');
     setNameSuggestions([]);
+    setShowCustomCategoryInput(false);
     setModal('add');
   }
 
@@ -103,11 +145,16 @@ export default function AdminInventory() {
       unit: item.unit,
       location: item.location,
       image: item.image || '',
+      invoiceNumber: item.invoiceNumber || '',
+      vendorName: item.vendorName || '',
+      purchasePurpose: item.purchasePurpose || '',
+      purchasedFor: item.purchasedFor || '',
       active: item.active !== false,
     });
     setEditId(item.id);
     setMsg('');
     setNameSuggestions([]);
+    setShowCustomCategoryInput(false);
     setModal('edit');
   }
 
@@ -129,12 +176,14 @@ export default function AdminInventory() {
       if (modal === 'add') {
         await axios.post('/api/components', {
           ...form,
+          centerId,
           stock: Number(form.stock),
           totalProcured: Number(form.stock),
         });
       } else {
         await axios.put(`/api/components/${editId}`, {
           ...form,
+          centerId,
           stock: Number(form.stock),
           totalProcured: Number(form.totalProcured),
         });
@@ -152,7 +201,7 @@ export default function AdminInventory() {
   async function handleDelete(id, name) {
     if (!window.confirm(`Delete "${name}"? This cannot be undone.`)) return;
     try {
-      await axios.delete(`/api/components/${id}`);
+      await axios.delete(`/api/components/${id}`, { data: { centerId } });
       await fetchItems();
     } catch {
       alert('Error deleting component.');
@@ -165,6 +214,7 @@ export default function AdminInventory() {
     const newStock = Math.max(0, item.stock + delta);
     try {
       await axios.put(`/api/components/${id}`, {
+        centerId,
         stock: newStock,
         totalProcured: delta > 0 ? item.totalProcured + delta : item.totalProcured,
       });
@@ -182,6 +232,8 @@ export default function AdminInventory() {
   }
 
   const totalDamaged = items.reduce((sum, item) => sum + (item.damagedCount || 0), 0);
+  const categories = ['All', ...Array.from(new Set(items.map(item => item.category || 'Uncategorized'))).sort((a, b) => a.localeCompare(b))];
+  const categoryOptions = Array.from(new Set([...(items.map(item => String(item.category || '').trim()).filter(Boolean)), form.category].filter(Boolean))).sort((a, b) => a.localeCompare(b));
 
   return (
     <div style={{ ...styles.page, ...(isMobile ? styles.pageMobile : {}) }}>
@@ -194,6 +246,15 @@ export default function AdminInventory() {
           <button style={{ ...styles.addBtn, ...(isMobile ? styles.fullWidthBtn : {}) }} onClick={openAdd}>+ Add New Component</button>
         </div>
 
+        {isSuperAdmin && (
+          <div style={styles.centerRow}>
+            <select value={centerId} onChange={event => setCenterId(event.target.value)} style={styles.centerSelect}>
+              <option value="">Select center</option>
+              {CENTERS.map(center => <option key={center.id} value={center.id}>{center.name}</option>)}
+            </select>
+          </div>
+        )}
+
         <div style={{ ...styles.toolbar, ...(isMobile ? styles.toolbarStack : {}) }}>
           <input
             style={{ ...styles.search, ...(isMobile ? styles.searchMobile : {}) }}
@@ -201,6 +262,15 @@ export default function AdminInventory() {
             value={search}
             onChange={event => handleSearchChange(event.target.value)}
           />
+          <select
+            value={categoryFilter}
+            onChange={event => setCategoryFilter(event.target.value)}
+            style={styles.filterSelect}
+          >
+            {categories.map(category => (
+              <option key={category} value={category}>{category === 'All' ? 'All Categories' : category}</option>
+            ))}
+          </select>
           <div style={styles.legend}>
             <span style={styles.dot('#2e7d32')} /> Good
             <span style={styles.dot('#f57f17')} /> Low
@@ -218,6 +288,7 @@ export default function AdminInventory() {
                   <th style={styles.th}>Component</th>
                   <th style={styles.th}>Photo</th>
                   <th style={styles.th}>Category</th>
+                  <th style={styles.th}>Procurement</th>
                   <th style={styles.th}>Location</th>
                   <th style={styles.th}>Stock</th>
                   <th style={styles.th}>Procured</th>
@@ -250,6 +321,13 @@ export default function AdminInventory() {
                           : <div style={styles.thumbPlaceholder}>No photo</div>}
                       </td>
                       <td style={styles.td}><span style={styles.catTag}>{item.category}</span></td>
+                      <td style={styles.td}>
+                        <div style={styles.procMeta}>
+                          <div style={styles.procLine}><strong>Inv:</strong> {item.invoiceNumber || '-'}</div>
+                          <div style={styles.procLine}><strong>Vendor:</strong> {item.vendorName || '-'}</div>
+                          <div style={styles.procLine}><strong>For:</strong> {item.purchasedFor || '-'}</div>
+                        </div>
+                      </td>
                       <td style={{ ...styles.td, color: '#6b7280', fontSize: '13px' }}>{item.location}</td>
                       <td style={styles.td}>
                         <div style={styles.stockCtrl}>
@@ -322,8 +400,59 @@ export default function AdminInventory() {
                   ))}
                 </div>
               )}
-              <FField label="Category *" value={form.category} onChange={value => setForm(current => ({ ...current, category: value }))} placeholder="e.g. Microcontroller" />
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#374151', marginBottom: '4px' }}>Category *</label>
+                {showCustomCategoryInput ? (
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <input
+                      style={{ flex: 1, minWidth: '220px', padding: '9px 13px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '13px', fontFamily: "'DM Sans', sans-serif", outline: 'none' }}
+                      value={form.category}
+                      onChange={event => setForm(current => ({ ...current, category: event.target.value }))}
+                      placeholder="Enter new category"
+                    />
+                    <button type="button" style={{ background: '#e8eaf6', color: '#1a237e', border: 'none', borderRadius: '8px', padding: '9px 12px', cursor: 'pointer', fontWeight: 700 }} onClick={() => setShowCustomCategoryInput(false)}>
+                      Use existing
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <select
+                      style={{ width: '100%', padding: '9px 13px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '13px', fontFamily: "'DM Sans', sans-serif", outline: 'none', background: '#fff' }}
+                      value={form.category}
+                      onChange={event => {
+                        const nextValue = event.target.value;
+                        if (nextValue === '__new__') {
+                          setForm(current => ({ ...current, category: '' }));
+                          setShowCustomCategoryInput(true);
+                        } else {
+                          setForm(current => ({ ...current, category: nextValue }));
+                        }
+                      }}
+                    >
+                      <option value="">Select a category</option>
+                      {categoryOptions.map(category => (
+                        <option key={category} value={category}>{category}</option>
+                      ))}
+                      <option value="__new__">+ Add new category</option>
+                    </select>
+                    <div style={{ fontSize: '12px', color: '#64748b' }}>Choose an existing category or add a new one if needed.</div>
+                  </div>
+                )}
+              </div>
               <FField label="Unit" value={form.unit} onChange={value => setForm(current => ({ ...current, unit: value }))} placeholder="pcs / kits / packs" />
+              <FField label="Invoice Number" value={form.invoiceNumber} onChange={value => setForm(current => ({ ...current, invoiceNumber: value }))} placeholder="e.g. INV-2026-0012" />
+              <FField label="Vendor Name" value={form.vendorName} onChange={value => setForm(current => ({ ...current, vendorName: value }))} placeholder="Vendor / supplier name" />
+              <FField label="Project / Purpose" value={form.purchasePurpose} onChange={value => setForm(current => ({ ...current, purchasePurpose: value }))} placeholder="Project name or purpose" />
+              <FSelectField
+                label="Purchased For"
+                value={form.purchasedFor}
+                onChange={value => setForm(current => ({ ...current, purchasedFor: value }))}
+                options={[
+                  { value: '', label: 'Select purpose owner' },
+                  { value: 'ERA Foundation', label: 'ERA Foundation' },
+                  { value: 'Comedkares', label: 'Comedkares' },
+                ]}
+              />
               <FField label="Location / Bin *" value={form.location} onChange={value => setForm(current => ({ ...current, location: value }))} placeholder="e.g. Bin-A1" />
               <FField label={modal === 'add' ? 'Initial Stock *' : 'Current Stock *'} value={form.stock} onChange={value => setForm(current => ({ ...current, stock: value }))} type="number" placeholder="0" />
               {modal === 'edit' && (
@@ -398,11 +527,37 @@ function FField({ label, value, onChange, placeholder, textarea, fullWidth, type
   );
 }
 
+function FSelectField({ label, value, onChange, options, fullWidth }) {
+  const base = {
+    width: '100%',
+    padding: '9px 13px',
+    border: '1.5px solid #e2e8f0',
+    borderRadius: '8px',
+    fontSize: '13px',
+    fontFamily: "'DM Sans', sans-serif",
+    outline: 'none',
+    background: '#fff',
+  };
+
+  return (
+    <div style={{ gridColumn: fullWidth ? '1 / -1' : undefined }}>
+      <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#374151', marginBottom: '4px' }}>{label}</label>
+      <select style={base} value={value} onChange={event => onChange(event.target.value)}>
+        {options.map(option => (
+          <option key={`${label}-${option.value}`} value={option.value}>{option.label}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 const styles = {
   page: { minHeight: '100vh', background: '#f0f2f8', padding: '32px 24px' },
   pageMobile: { padding: '22px 14px 28px' },
   container: { maxWidth: '1400px', margin: '0 auto' },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', gap: '16px', flexWrap: 'wrap' },
+  centerRow: { marginBottom: '16px' },
+  centerSelect: { minWidth: '280px', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #dbe3f0', fontSize: '14px', background: '#fff' },
   title: { fontFamily: "'DM Sans', sans-serif", fontSize: '24px', fontWeight: 800, color: '#1a1a2e' },
   sub: { color: '#6b7280', fontSize: '13px', marginTop: '4px' },
   addBtn: { background: 'linear-gradient(135deg, #ff6d00, #ff9a3c)', color: '#fff', border: 'none', padding: '11px 20px', borderRadius: '10px', cursor: 'pointer', fontWeight: 700, fontSize: '14px' },
@@ -411,17 +566,20 @@ const styles = {
   fullWidthBtn: { width: '100%' },
   search: { flex: 1, minWidth: '260px', padding: '11px 16px', border: '1.5px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', fontFamily: "'DM Sans', sans-serif", outline: 'none', background: '#fff' },
   searchMobile: { minWidth: 0 },
+  filterSelect: { minWidth: '220px', padding: '11px 12px', border: '1.5px solid #dbe3f0', borderRadius: '10px', fontSize: '14px', background: '#fff', color: '#1f2937' },
   legend: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#6b7280' },
   dot: color => ({ width: '10px', height: '10px', borderRadius: '50%', background: color, display: 'inline-block', marginRight: '3px' }),
   loading: { padding: '60px', textAlign: 'center', color: '#6b7280' },
   tableWrap: { background: '#fff', borderRadius: '14px', overflowX: 'auto', overflowY: 'hidden', boxShadow: '0 2px 12px rgba(26,35,126,0.07)' },
-  table: { width: '100%', minWidth: '1080px', borderCollapse: 'collapse' },
+  table: { width: '100%', minWidth: '1220px', borderCollapse: 'collapse' },
   thead: { background: '#1a237e' },
   th: { padding: '12px 14px', color: '#fff', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px', textAlign: 'left' },
   tr: { borderBottom: '1px solid #f0f2f8' },
   td: { padding: '12px 14px', fontSize: '13px', color: '#374151', verticalAlign: 'middle' },
   compName: { fontWeight: 600, color: '#1a1a2e', fontSize: '14px' },
   compDesc: { color: '#6b7280', fontSize: '11px', marginTop: '2px' },
+  procMeta: { display: 'flex', flexDirection: 'column', gap: '2px' },
+  procLine: { fontSize: '11px', color: '#374151', whiteSpace: 'nowrap' },
   suggestions: { display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', marginTop: '8px', padding: '8px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' },
   suggestionsLabel: { fontSize: '12px', color: '#283046', fontWeight: 600, marginRight: '8px' },
   suggestionBtn: { background: '#eef2ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: '999px', padding: '4px 10px', fontSize: '12px', cursor: 'pointer' },

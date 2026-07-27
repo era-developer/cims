@@ -8,12 +8,18 @@ const {
   logActivity,
 } = require('../utils/excel');
 const { sendOrderNotification, sendStatusUpdate } = require('../utils/email');
-const { sendOrderWhatsAppNotifications, sendStatusWhatsAppNotifications } = require('../utils/whatsapp');
 const { authMiddleware, adminOnly } = require('../middleware/auth');
 
 const router = express.Router();
 
 const ADMIN_STATUSES = new Set(['Approved', 'Rejected', 'Returned']);
+
+function getScopedCenterId(req) {
+  if (req.user.role === 'super_admin') {
+    return String(req.query.centerId || req.body.centerId || '').trim();
+  }
+  return req.user.centerId;
+}
 
 function parseOrderItems(order) {
   try {
@@ -175,9 +181,48 @@ function applyReturnSummaryUpdates(returnSummary, updates) {
   });
 }
 
-async function reserveStock(items) {
+function processApprovedItems(originalItems, approvedItemsPayload) {
+  if (!Array.isArray(approvedItemsPayload)) {
+    throw new Error('approvedItems must be an array.');
+  }
+
+  const approvedMap = new Map(approvedItemsPayload.map(item => [item.id, item.qty]));
+  const updatedItems = [];
+  const returnedToStockItems = [];
+  const rejectedItems = [];
+
+  for (const originalItem of originalItems) {
+    // If an item is not in the payload, assume its quantity is unchanged.
+    // This makes the feature optional from the frontend.
+    const approvedQty = approvedMap.has(originalItem.id)
+      ? Number(approvedMap.get(originalItem.id))
+      : originalItem.qty;
+
+    if (Number.isNaN(approvedQty) || approvedQty < 0) {
+      throw new Error(`Invalid quantity provided for ${originalItem.name}.`);
+    }
+    if (approvedQty > originalItem.qty) {
+      throw new Error(`Approved quantity for ${originalItem.name} cannot exceed requested quantity (${originalItem.qty}).`);
+    }
+
+    if (approvedQty > 0) {
+      updatedItems.push({ ...originalItem, qty: approvedQty });
+    }
+
+    const diff = originalItem.qty - approvedQty;
+    if (diff > 0) {
+      const returnedItem = { ...originalItem, qty: diff };
+      returnedToStockItems.push(returnedItem);
+      rejectedItems.push(returnedItem);
+    }
+  }
+
+  return { updatedItems, returnedToStockItems, rejectedItems };
+}
+
+async function reserveStock(items, centerId) {
   const aggregatedItems = aggregateItems(items);
-  const inventory = await getInventory();
+  const inventory = await getInventory(centerId);
 
   for (const item of aggregatedItems) {
     const component = inventory.find(entry => entry.id === item.id);
@@ -191,40 +236,40 @@ async function reserveStock(items) {
     const component = inventory.find(entry => entry.id === item.id);
     await updateInventoryItem(component.id, {
       stock: Math.max(0, component.stock - item.qty),
-    });
+    }, centerId);
   }
 
   return aggregatedItems;
 }
 
-async function restoreStock(items) {
+async function restoreStock(items, centerId) {
   const aggregatedItems = aggregateItems(items);
-  const inventory = await getInventory();
+  const inventory = await getInventory(centerId);
 
   for (const item of aggregatedItems) {
     const component = inventory.find(entry => entry.id === item.id);
     if (!component) continue;
     await updateInventoryItem(component.id, {
       stock: (component.stock || 0) + item.qty,
-    });
+    }, centerId);
   }
 }
 
-async function countIssuedItems(items) {
+async function countIssuedItems(items, centerId) {
   const aggregatedItems = aggregateItems(items);
-  const inventory = await getInventory();
+  const inventory = await getInventory(centerId);
 
   for (const item of aggregatedItems) {
     const component = inventory.find(entry => entry.id === item.id);
     if (!component) continue;
     await updateInventoryItem(component.id, {
       totalIssued: (component.totalIssued || 0) + item.qty,
-    });
+    }, centerId);
   }
 }
 
-async function applyInventoryReturnUpdates(returnItems) {
-  const inventory = await getInventory();
+async function applyInventoryReturnUpdates(returnItems, centerId) {
+  const inventory = await getInventory(centerId);
 
   for (const item of returnItems) {
     const component = inventory.find(entry => entry.id === item.id);
@@ -233,14 +278,15 @@ async function applyInventoryReturnUpdates(returnItems) {
     await updateInventoryItem(component.id, {
       stock: (component.stock || 0) + (Number(item.returnedQty) || 0),
       damagedCount: (component.damagedCount || 0) + (Number(item.damagedQty) || 0),
-    });
+    }, centerId);
   }
 }
 
 // POST place new order (student)
 router.post('/', authMiddleware, async (req, res) => {
   try {
-    const reservedItems = await reserveStock(req.body.items || []);
+    const centerId = req.user.centerId;
+    const reservedItems = await reserveStock(req.body.items || [], centerId);
     if (!reservedItems.length) {
       return res.status(400).json({ message: 'Cart is empty' });
     }
@@ -249,19 +295,21 @@ router.post('/', authMiddleware, async (req, res) => {
     const studentDetails = req.body.studentDetails || {};
     const expectedReturnDateRaw = String(studentDetails.expectedReturnDate || '').trim();
     if (!expectedReturnDateRaw) {
-      await restoreStock(reservedItems).catch(console.error);
+      await restoreStock(reservedItems, centerId).catch(console.error);
       return res.status(400).json({ message: 'Expected return date is required' });
     }
 
     const expectedReturnDate = new Date(expectedReturnDateRaw);
     if (Number.isNaN(expectedReturnDate.getTime())) {
-      await restoreStock(reservedItems).catch(console.error);
+      await restoreStock(reservedItems, centerId).catch(console.error);
       return res.status(400).json({ message: 'Expected return date is invalid' });
     }
 
     const initialReturnSummary = parseReturnSummary({ itemsJson: JSON.stringify(reservedItems) }, reservedItems);
     const order = {
       orderId: `CIMS-${Date.now().toString(36).toUpperCase()}`,
+      centerId,
+      centerName: req.user.centerName,
       createdAt: now,
       username: req.user.username,
       studentEmail: String(studentDetails.email || req.user.email || '').trim(),
@@ -282,17 +330,18 @@ router.post('/', authMiddleware, async (req, res) => {
     try {
       await saveOrder(order);
     } catch (err) {
-      await restoreStock(reservedItems).catch(console.error);
+      await restoreStock(reservedItems, centerId).catch(console.error);
       throw err;
     }
 
     await logActivity('PLACE_ORDER', req.user.username, {
       role: 'student',
+      centerId,
       info: `Order ${order.orderId}: ${reservedItems.length} component type(s) reserved`,
     });
 
-    sendOrderNotification(buildOrderForNotifications(order)).catch(console.error);
-    sendOrderWhatsAppNotifications(buildOrderForNotifications(order)).catch(console.error);
+    sendOrderNotification(buildOrderForNotifications(order), centerId).catch(console.error);
+    // sendOrderWhatsAppNotifications(buildOrderForNotifications(order)).catch(console.error); // Removed - using manual WhatsApp button instead
 
     res.status(201).json({ message: 'Order placed successfully', orderId: order.orderId });
   } catch (err) {
@@ -305,7 +354,8 @@ router.post('/', authMiddleware, async (req, res) => {
 // GET all orders (admin) or own orders (student)
 router.get('/', authMiddleware, async (req, res) => {
   try {
-    const orders = (await getOrders()).map(order => {
+    const scopedCenterId = getScopedCenterId(req);
+    const orders = (await getOrders(scopedCenterId || undefined)).map(order => {
       const items = parseOrderItems(order);
       const returnSummary = parseReturnSummary(order, items);
       return {
@@ -317,7 +367,7 @@ router.get('/', authMiddleware, async (req, res) => {
           .map(item => ({ id: item.id, name: item.name, unit: item.unit, qty: item.pendingQty })),
       };
     });
-    if (req.user.role === 'admin') return res.json(orders);
+    if (['admin', 'super_admin'].includes(req.user.role)) return res.json(orders);
     res.json(orders.filter(order => order.username === req.user.username));
   } catch (err) {
     console.error(err);
@@ -328,7 +378,7 @@ router.get('/', authMiddleware, async (req, res) => {
 // Student requests a return after using the components
 router.put('/:orderId/return-request', authMiddleware, async (req, res) => {
   try {
-    const orders = await getOrders();
+    const orders = await getOrders(req.user.centerId);
     const order = orders.find(entry => entry.orderId === req.params.orderId);
     if (!order) return res.status(404).json({ message: 'Order not found' });
     if (order.username !== req.user.username && req.user.role !== 'admin') {
@@ -341,9 +391,10 @@ router.put('/:orderId/return-request', authMiddleware, async (req, res) => {
     const now = new Date().toISOString();
     await updateOrderStatus(order.orderId, 'Return Requested', undefined, {
       returnRequestedAt: now,
-    });
+    }, order.centerId);
     await logActivity('RETURN_REQUESTED', req.user.username, {
       role: req.user.role,
+      centerId: order.centerId,
       info: `${order.orderId} marked for return`,
     });
 
@@ -351,12 +402,12 @@ router.put('/:orderId/return-request', authMiddleware, async (req, res) => {
       ...order,
       status: 'Return Requested',
       returnRequestedAt: now,
-    }), 'Return Requested', req.body?.remarks || '').catch(console.error);
-    sendStatusWhatsAppNotifications(buildOrderForNotifications({
-      ...order,
-      status: 'Return Requested',
-      returnRequestedAt: now,
-    }), 'Return Requested', req.body?.remarks || '').catch(console.error);
+    }), 'Return Requested', req.body?.remarks || '', order.centerId).catch(console.error);
+    // sendStatusWhatsAppNotifications(buildOrderForNotifications({ // Removed - using manual WhatsApp button instead
+    //   ...order,
+    //   status: 'Return Requested',
+    //   returnRequestedAt: now,
+    // }), 'Return Requested', req.body?.remarks || '').catch(console.error);
 
     res.json({ message: 'Return request submitted. Please hand the components back to the lab/admin.' });
   } catch (err) {
@@ -373,43 +424,77 @@ router.put('/:orderId/status', authMiddleware, adminOnly, async (req, res) => {
       return res.status(400).json({ message: 'Invalid status' });
     }
 
-    const orders = await getOrders();
+    const orders = await getOrders(getScopedCenterId(req) || undefined);
     const order = orders.find(entry => entry.orderId === req.params.orderId);
     if (!order) return res.status(404).json({ message: 'Order not found' });
-
-    const items = parseOrderItems(order);
+    
+    const originalItems = parseOrderItems(order);
     const now = new Date().toISOString();
     const meta = {};
     let finalStatus = status;
+    let finalItems = originalItems;
 
     if (status === 'Approved') {
       if (order.status !== 'Pending') {
         return res.status(400).json({ message: 'Only pending orders can be approved' });
       }
-      if (!order.stockReserved) {
-        await reserveStock(items);
-        meta.stockReserved = true;
-        meta.reservedAt = now;
+
+      // If admin provides edited quantities, process them.
+      if (req.body.approvedItems) {
+        const { updatedItems, returnedToStockItems, rejectedItems } = processApprovedItems(originalItems, req.body.approvedItems);
+
+        if (updatedItems.length === 0) {
+          // If all items are set to 0 qty, treat it as a rejection.
+          finalStatus = 'Rejected';
+        } else {
+          finalItems = updatedItems;
+          meta.itemsJson = JSON.stringify(finalItems); // Update the order's items
+
+          // Update the return summary to match the items being issued
+          const newReturnSummary = parseReturnSummary({ itemsJson: meta.itemsJson });
+          meta.returnSummaryJson = serializeReturnSummary(newReturnSummary);
+
+          // Restore stock for items that were not issued or had reduced quantity.
+          if (returnedToStockItems.length > 0) {
+            await restoreStock(returnedToStockItems, order.centerId);
+          }
+          if (rejectedItems.length > 0) {
+            meta.rejectedItems = rejectedItems;
+          }
+        }
       }
-      if (!order.issuedCounted) {
-        await countIssuedItems(items);
+
+      if (finalStatus === 'Approved' && !order.issuedCounted) {
+        await countIssuedItems(finalItems, order.centerId); // Count only what's being issued
         meta.issuedCounted = true;
         meta.issuedAt = now;
       }
     }
-
+    
     if (status === 'Rejected') {
       if (order.status !== 'Pending') {
         return res.status(400).json({ message: 'Only pending orders can be rejected' });
       }
       if (order.stockReserved) {
-        await restoreStock(items);
+        await restoreStock(originalItems, order.centerId);
         meta.stockReserved = false;
       }
       meta.returnRequestedAt = '';
       meta.returnedAt = '';
       meta.lastReturnAt = '';
-      meta.returnSummaryJson = serializeReturnSummary(parseReturnSummary(order, items));
+      meta.returnSummaryJson = serializeReturnSummary(parseReturnSummary(order, originalItems));
+    }
+    
+    // Handle the case where approval was changed to rejection
+    if (finalStatus === 'Rejected' && status === 'Approved') {
+      if (order.stockReserved) {
+        await restoreStock(originalItems, order.centerId);
+        meta.stockReserved = false;
+      }
+      meta.returnRequestedAt = '';
+      meta.returnedAt = '';
+      meta.lastReturnAt = '';
+      meta.returnSummaryJson = serializeReturnSummary(parseReturnSummary(order, originalItems));
     }
 
     if (status === 'Returned') {
@@ -417,9 +502,9 @@ router.put('/:orderId/status', authMiddleware, adminOnly, async (req, res) => {
         return res.status(400).json({ message: 'This order is not ready for return processing' });
       }
 
-      const currentReturnSummary = parseReturnSummary(order, items);
+      const currentReturnSummary = parseReturnSummary(order, originalItems);
       const returnUpdates = normalizeReturnItemsPayload(req.body.returnItems, currentReturnSummary);
-      await applyInventoryReturnUpdates(returnUpdates);
+      await applyInventoryReturnUpdates(returnUpdates, order.centerId);
 
       const updatedReturnSummary = applyReturnSummaryUpdates(currentReturnSummary, returnUpdates);
       finalStatus = determineReturnStatus(updatedReturnSummary);
@@ -431,24 +516,26 @@ router.put('/:orderId/status', authMiddleware, adminOnly, async (req, res) => {
       meta.stockReserved = updatedReturnSummary.some(item => item.pendingQty > 0);
     }
 
-    await updateOrderStatus(order.orderId, finalStatus, remarks, meta);
+    await updateOrderStatus(order.orderId, finalStatus, remarks, meta, order.centerId);
     await logActivity('ORDER_STATUS', req.user.username, {
-      role: 'admin',
+      role: req.user.role,
+      centerId: order.centerId,
       info: `${order.orderId} -> ${finalStatus}`,
     });
 
     sendStatusUpdate(buildOrderForNotifications({
       ...order,
       ...meta,
+      items: finalItems,
       status: finalStatus,
       adminRemarks: remarks !== undefined ? remarks : order.adminRemarks,
-    }), finalStatus, remarks).catch(console.error);
-    sendStatusWhatsAppNotifications(buildOrderForNotifications({
-      ...order,
-      ...meta,
-      status: finalStatus,
-      adminRemarks: remarks !== undefined ? remarks : order.adminRemarks,
-    }), finalStatus, remarks).catch(console.error);
+    }), finalStatus, remarks, order.centerId).catch(console.error);
+    // sendStatusWhatsAppNotifications(buildOrderForNotifications({ // Removed - using manual WhatsApp button instead
+    //   ...order,
+    //   ...meta,
+    //   status: finalStatus,
+    //   adminRemarks: remarks !== undefined ? remarks : order.adminRemarks,
+    // }), finalStatus, remarks).catch(console.error);
 
     res.json({
       message: `Order ${finalStatus}`,

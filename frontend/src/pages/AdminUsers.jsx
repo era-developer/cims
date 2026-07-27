@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useSearchParams } from 'react-router-dom';
+import { CENTERS } from '../centers';
+import { useAuth } from '../context/AuthContext';
 import useViewport from '../hooks/useViewport';
 
 const EMPTY_FORM = {
@@ -13,6 +15,7 @@ const EMPTY_FORM = {
   graduationYear: '',
   degree: '',
   department: '',
+  centerId: '',
   password: '',
   role: 'student',
   active: true,
@@ -21,6 +24,7 @@ const EMPTY_FORM = {
 export default function AdminUsers() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { isMobile, isTablet } = useViewport();
+  const { user } = useAuth();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null);
@@ -31,12 +35,18 @@ export default function AdminUsers() {
   const [pageMsg, setPageMsg] = useState('');
   const [pageMsgType, setPageMsgType] = useState('success');
   const [search, setSearch] = useState('');
+  const [centerId, setCenterId] = useState('');
+  const isSuperAdmin = user?.role === 'super_admin';
+
+  useEffect(() => {
+    setCenterId(isSuperAdmin ? '' : (user?.centerId || ''));
+  }, [isSuperAdmin, user]);
 
   useEffect(() => {
     fetchUsers();
     const timer = setInterval(fetchUsers, 30000);
     return () => clearInterval(timer);
-  }, []);
+  }, [centerId]);
 
   useEffect(() => {
     setSearch(searchParams.get('q') || '');
@@ -44,7 +54,7 @@ export default function AdminUsers() {
 
   async function fetchUsers() {
     try {
-      const { data } = await axios.get('/api/admin/users');
+      const { data } = await axios.get('/api/admin/users', { params: centerId ? { centerId } : {} });
       setUsers(data);
     } catch (err) {
       setPageMsgType('error');
@@ -64,7 +74,7 @@ export default function AdminUsers() {
 
   function openCreate() {
     setEditingId('');
-    setForm(EMPTY_FORM);
+    setForm({ ...EMPTY_FORM, centerId: isSuperAdmin ? centerId : (user?.centerId || '') });
     setMsg('');
     setModal('create');
   }
@@ -81,6 +91,7 @@ export default function AdminUsers() {
       graduationYear: user.graduationYear || '',
       degree: user.degree || '',
       department: user.department || '',
+      centerId: user.centerId || '',
       password: '',
       role: user.role || 'student',
       active: !!user.active,
@@ -101,6 +112,7 @@ export default function AdminUsers() {
       graduationYear: form.graduationYear.trim(),
       degree: form.degree.trim(),
       department: form.department.trim(),
+      centerId: form.centerId,
     };
     if (!payload.username || !payload.fullName || !payload.password) {
       setMsg('Username, full name, and password are required.');
@@ -135,6 +147,7 @@ export default function AdminUsers() {
       graduationYear: form.graduationYear.trim(),
       degree: form.degree.trim(),
       department: form.department.trim(),
+      centerId: form.centerId,
     };
     if (!payload.username || !payload.fullName) {
       setMsg('Username and full name are required.');
@@ -194,6 +207,15 @@ export default function AdminUsers() {
           </div>
           <button style={{ ...styles.addBtn, ...(isMobile ? styles.fullWidthBtn : {}) }} onClick={openCreate}>+ Create User</button>
         </div>
+
+        {isSuperAdmin && (
+          <div style={styles.centerRow}>
+            <select value={centerId} onChange={event => setCenterId(event.target.value)} style={styles.centerSelect}>
+              <option value="">All Centers</option>
+              {CENTERS.map(center => <option key={center.id} value={center.id}>{center.name}</option>)}
+            </select>
+          </div>
+        )}
 
         {pageMsg && (
           <div style={{ ...styles.pageMsg, ...(pageMsgType === 'error' ? styles.pageMsgError : styles.pageMsgSuccess) }}>
@@ -338,6 +360,18 @@ export default function AdminUsers() {
                 <select style={styles.formInput} value={form.role} onChange={event => setForm(current => ({ ...current, role: event.target.value }))}>
                   <option value="student">Student</option>
                   <option value="admin">Admin</option>
+                  {isSuperAdmin && <option value="super_admin">Super Admin</option>}
+                </select>
+              </div>
+              <div>
+                <label style={styles.formLabel}>Center</label>
+                <select
+                  style={styles.formInput}
+                  value={form.centerId}
+                  onChange={event => setForm(current => ({ ...current, centerId: event.target.value }))}
+                  disabled={!isSuperAdmin || form.role === 'super_admin'}>
+                  <option value="">Select center</option>
+                  {CENTERS.map(center => <option key={center.id} value={center.id}>{center.name}</option>)}
                 </select>
               </div>
               <label style={styles.checkboxWrap}>
@@ -391,6 +425,8 @@ const styles = {
   pageMobile: { padding: '22px 14px 28px' },
   container: { maxWidth: '1280px', margin: '0 auto' },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', gap: '16px' },
+  centerRow: { marginBottom: '16px' },
+  centerSelect: { minWidth: '280px', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #dbe3f0', fontSize: '14px', background: '#fff' },
   title: { fontFamily: "'DM Sans', sans-serif", fontSize: '24px', fontWeight: 800, color: '#1a1a2e' },
   sub: { color: '#6b7280', fontSize: '13px', marginTop: '4px' },
   addBtn: { background: 'linear-gradient(135deg, #f9a825, #ffb74d)', color: '#102548', border: 'none', padding: '11px 20px', borderRadius: '10px', cursor: 'pointer', fontWeight: 800, fontSize: '14px' },
@@ -449,4 +485,3 @@ const styles = {
   cancelBtn: { background: '#f0f2f8', border: 'none', padding: '10px 18px', borderRadius: '9px', cursor: 'pointer', fontSize: '13px', fontWeight: 700 },
   saveBtn: { background: 'linear-gradient(135deg, #17355f, #234d81)', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '9px', cursor: 'pointer', fontSize: '13px', fontWeight: 800 },
 };
-

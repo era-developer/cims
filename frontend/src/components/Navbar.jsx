@@ -14,14 +14,31 @@ export default function Navbar() {
   const [searchValue, setSearchValue] = useState('');
   const isCompact = width <= 1180;
   const isMobile = width <= 720;
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = ['admin', 'super_admin'].includes(user?.role);
+  const adminLinks = [
+    { path: '/admin', label: 'Dashboard' },
+    { path: '/admin/inventory', label: 'Inventory' },
+    { path: '/admin/orders', label: 'Orders' },
+    { path: '/admin/my-center', label: 'My Center' },
+    { path: '/admin/users', label: 'Users' },
+  ];
   const navLinks = isAdmin
-    ? [
-        { path: '/admin', label: 'Dashboard' },
-        { path: '/admin/inventory', label: 'Inventory' },
-        { path: '/admin/orders', label: 'Orders' },
-        { path: '/admin/users', label: 'Users' },
-      ]
+    ? (user?.role === 'super_admin'
+      ? [
+          { path: '/admin', label: 'Dashboard' },
+          { path: '/admin/inventory', label: 'Inventory' },
+          { path: '/admin/orders', label: 'Orders' },
+          { path: '/admin/transfers', label: 'Transfers' },
+          { path: '/admin/my-center', label: 'My Center' },
+          { path: '/admin/users', label: 'Users' },
+        ]
+      : [
+          { path: '/admin', label: 'Dashboard' },
+          { path: '/admin/inventory', label: 'Inventory' },
+          { path: '/admin/orders', label: 'Orders' },
+          { path: '/admin/my-center', label: 'My Center' },
+          { path: '/admin/users', label: 'Users' },
+        ])
     : [
         { path: '/dashboard', label: 'Browse' },
         { path: '/my-orders', label: 'My Orders' },
@@ -37,6 +54,9 @@ export default function Navbar() {
     if (isAdmin) {
       if (location.pathname.startsWith('/admin/users')) {
         return { path: '/admin/users', placeholder: 'Search users...' };
+      }
+      if (location.pathname.startsWith('/admin/transfers')) {
+        return { path: '/admin/transfers', placeholder: 'Search transfers...' };
       }
       if (location.pathname.startsWith('/admin/orders')) {
         return { path: '/admin/orders', placeholder: 'Search orders...' };
@@ -115,7 +135,7 @@ export default function Navbar() {
             <div style={styles.avatar}>{user.fullName?.[0] || user.username[0].toUpperCase()}</div>
             <div style={styles.userText}>
               <div style={styles.userName}>{user.fullName || user.username}</div>
-              <div style={styles.userRole}>{user.role}</div>
+              <div style={styles.userRole}>{user.role}{user.centerName ? ` - ${user.centerName}` : ''}</div>
             </div>
           </div>
           <button style={styles.logoutBtn} onClick={handleLogout}>Sign Out</button>

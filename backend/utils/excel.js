@@ -32,6 +32,10 @@ const INVENTORY_COLUMNS = [
   { header: 'Image URL', key: 'image', width: 30 },
   { header: 'Active', key: 'active', width: 10 },
   { header: 'Damaged Count', key: 'damagedCount', width: 16 },
+  { header: 'Invoice Number', key: 'invoiceNumber', width: 22 },
+  { header: 'Vendor Name', key: 'vendorName', width: 28 },
+  { header: 'Purchase Project/Purpose', key: 'purchasePurpose', width: 38 },
+  { header: 'Purchased For', key: 'purchasedFor', width: 28 },
 ];
 
 const ORDER_COLUMNS = [
@@ -66,6 +70,30 @@ const ORDER_COLUMNS = [
   { header: 'Last Return At', key: 'lastReturnAt', width: 22 },
   { header: 'Expected Return Date', key: 'expectedReturnDate', width: 18 },
   { header: 'Reminder Sent At', key: 'reminderSentAt', width: 22 },
+];
+
+const TRANSFER_COLUMNS = [
+  { header: 'Transfer ID', key: 'id', width: 24 },
+  { header: 'Requesting Center ID', key: 'requestingCenterId', width: 18 },
+  { header: 'Requesting Center Name', key: 'requestingCenterName', width: 28 },
+  { header: 'Requested By', key: 'requestedBy', width: 24 },
+  { header: 'Request Date', key: 'requestDate', width: 22 },
+  { header: 'Status', key: 'status', width: 14 },
+  { header: 'Status Updated At', key: 'statusUpdatedAt', width: 22 },
+  { header: 'Components (JSON)', key: 'componentsJson', width: 60 },
+  { header: 'Program Name', key: 'programName', width: 30 },
+  { header: 'Responsible Person', key: 'responsiblePerson', width: 26 },
+  { header: 'Responsible Email', key: 'responsibleEmail', width: 30 },
+  { header: 'Purpose', key: 'purpose', width: 40 },
+  { header: 'Desired Return Date', key: 'desiredReturnDate', width: 18 },
+  { header: 'Notes', key: 'notes', width: 40 },
+  { header: 'Supply Center ID', key: 'supplyCenterId', width: 18 },
+  { header: 'Supply Center Name', key: 'supplyCenterName', width: 28 },
+  { header: 'Approved At', key: 'approvedAt', width: 22 },
+  { header: 'Supplier Remarks', key: 'supplierRemarks', width: 40 },
+  { header: 'Return Requested At', key: 'returnRequestedAt', width: 22 },
+  { header: 'Returned At', key: 'returnedAt', width: 22 },
+  { header: 'Return Notes', key: 'returnNotes', width: 40 },
 ];
 
 const USER_COLUMNS = [
@@ -125,6 +153,7 @@ function getCenterPaths(centerId) {
     inventory: path.join(baseDir, `${center.id}_inventory.xlsx`),
     orders: path.join(baseDir, `${center.id}_orders.xlsx`),
     logs: path.join(baseDir, `${center.id}_logs.xlsx`),
+    transfers: path.join(baseDir, `${center.id}_transfers.xlsx`),
     whatsapp: path.join(baseDir, `${center.id}_whatsapp_messages.xlsx`),
   };
 }
@@ -370,6 +399,194 @@ async function initCenterFiles(centerId) {
   const paths = getCenterPaths(centerId);
   await ensureDir(paths.baseDir);
   await ensureInventoryWorkbook(centerId);
+  await ensureTransfersWorkbook(centerId);
+}
+
+function parseComponents(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function transferFromRow(row) {
+  const value = index => normalizeCellValue(row.getCell(index).value);
+  const components = parseComponents(value(8));
+    return {
+      id: value(1),
+    requestingCenterId: value(2),
+    requestingCenterName: value(3),
+    requestedBy: value(4),
+    requestDate: value(5),
+    status: value(6) || 'Pending',
+    statusUpdatedAt: value(7),
+    components,
+    componentsJson: value(8),
+    programName: value(9),
+    responsiblePerson: value(10),
+    responsibleEmail: value(11),
+    purpose: value(12),
+    desiredReturnDate: value(13),
+    notes: value(14),
+    supplyCenterId: value(15),
+    supplyCenterName: value(16),
+    approvedAt: value(17),
+      supplierRemarks: value(18),
+      returnRequestedAt: value(19),
+      returnedAt: value(20),
+      returnNotes: value(21),
+    };
+  }
+
+async function ensureTransfersWorkbook(centerId) {
+  const center = requireCenter(centerId);
+  const filePath = getWorkbookFile('transfers', center.id);
+  if (fsSync.existsSync(filePath)) return;
+  const workbook = new ExcelJS.Workbook();
+  createStyledWorksheet(workbook, 'Transfers', TRANSFER_COLUMNS, { views: [{ state: 'frozen', ySplit: 1 }] });
+  await saveWorkbook(workbook, filePath);
+}
+
+async function addTransferRequest(centerId, payload) {
+  const center = requireCenter(centerId);
+  await ensureTransfersWorkbook(center.id);
+  const filePath = getWorkbookFile('transfers', center.id);
+  const workbook = await loadWorkbook(filePath);
+  let sheet = workbook.getWorksheet('Transfers');
+  if (!sheet) {
+    sheet = createStyledWorksheet(workbook, 'Transfers', TRANSFER_COLUMNS, { views: [{ state: 'frozen', ySplit: 1 }] });
+  } else {
+    applyWorksheetColumns(sheet, TRANSFER_COLUMNS);
+  }
+
+  const row = sheet.addRow({
+    id: uuidv4(),
+    requestingCenterId: center.id,
+    requestingCenterName: center.name,
+    requestedBy: payload.requestedBy || '',
+    requestDate: new Date(),
+    status: 'Pending',
+    statusUpdatedAt: new Date(),
+    componentsJson: JSON.stringify(payload.components || []),
+    programName: payload.programName || '',
+    responsiblePerson: payload.responsiblePerson || '',
+    responsibleEmail: payload.responsibleEmail || '',
+    purpose: payload.purpose || '',
+    desiredReturnDate: payload.desiredReturnDate || '',
+    notes: payload.notes || '',
+    supplyCenterId: '',
+    supplyCenterName: '',
+    approvedAt: '',
+    supplierRemarks: '',
+    returnedAt: '',
+    returnNotes: '',
+  });
+
+  styleDataRow(row, sheet.rowCount % 2 === 0);
+  await saveWorkbook(workbook, filePath);
+  return transferFromRow(row);
+}
+
+async function updateTransferRequest(transferId, updates) {
+  for (const center of CENTERS) {
+    const filePath = getWorkbookFile('transfers', center.id);
+    if (!fsSync.existsSync(filePath)) continue;
+    const workbook = await loadWorkbook(filePath);
+    const sheet = workbook.getWorksheet('Transfers');
+    if (!sheet) continue;
+
+    let matchedRow = null;
+    sheet.eachRow((row, rowNum) => {
+      if (rowNum === 1) return;
+      if (normalizeCellValue(row.getCell(1).value) === transferId) {
+        matchedRow = row;
+      }
+    });
+
+    if (!matchedRow) continue;
+
+    const write = (colIndex, value) => {
+      if (value !== undefined) matchedRow.getCell(colIndex).value = value;
+    };
+
+    if (updates.status !== undefined) {
+      write(6, updates.status);
+      write(7, updates.statusUpdatedAt || new Date());
+    }
+    if (updates.components) {
+      write(8, JSON.stringify(updates.components));
+    }
+    write(9, updates.programName);
+    write(10, updates.responsiblePerson);
+    write(11, updates.responsibleEmail);
+    write(12, updates.purpose);
+    write(13, updates.desiredReturnDate);
+    write(14, updates.notes);
+    write(15, updates.supplyCenterId);
+    write(16, updates.supplyCenterName);
+    write(17, updates.approvedAt);
+    write(18, updates.supplierRemarks);
+    write(19, updates.returnRequestedAt);
+    write(20, updates.returnedAt);
+    write(21, updates.returnNotes);
+
+    await saveWorkbook(workbook, filePath);
+    return transferFromRow(matchedRow);
+  }
+
+  return null;
+}
+
+async function getTransferRequests(centerId, options = {}) {
+  const targetCenters = centerId
+    ? [requireCenter(centerId).id]
+    : CENTERS.map(center => center.id);
+  const requests = [];
+  for (const id of targetCenters) {
+    await ensureTransfersWorkbook(id);
+    const workbook = await loadWorkbook(getWorkbookFile('transfers', id));
+    const sheet = workbook.getWorksheet('Transfers');
+    if (!sheet) continue;
+    sheet.eachRow((row, rowNum) => {
+      if (rowNum === 1) return;
+      const request = transferFromRow(row);
+      requests.push(request);
+    });
+  }
+
+  if (options.includeAvailability) {
+    await Promise.all(requests.map(async request => {
+      request.availableCenters = await computeTransferAvailability(request.components, request.requestingCenterId);
+    }));
+  }
+
+  return requests.sort((a, b) => {
+    const aDate = new Date(a.requestDate || 0);
+    const bDate = new Date(b.requestDate || 0);
+    return bDate - aDate;
+  });
+}
+
+async function computeTransferAvailability(components, excludeCenterId) {
+  if (!Array.isArray(components) || !components.length) return [];
+  const available = [];
+  for (const center of CENTERS) {
+    if (center.id === excludeCenterId) continue;
+    const inventory = await getInventory(center.id);
+    const stockMap = new Map(inventory.map(item => [item.id, Number(item.stock) || 0]));
+    const hasAll = components.every(item => {
+      const required = Number(item.qty) || 0;
+      if (required <= 0) return false;
+      const availableStock = stockMap.get(item.id) || 0;
+      return availableStock >= required;
+    });
+    if (hasAll) available.push(center);
+  }
+  return available;
 }
 
 async function initAllCenterData() {
@@ -427,6 +644,10 @@ async function getInventory(centerId) {
           image: value(13) || '',
           active: normalizeBoolean(row.getCell(14).value),
           damagedCount: Number(value(15)) || 0,
+          invoiceNumber: value(16) || '',
+          vendorName: value(17) || '',
+          purchasePurpose: value(18) || '',
+          purchasedFor: value(19) || '',
         };
       } else {
         // Old format: col2 is name (no centerId/centerName columns)
@@ -446,6 +667,10 @@ async function getInventory(centerId) {
           image: value(11) || '',
           active: normalizeBoolean(row.getCell(12).value),
           damagedCount: Number(value(13)) || 0,
+          invoiceNumber: '',
+          vendorName: '',
+          purchasePurpose: '',
+          purchasedFor: '',
         };
       }
 
@@ -457,6 +682,38 @@ async function getInventory(centerId) {
     }
   });
   return items.filter(item => item.id && item.name);
+}
+
+function createInventoryExportWorkbook(items = []) {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = createStyledWorksheet(workbook, 'Inventory', INVENTORY_COLUMNS, { views: [{ state: 'frozen', ySplit: 1 }] });
+
+  (Array.isArray(items) ? items : []).forEach(item => {
+    const row = sheet.addRow({
+      id: item.id || '',
+      centerId: item.centerId || '',
+      centerName: item.centerName || '',
+      name: item.name || '',
+      category: item.category || '',
+      description: item.description || '',
+      stock: Number(item.stock) || 0,
+      totalProcured: Number(item.totalProcured ?? item.stock) || 0,
+      totalIssued: Number(item.totalIssued) || 0,
+      unit: item.unit || 'pcs',
+      location: item.location || '',
+      addedDate: item.addedDate ? new Date(item.addedDate) : '',
+      image: item.image || '',
+      active: item.active !== false,
+      damagedCount: Number(item.damagedCount) || 0,
+      invoiceNumber: String(item.invoiceNumber || '').trim(),
+      vendorName: String(item.vendorName || '').trim(),
+      purchasePurpose: String(item.purchasePurpose || '').trim(),
+      purchasedFor: String(item.purchasedFor || '').trim(),
+    });
+    styleDataRow(row, sheet.rowCount % 2 === 0);
+  });
+
+  return workbook;
 }
 
 async function addInventoryItem(item, centerId) {
@@ -487,6 +744,10 @@ async function addInventoryItem(item, centerId) {
     image: item.image || '',
     active: item.active !== false,
     damagedCount: Number(item.damagedCount) || 0,
+    invoiceNumber: String(item.invoiceNumber || '').trim(),
+    vendorName: String(item.vendorName || '').trim(),
+    purchasePurpose: String(item.purchasePurpose || '').trim(),
+    purchasedFor: String(item.purchasedFor || '').trim(),
   };
 
   const row = sheet.addRow(newItem);
@@ -517,6 +778,10 @@ async function updateInventoryItem(id, updates, centerId) {
     if (updates.image !== undefined) row.getCell(13).value = updates.image;
     if (updates.active !== undefined) row.getCell(14).value = !!updates.active;
     if (updates.damagedCount !== undefined) row.getCell(15).value = Number(updates.damagedCount) || 0;
+    if (updates.invoiceNumber !== undefined) row.getCell(16).value = String(updates.invoiceNumber || '').trim();
+    if (updates.vendorName !== undefined) row.getCell(17).value = String(updates.vendorName || '').trim();
+    if (updates.purchasePurpose !== undefined) row.getCell(18).value = String(updates.purchasePurpose || '').trim();
+    if (updates.purchasedFor !== undefined) row.getCell(19).value = String(updates.purchasedFor || '').trim();
     found = true;
   });
 
@@ -1045,6 +1310,8 @@ async function getAnalytics() {
     totalUsers: 0,
     totalOrders: 0,
     totalInventory: 0,
+    totalDamagedUnits: 0,
+    totalDamagedComponents: 0,
     centers: {}
   };
 
@@ -1052,15 +1319,21 @@ async function getAnalytics() {
     const users = await getUsers({ centerId: center.id });
     const orders = await getOrders(center.id);
     const inventory = await getInventory(center.id);
+    const damagedUnits = inventory.reduce((sum, item) => sum + (Number(item.damagedCount) || 0), 0);
+    const damagedComponents = inventory.filter(item => (Number(item.damagedCount) || 0) > 0).length;
     stats.centers[center.id] = {
       name: center.name,
       users: users.length,
       orders: orders.length,
       inventory: inventory.length,
+      damagedUnits,
+      damagedComponents,
     };
     stats.totalUsers += users.length;
     stats.totalOrders += orders.length;
     stats.totalInventory += inventory.length;
+    stats.totalDamagedUnits += damagedUnits;
+    stats.totalDamagedComponents += damagedComponents;
   }
 
   return stats;
@@ -1070,6 +1343,7 @@ module.exports = {
   CENTERS,
   DATA_DIR,
   FILES,
+  createInventoryExportWorkbook,
   addInventoryItem,
   addUser,
   deleteInventoryItem,
@@ -1092,5 +1366,9 @@ module.exports = {
   updateInventoryItem,
   updateOrderStatus,
   updateUser,
+  getTransferRequests,
+  addTransferRequest,
+  updateTransferRequest,
+  computeTransferAvailability,
   getAnalytics,
 };

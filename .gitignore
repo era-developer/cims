@@ -24,6 +24,11 @@ frontend/build/
 
 # Backend runtime data
 backend/data/*.xlsx
+backend/data/*/
+!backend/data/order_meta.json
+!backend/data/jp_nagar/
+!backend/data/jp_nagar/*
+backend/data/*/*.xlsx
 
 # Ignore npm package lock files only if generated in node_modules (keep root locks)
 **/package-lock.json

@@ -3,7 +3,7 @@ const cors = require('cors');
 const path = require('path');
 require('dotenv').config();
 
-const { initInventory, initUsers, FILES } = require('./utils/excel');
+const { initAllCenterData } = require('./utils/excel');
 const { verifyEmailConnection } = require('./utils/email');
 const { verifyWhatsAppConnection } = require('./utils/whatsapp');
 const { processReturnReminders } = require('./utils/reminders');
@@ -22,6 +22,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/components', require('./routes/components'));
 app.use('/api/orders', require('./routes/orders'));
 app.use('/api/admin', require('./routes/admin'));
+app.use('/api/transfers', require('./routes/transfers'));
 app.use('/api/webhooks', require('./routes/webhooks'));
 
 // Serve frontend build in production
@@ -159,14 +160,8 @@ app.get('/api/health', async (_, res) => {
 
 // Init Excel files on first run
 async function init() {
-  if (!fs.existsSync(FILES.inventory)) {
-    console.log('📦 Initializing inventory with dummy data...');
-    await initInventory();
-  }
-  if (!fs.existsSync(FILES.users)) {
-    console.log('👤 Initializing default users...');
-    await initUsers();
-  }
+  console.log('Initializing center-wise workbooks and user directories...');
+  await initAllCenterData();
 }
 
 const PORT = process.env.PORT || 5000;
@@ -206,3 +201,4 @@ setInterval(async () => {
     console.error(`[REMINDERS WARNING] ${err.message}`);
   }
 }, REMINDER_INTERVAL_MS);
+
