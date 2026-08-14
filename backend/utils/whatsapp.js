@@ -1,6 +1,6 @@
 require('dotenv').config();
 
-const { saveWhatsappMessage } = require('./excel');
+const { saveWhatsappMessage } = require('./whatsappDb');
 const { readCenterSpecificEnv } = require('./email');
 
 function readEnv(name) {

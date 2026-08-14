@@ -2,6 +2,35 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import ProgramSelect, { resolveProgramName, OTHER_PROGRAM } from '../components/ProgramSelect';
+import { CENTERS } from '../centers';
+
+const PROGRAM_STATUS_META = {
+  planning: { label: 'Planning', color: '#1d4ed8', bg: '#dbeafe' },
+  ongoing: { label: 'Ongoing', color: '#b45309', bg: '#fef3c7' },
+  completed: { label: 'Completed', color: '#047857', bg: '#d1fae5' },
+};
+const PROGRAM_STATUS_OPTIONS = ['planning', 'ongoing', 'completed'];
+
+// Renders "N students, M teams, from Institute" from whichever of the three
+// optional session-context fields are actually set -- used for both
+// Procurement Requests and (via ProgramDetail) Internal Use records.
+function sessionContextLine(record) {
+  const parts = [];
+  if (record.studentCount != null) parts.push(`${record.studentCount} student${record.studentCount === 1 ? '' : 's'}`);
+  if (record.teamCount != null) parts.push(`${record.teamCount} team${record.teamCount === 1 ? '' : 's'}`);
+  if (!parts.length && !record.instituteName) return '';
+  return parts.join(', ') + (record.instituteName ? `${parts.length ? ' from ' : 'From '}${record.instituteName}` : '');
+}
+
+const PROCUREMENT_STATUS_META = {
+  Requested: { background: '#fff4e6', color: '#d97706' },
+  Approved: { background: '#ecfdf5', color: '#047857' },
+  Rejected: { background: '#fce4ec', color: '#c62828' },
+  'Order Placed': { background: '#e3f2fd', color: '#1565c0' },
+  'In Transit': { background: '#f3e5f5', color: '#6a1b9a' },
+  Received: { background: '#eef2ff', color: '#4338ca' },
+};
 
 const FLOW_STEPS = [
   'List the exact components and quantities you need, picking from the existing inventory items.',
@@ -25,6 +54,8 @@ function createRow() {
 export default function MyCenter() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const isSuperAdmin = user?.role === 'super_admin';
+  const [centerId, setCenterId] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [rows, setRows] = useState([createRow()]);
   const [inventory, setInventory] = useState([]);
@@ -45,6 +76,31 @@ export default function MyCenter() {
   });
   const [error, setError] = useState('');
   const [submissionStatus, setSubmissionStatus] = useState('');
+  const [programs, setPrograms] = useState([]);
+  const [programModalOpen, setProgramModalOpen] = useState(false);
+  const [editingProgramId, setEditingProgramId] = useState(null);
+  const [programForm, setProgramForm] = useState({
+    name: '', handledBy: '', startDate: '', expectedEndDate: '', instituteName: '', notes: '', completionDate: '', status: 'planning',
+  });
+  const [programSaving, setProgramSaving] = useState(false);
+  const [programMsg, setProgramMsg] = useState('');
+  const [otherProgramName, setOtherProgramName] = useState('');
+  const [showAllPrograms, setShowAllPrograms] = useState(false);
+  const [procurementRequests, setProcurementRequests] = useState([]);
+  const [loadingProcurement, setLoadingProcurement] = useState(false);
+  const [procurementFormOpen, setProcurementFormOpen] = useState(false);
+  const [procurementRows, setProcurementRows] = useState([{ id: 'p-row-0', name: '', componentId: '', available: 0, unit: 'pcs', qty: '', reason: '' }]);
+  const [procurementProjectId, setProcurementProjectId] = useState('');
+  const [procurementOtherProgram, setProcurementOtherProgram] = useState('');
+  const [procurementStudentCount, setProcurementStudentCount] = useState('');
+  const [procurementTeamCount, setProcurementTeamCount] = useState('');
+  const [procurementInstituteName, setProcurementInstituteName] = useState('');
+  const [procurementSaving, setProcurementSaving] = useState(false);
+  const [procurementMsg, setProcurementMsg] = useState('');
+
+  useEffect(() => {
+    setCenterId(isSuperAdmin ? (CENTERS[0]?.id || '') : (user?.centerId || ''));
+  }, [isSuperAdmin, user]);
 
   useEffect(() => {
     let cancel = false;
@@ -69,30 +125,198 @@ export default function MyCenter() {
   }, []);
 
   const fetchRequests = useCallback(async () => {
-    if (!user?.centerId) return;
+    if (!centerId) return;
     setLoadingRequests(true);
     try {
-      const { data } = await axios.get('/api/transfers', { params: { centerId: user.centerId } });
+      const { data } = await axios.get('/api/transfers', { params: { centerId } });
       setRequests(data);
     } catch (err) {
       console.error('Unable to load transfer history', err);
     } finally {
       setLoadingRequests(false);
     }
-  }, [user?.centerId]);
+  }, [centerId]);
 
   useEffect(() => {
-    if (!user?.centerId) return;
+    if (!centerId) return;
     fetchRequests();
-  }, [user?.centerId, fetchRequests]);
+  }, [centerId, fetchRequests]);
+
+  const fetchProcurement = useCallback(async () => {
+    if (!centerId) return;
+    setLoadingProcurement(true);
+    try {
+      const { data } = await axios.get('/api/procurement', { params: { centerId } });
+      setProcurementRequests(data);
+    } catch (err) {
+      console.error('Unable to load component requests', err);
+    } finally {
+      setLoadingProcurement(false);
+    }
+  }, [centerId]);
+
+  useEffect(() => {
+    if (!centerId) return;
+    fetchProcurement();
+  }, [centerId, fetchProcurement]);
+
+  function updateProcurementRow(rowId, field, value) {
+    setProcurementRows(prev => prev.map(row => (row.id === rowId ? { ...row, [field]: value } : row)));
+  }
+
+  function handleProcurementNameChange(rowId, value) {
+    updateProcurementRow(rowId, 'name', value);
+    setProcurementRows(prev => prev.map(row => (row.id === rowId ? { ...row, componentId: '', available: 0, unit: 'pcs' } : row)));
+  }
+
+  function handleProcurementSuggestionSelect(rowId, item) {
+    setProcurementRows(prev => prev.map(row => (row.id === rowId
+      ? { ...row, componentId: item.id, name: item.name, available: Number(item.stock || 0), unit: item.unit || 'pcs' }
+      : row)));
+  }
+
+  const procurementSuggestionsMap = useMemo(() => {
+    const map = {};
+    procurementRows.forEach(row => {
+      // Once a suggestion is picked (componentId set), the name field holds
+      // that exact match, which would otherwise keep matching itself and
+      // leave the dropdown open right after the click that was meant to close it.
+      if (!row.name.trim() || row.componentId) return;
+      const query = row.name.trim().toLowerCase();
+      map[row.id] = inventory.filter(item => item.name?.toLowerCase().includes(query)).slice(0, 6);
+    });
+    return map;
+  }, [inventory, procurementRows]);
+
+  function addProcurementRow() {
+    setProcurementRows(prev => [...prev, { id: `p-row-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`, name: '', componentId: '', available: 0, unit: 'pcs', qty: '', reason: '' }]);
+  }
+
+  function removeProcurementRow(rowId) {
+    setProcurementRows(prev => prev.filter(row => row.id !== rowId));
+  }
+
+  async function handleProcurementSubmit(event) {
+    event.preventDefault();
+    setProcurementMsg('');
+    const isOtherProgram = procurementProjectId === OTHER_PROGRAM;
+    const hasProgram = isOtherProgram ? procurementOtherProgram.trim() : procurementProjectId;
+    if (!hasProgram) {
+      setProcurementMsg('Select which program this request is for.');
+      return;
+    }
+    const validItems = procurementRows
+      .filter(row => row.name.trim() && Number(row.qty) > 0)
+      .map(row => ({ name: row.name.trim(), qty: Number(row.qty), reason: row.reason.trim() }));
+    if (!validItems.length) {
+      setProcurementMsg('Add at least one component with a name and quantity.');
+      return;
+    }
+    setProcurementSaving(true);
+    try {
+      await axios.post('/api/procurement', {
+        centerId, items: validItems,
+        ...(isOtherProgram ? { otherProgramName: procurementOtherProgram.trim() } : { projectId: Number(procurementProjectId) }),
+        studentCount: procurementStudentCount, teamCount: procurementTeamCount, instituteName: procurementInstituteName.trim(),
+      });
+      setProcurementFormOpen(false);
+      setProcurementRows([{ id: `p-row-${Date.now().toString(36)}`, name: '', componentId: '', available: 0, unit: 'pcs', qty: '', reason: '' }]);
+      setProcurementProjectId('');
+      setProcurementOtherProgram('');
+      setProcurementStudentCount('');
+      setProcurementTeamCount('');
+      setProcurementInstituteName('');
+      await fetchProcurement();
+    } catch (err) {
+      setProcurementMsg(err.response?.data?.message || 'Unable to submit this request.');
+    } finally {
+      setProcurementSaving(false);
+    }
+  }
+
+  const fetchPrograms = useCallback(async () => {
+    if (!centerId) return;
+    try {
+      const { data } = await axios.get('/api/programs', { params: { centerId } });
+      setPrograms(data);
+    } catch (err) {
+      console.error('Unable to load programs', err);
+    }
+  }, [centerId]);
+
+  useEffect(() => {
+    fetchPrograms();
+  }, [fetchPrograms]);
+
+  function openProgramModal() {
+    setEditingProgramId(null);
+    setProgramForm({ name: '', handledBy: '', startDate: '', expectedEndDate: '', instituteName: '', notes: '', completionDate: '', status: 'planning' });
+    setProgramMsg('');
+    setProgramModalOpen(true);
+  }
+
+  function openEditProgramModal(program) {
+    setEditingProgramId(program.id);
+    setProgramForm({
+      name: program.name || '',
+      handledBy: program.handled_by || '',
+      startDate: program.start_date || '',
+      expectedEndDate: program.expected_end_date || '',
+      instituteName: program.institute_name || '',
+      notes: program.notes || '',
+      completionDate: program.completion_date || '',
+      status: program.status || 'planning',
+    });
+    setProgramMsg('');
+    setProgramModalOpen(true);
+  }
+
+  async function handleProgramSubmit(event) {
+    event.preventDefault();
+    setProgramMsg('');
+    if (!programForm.name.trim() || !programForm.handledBy.trim()) {
+      setProgramMsg('Program name and who is handling it are required.');
+      return;
+    }
+    setProgramSaving(true);
+    const payload = {
+      centerId,
+      name: programForm.name.trim(), handledBy: programForm.handledBy.trim(),
+      startDate: programForm.startDate, expectedEndDate: programForm.expectedEndDate,
+      instituteName: programForm.instituteName.trim(), notes: programForm.notes.trim(),
+      completionDate: programForm.completionDate, status: programForm.status,
+    };
+    try {
+      if (editingProgramId) {
+        await axios.put(`/api/programs/${editingProgramId}`, payload);
+      } else {
+        await axios.post('/api/programs', payload);
+      }
+      setProgramModalOpen(false);
+      fetchPrograms();
+    } catch (err) {
+      setProgramMsg(err.response?.data?.message || `Unable to ${editingProgramId ? 'update' : 'create'} this program.`);
+    } finally {
+      setProgramSaving(false);
+    }
+  }
+
+  function openProgramDetail(program) {
+    navigate(`/admin/programs/${program.id}`);
+  }
+
+  const sortedPrograms = useMemo(() => {
+    return [...programs].sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+  }, [programs]);
+  const recentPrograms = sortedPrograms.slice(0, 5);
 
   const filteredRequests = useMemo(() => {
-    if (!user?.centerId) return [];
+    if (!centerId) return [];
     if (viewMode === 'sent') {
-      return requests.filter(request => request.supplyCenterId === user.centerId);
+      return requests.filter(request => request.supplyCenterId === centerId);
     }
-    return requests.filter(request => request.requestingCenterId === user.centerId);
-  }, [requests, viewMode, user?.centerId]);
+    return requests.filter(request => request.requestingCenterId === centerId);
+  }, [requests, viewMode, centerId]);
 
   function openReturnModal(requestId) {
     setReturnModal({ open: true, requestId, details: { courierName: '', trackingId: '', notes: '' } });
@@ -127,7 +351,10 @@ export default function MyCenter() {
   const suggestionsMap = useMemo(() => {
     const map = {};
     rows.forEach(row => {
-      if (!row.name.trim()) return;
+      // Once a suggestion is picked (componentId set), don't keep matching
+      // the now-exact name against itself -- that left the dropdown open
+      // right after the click that was meant to close it.
+      if (!row.name.trim() || row.componentId) return;
       const query = row.name.trim().toLowerCase();
       map[row.id] = inventory
         .filter(item => item.name?.toLowerCase().includes(query))
@@ -185,7 +412,7 @@ export default function MyCenter() {
       return;
     }
     const payload = {
-      programName: formDetails.programName.trim(),
+      programName: resolveProgramName(formDetails.programName, otherProgramName),
       responsiblePerson: formDetails.responsiblePerson.trim(),
       responsibleEmail: formDetails.responsibleEmail.trim(),
       purpose: formDetails.purpose.trim(),
@@ -207,6 +434,7 @@ export default function MyCenter() {
       setSubmissionStatus('waiting');
       setRows([createRow()]);
       setFormDetails({ programName: '', responsiblePerson: '', responsibleEmail: '', purpose: '', desiredReturnDate: '', notes: '' });
+      setOtherProgramName('');
       fetchRequests();
     } catch (err) {
       setError(err.response?.data?.message || 'Unable to submit the request right now.');
@@ -216,10 +444,167 @@ export default function MyCenter() {
     }
   }
 
-  const centerName = user?.centerName || 'your center';
+  const centerName = isSuperAdmin
+    ? (CENTERS.find(c => c.id === centerId)?.name || 'Select a center')
+    : (user?.centerName || 'your center');
 
   return (
     <div style={styles.page}>
+      {isSuperAdmin && (
+        <div style={{ marginBottom: 14 }}>
+          <label style={styles.fieldLabel}>
+            <span style={styles.labelText}>Viewing center</span>
+            <select value={centerId} onChange={event => setCenterId(event.target.value)} style={styles.input}>
+              {CENTERS.map(center => <option key={center.id} value={center.id}>{center.name}</option>)}
+            </select>
+          </label>
+        </div>
+      )}
+      <section style={styles.card}>
+        <div style={styles.cardHeaderRow}>
+          <div>
+            <div style={{ ...styles.sectionHeading, marginBottom: 6 }}>Programs — {centerName}</div>
+            <p style={styles.helperText}>
+              Programs created here show up as a dropdown wherever a program/project name is asked — invoice entry, component
+              add, and marking a unit damaged.
+            </p>
+          </div>
+          {isSuperAdmin && (
+            <button type="button" onClick={openProgramModal} style={styles.primarySmallBtn}>
+              + Add Program
+            </button>
+          )}
+        </div>
+        {programs.length === 0 ? (
+          <p style={styles.helperText}>No programs created yet.</p>
+        ) : (
+          <>
+            <div style={styles.historyList}>
+              {recentPrograms.map(program => (
+                <ProgramRow key={program.id} program={program} onEdit={openEditProgramModal} onOpen={openProgramDetail} />
+              ))}
+            </div>
+            {sortedPrograms.length > 5 && (
+              <button type="button" onClick={() => setShowAllPrograms(true)} style={styles.seeAllBtn}>
+                See all programs ({sortedPrograms.length})
+              </button>
+            )}
+          </>
+        )}
+      </section>
+
+      <section style={styles.card}>
+        <div style={styles.cardHeaderRow}>
+          <div>
+            <div style={{ ...styles.sectionHeading, marginBottom: 6 }}>Request New Components — {centerName}</div>
+            <p style={styles.helperText}>
+              For components your center doesn't have yet (or needs more of) for a prototype or program. Goes to the
+              super admin for approval and procurement -- different from requesting existing stock from another center below.
+            </p>
+          </div>
+          <button type="button" onClick={() => { setProcurementFormOpen(true); setProcurementMsg(''); }} style={styles.primarySmallBtn}>
+            + Request Components
+          </button>
+        </div>
+
+        {procurementFormOpen && (
+          <form onSubmit={handleProcurementSubmit} style={{ marginTop: '12px', marginBottom: '18px', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '14px' }}>
+            {procurementMsg && <p style={{ color: '#c62828', fontSize: '13px', marginTop: 0 }}>{procurementMsg}</p>}
+            <div style={{ marginBottom: '12px', maxWidth: '360px' }}>
+              <ProgramSelect
+                programs={programs} mode="id" label="Program" required
+                value={procurementProjectId} otherValue={procurementOtherProgram}
+                onChange={setProcurementProjectId} onOtherChange={setProcurementOtherProgram}
+              />
+            </div>
+            <p style={{ ...styles.helperText, marginTop: 0 }}>If this is for a workshop/session with visiting students, optionally fill in:</p>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '12px' }}>
+              <label style={{ flex: '1 1 140px' }}>
+                <span style={styles.labelText}>Number of Students</span>
+                <input type="number" min="0" style={styles.input} value={procurementStudentCount}
+                  onChange={e => setProcurementStudentCount(e.target.value)} />
+              </label>
+              <label style={{ flex: '1 1 140px' }}>
+                <span style={styles.labelText}>Number of Teams</span>
+                <input type="number" min="0" style={styles.input} value={procurementTeamCount}
+                  onChange={e => setProcurementTeamCount(e.target.value)} />
+              </label>
+              <label style={{ flex: '1 1 200px' }}>
+                <span style={styles.labelText}>Institute Name</span>
+                <input style={styles.input} value={procurementInstituteName}
+                  onChange={e => setProcurementInstituteName(e.target.value)} />
+              </label>
+            </div>
+            {procurementRows.map(row => (
+              <div key={row.id} style={{ ...styles.tableRow, flexWrap: 'wrap' }}>
+                <div style={{ flex: 2, minWidth: '180px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <input style={styles.input} placeholder="Component name"
+                    value={row.name} onChange={e => handleProcurementNameChange(row.id, e.target.value)} />
+                  {row.componentId ? (
+                    <span style={styles.helperText}>Currently available: {row.available} {row.unit}</span>
+                  ) : (row.name.trim() && (
+                    <span style={styles.helperText}>New component -- not currently in your inventory.</span>
+                  ))}
+                  {procurementSuggestionsMap[row.id]?.length ? (
+                    <div style={styles.suggestionList}>
+                      {procurementSuggestionsMap[row.id].map(item => (
+                        <button key={item.id} type="button" style={styles.suggestionItem}
+                          onMouseDown={event => event.preventDefault()}
+                          onClick={() => handleProcurementSuggestionSelect(row.id, item)}>
+                          <span style={styles.suggestionName}>{item.name}</span>
+                          <span style={styles.suggestionMeta}>{item.stock || 0} pcs · {item.category || 'Inventory'}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+                <input style={{ ...styles.input, flex: 1, minWidth: '80px' }} type="number" min="1" placeholder="Qty"
+                  value={row.qty} onChange={e => updateProcurementRow(row.id, 'qty', e.target.value)} />
+                <input style={{ ...styles.input, flex: 2, minWidth: '160px' }} placeholder="Reason (optional)"
+                  value={row.reason} onChange={e => updateProcurementRow(row.id, 'reason', e.target.value)} />
+                <button type="button" onClick={() => removeProcurementRow(row.id)} style={styles.removeRowBtn}
+                  disabled={procurementRows.length === 1} title="Remove this component">
+                  ×
+                </button>
+              </div>
+            ))}
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px' }}>
+              <button type="button" onClick={addProcurementRow} style={styles.seeAllBtn}>+ Add another component</button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button type="button" onClick={() => setProcurementFormOpen(false)} style={styles.secondaryBtn}>Cancel</button>
+                <button type="submit" disabled={procurementSaving} style={styles.primarySmallBtn}>
+                  {procurementSaving ? 'Submitting...' : 'Submit Request'}
+                </button>
+              </div>
+            </div>
+          </form>
+        )}
+
+        {loadingProcurement ? (
+          <p style={styles.helperText}>Loading...</p>
+        ) : procurementRequests.length === 0 ? (
+          <p style={styles.helperText}>No component requests yet.</p>
+        ) : (
+          <div style={styles.historyList}>
+            {procurementRequests.map(request => (
+              <div key={request.id} style={styles.historyItem}>
+                <div style={styles.historyRow}>
+                  <span style={styles.historyTitle}>Request #{request.id} {request.programName ? `· ${request.programName}` : ''}</span>
+                  <span style={{ ...styles.statusBadge, ...(PROCUREMENT_STATUS_META[request.status] || {}) }}>{request.status}</span>
+                </div>
+                <div style={styles.componentList}>
+                  {request.items.map(item => (
+                    <span key={item.id} style={styles.componentPill}>{item.componentName} × {item.qtyRequested}</span>
+                  ))}
+                </div>
+                {sessionContextLine(request) && <p style={styles.helperText}>{sessionContextLine(request)}</p>}
+                {request.adminRemarks && <p style={styles.helperText}>Remarks: {request.adminRemarks}</p>}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
       <div style={styles.hero}>
         <div>
           <p style={styles.label}>My Center — {centerName}</p>
@@ -320,14 +705,14 @@ export default function MyCenter() {
           <div style={styles.section}>
             <div style={styles.sectionHeading}>Project & contact details</div>
             <div style={styles.detailGrid}>
-              <label style={styles.fieldLabel}>
-                <span style={styles.labelText}>Program / project name</span>
-                <input
-                  value={formDetails.programName}
-                  onChange={event => handleDetailChange('programName', event.target.value)}
-                  style={styles.input}
+              <div style={styles.fieldLabel}>
+                <ProgramSelect
+                  programs={programs} mode="name" label="Program / project name"
+                  value={formDetails.programName} otherValue={otherProgramName}
+                  onChange={value => handleDetailChange('programName', value)}
+                  onOtherChange={setOtherProgramName}
                 />
-              </label>
+              </div>
               <label style={styles.fieldLabel}>
                 <span style={styles.labelText}>Responsible person</span>
                 <input
@@ -526,6 +911,118 @@ export default function MyCenter() {
           </div>
         </div>
       )}
+
+      {showAllPrograms && (
+        <div style={styles.modalOverlay} onClick={() => setShowAllPrograms(false)}>
+          <div style={styles.modalWide} onClick={event => event.stopPropagation()}>
+            <h3 style={styles.modalTitle}>All programs — {centerName}</h3>
+            <div style={{ ...styles.historyList, maxHeight: '60vh', overflowY: 'auto' }}>
+              {sortedPrograms.map(program => (
+                <ProgramRow key={program.id} program={program} onEdit={openEditProgramModal} onOpen={openProgramDetail} />
+              ))}
+            </div>
+            <div style={styles.modalActions}>
+              <button type="button" style={styles.modalCancelBtn} onClick={() => setShowAllPrograms(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {programModalOpen && (
+        <div style={styles.modalOverlay} onClick={() => setProgramModalOpen(false)}>
+          <div style={styles.modal} onClick={event => event.stopPropagation()}>
+            <h3 style={styles.modalTitle}>{editingProgramId ? 'Edit Program' : 'Add Program'}</h3>
+            <p style={styles.modalText}>This becomes a selectable option wherever a program/project name is asked.</p>
+            {programMsg && <div style={styles.error}>{programMsg}</div>}
+            <label style={styles.modalLabel}>
+              Program Name *
+              <input style={styles.modalInput} value={programForm.name}
+                onChange={e => setProgramForm({ ...programForm, name: e.target.value })} />
+            </label>
+            <label style={styles.modalLabel}>
+              Handled By *
+              <input style={styles.modalInput} value={programForm.handledBy}
+                onChange={e => setProgramForm({ ...programForm, handledBy: e.target.value })}
+                placeholder="Name of the admin/faculty managing this program" />
+            </label>
+            <label style={styles.modalLabel}>
+              Program Start Date
+              <input type="date" style={styles.modalInput} value={programForm.startDate}
+                onChange={e => setProgramForm({ ...programForm, startDate: e.target.value })} />
+            </label>
+            <label style={styles.modalLabel}>
+              Expected End Date
+              <input type="date" style={styles.modalInput} value={programForm.expectedEndDate}
+                onChange={e => setProgramForm({ ...programForm, expectedEndDate: e.target.value })} />
+            </label>
+            <label style={styles.modalLabel}>
+              Institute Name (if an institute is involved)
+              <input style={styles.modalInput} value={programForm.instituteName}
+                onChange={e => setProgramForm({ ...programForm, instituteName: e.target.value })} />
+            </label>
+            <label style={styles.modalLabel}>
+              Other Details
+              <textarea style={{ ...styles.modalInput, minHeight: 70 }} value={programForm.notes}
+                onChange={e => setProgramForm({ ...programForm, notes: e.target.value })} />
+            </label>
+            <label style={styles.modalLabel}>
+              Status (set by the mentor/admin — this decides whether it's still selectable elsewhere)
+              <select style={styles.modalInput} value={programForm.status}
+                onChange={e => setProgramForm({ ...programForm, status: e.target.value })}>
+                {PROGRAM_STATUS_OPTIONS.map(opt => (
+                  <option key={opt} value={opt}>{PROGRAM_STATUS_META[opt].label}</option>
+                ))}
+              </select>
+            </label>
+            {editingProgramId && (
+              <label style={styles.modalLabel}>
+                Completion Date (optional record of when it actually wrapped up)
+                <input type="date" style={styles.modalInput} value={programForm.completionDate}
+                  onChange={e => setProgramForm({ ...programForm, completionDate: e.target.value })} />
+              </label>
+            )}
+            <div style={styles.modalActions}>
+              <button type="button" style={styles.modalCancelBtn} onClick={() => setProgramModalOpen(false)} disabled={programSaving}>
+                Cancel
+              </button>
+              <button type="button" style={styles.primaryBtn} onClick={handleProgramSubmit} disabled={programSaving}>
+                {programSaving ? 'Saving...' : editingProgramId ? 'Save changes' : 'Create Program'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProgramRow({ program, onEdit, onOpen }) {
+  const meta = PROGRAM_STATUS_META[program.status] || PROGRAM_STATUS_META.planning;
+  const timeline = program.completion_date
+    ? `Completed ${program.completion_date}${program.start_date ? ` (started ${program.start_date})` : ''}`
+    : `${program.start_date || 'Start date not set'} → ${program.expected_end_date || 'no expected end date'}`;
+  return (
+    <div style={styles.historyItemClickable} onClick={() => onOpen(program)}>
+      <div style={styles.historyRow}>
+        <span style={styles.historyTitle}>{program.name}</span>
+        <span style={{ ...styles.statusBadge, color: meta.color, background: meta.bg }}>{meta.label}</span>
+      </div>
+      <div style={styles.historyRow}>
+        <span>Handled by: {program.handled_by || '-'}</span>
+        <span>Institute: {program.institute_name || '-'}</span>
+      </div>
+      <div style={styles.historyRow}>
+        <span>{timeline}</span>
+      </div>
+      {program.notes && <div style={styles.historyRow}><span>{program.notes}</span></div>}
+      <div style={{ ...styles.returnButtonRow, justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={styles.helperText}>Click to view full transaction history & lifecycle</span>
+        <button type="button" style={styles.secondaryBtn} onClick={event => { event.stopPropagation(); onEdit(program); }}>
+          Edit
+        </button>
+      </div>
     </div>
   );
 }
@@ -580,6 +1077,35 @@ const styles = {
   },
   section: { marginBottom: 12 },
   sectionHeading: { fontSize: 16, fontWeight: 700, marginBottom: 16, color: '#1c2564' },
+  cardHeaderRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, marginBottom: 16, flexWrap: 'wrap' },
+  primarySmallBtn: {
+    background: '#1a237e',
+    border: 'none',
+    borderRadius: 10,
+    color: '#fff',
+    fontWeight: 700,
+    cursor: 'pointer',
+    padding: '10px 16px',
+    whiteSpace: 'nowrap',
+  },
+  seeAllBtn: {
+    marginTop: 14,
+    background: 'transparent',
+    border: '1px solid #cbd5f5',
+    borderRadius: 10,
+    padding: '10px 16px',
+    cursor: 'pointer',
+    fontWeight: 600,
+    color: '#1a237e',
+    width: '100%',
+  },
+  statusBadge: {
+    display: 'inline-flex',
+    padding: '3px 10px',
+    borderRadius: 999,
+    fontSize: 12,
+    fontWeight: 700,
+  },
   tableHeader: {
     display: 'flex',
     alignItems: 'center',
@@ -695,10 +1221,12 @@ const styles = {
   flowItem: { color: '#1e293b', fontSize: 14, lineHeight: 1.6 },
   historyList: { display: 'flex', flexDirection: 'column', gap: 12 },
   historyItem: { border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 16px', background: '#f8fafc' },
+  historyItemClickable: { border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 16px', background: '#f8fafc', cursor: 'pointer' },
   historyRow: { display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#1e1b4b', marginBottom: 6 },
   historyTitle: { fontWeight: 700, color: '#0f172a' },
   historyStatus: { fontWeight: 600, color: '#047857' },
   componentPill: { display: 'inline-flex', padding: '4px 8px', borderRadius: 8, background: '#fff', border: '1px solid #d1d5db', marginRight: 6, marginBottom: 6, fontSize: 12 },
+  componentList: { display: 'flex', flexWrap: 'wrap', marginTop: 8 },
   returnButtonRow: { display: 'flex', justifyContent: 'flex-end', marginTop: 6 },
   secondaryBtn: {
     borderRadius: 10,
@@ -723,6 +1251,16 @@ const styles = {
     borderRadius: 20,
     padding: '28px',
     width: 'min(480px, 90%)',
+    boxShadow: '0 20px 40px rgba(15,23,42,0.25)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 12,
+  },
+  modalWide: {
+    background: '#fff',
+    borderRadius: 20,
+    padding: '28px',
+    width: 'min(700px, 92%)',
     boxShadow: '0 20px 40px rgba(15,23,42,0.25)',
     display: 'flex',
     flexDirection: 'column',

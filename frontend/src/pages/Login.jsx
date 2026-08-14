@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import axios from 'axios';
 import QRCode from 'react-qr-code';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import BrandLogo from '../components/BrandLogo';
@@ -10,6 +11,10 @@ import { getCurrentCenter } from '../centers';
 
 const currentCenter = getCurrentCenter();
 const STUDENT_USER_GUIDE_URL = 'https://docs.google.com/document/d/e/2PACX-1vTmEzNIgJYwf4Uiu2q8Eqnhr_rEWKimLR1i4W4oORtBIzBTmR4Nv6jZmM9Qwl74RvC5Y3qB8FcaRs3X/pub';
+// Stable public entry point (matches backend SITE_URL) -- not derived from
+// window.location, so the QR/link stays correct regardless of which host
+// (ngrok, a new domain, etc.) is actually serving the app underneath it.
+const STABLE_SITE_URL = 'https://comedkares.s.gy/cims';
 
 const INITIAL_REGISTER_FORM = {
   username: '',
@@ -40,6 +45,23 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [registrationLink, setRegistrationLink] = useState('');
 
+  // 'request' = enter username/email and ask for a code; 'reset' = enter
+  // the emailed code plus a new password. Kept as local state rather than
+  // a 'forgot' branch of `mode` needing a URL param -- there's no reason to
+  // deep-link into this flow.
+  const [forgotStep, setForgotStep] = useState('request');
+  const [forgotLoginId, setForgotLoginId] = useState('');
+  const [forgotCode, setForgotCode] = useState('');
+  const [forgotNewPassword, setForgotNewPassword] = useState('');
+  const [forgotConfirmPassword, setForgotConfirmPassword] = useState('');
+  const [forgotCooldown, setForgotCooldown] = useState(0);
+
+  useEffect(() => {
+    if (forgotCooldown <= 0) return undefined;
+    const timer = setInterval(() => setForgotCooldown(current => Math.max(current - 1, 0)), 1000);
+    return () => clearInterval(timer);
+  }, [forgotCooldown > 0]);
+
   useEffect(() => {
     setMode(searchParams.get('register') === '1' ? 'register' : 'login');
     const centerId = searchParams.get('centerId');
@@ -49,9 +71,7 @@ export default function Login() {
   }, [searchParams]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      setRegistrationLink(`${window.location.origin}/${REGISTRATION_QUERY}`);
-    }
+    setRegistrationLink(`${STABLE_SITE_URL}/${REGISTRATION_QUERY}`);
   }, []);
 
   function switchMode(nextMode, options = {}) {
@@ -127,6 +147,72 @@ export default function Login() {
     }
   }
 
+  function openForgotPassword() {
+    setForgotStep('request');
+    setForgotLoginId(loginForm.username.trim());
+    setForgotCode('');
+    setForgotNewPassword('');
+    setForgotConfirmPassword('');
+    setForgotCooldown(0);
+    setMessage('');
+    setMode('forgot');
+  }
+
+  async function handleForgotRequest(event) {
+    event.preventDefault();
+    if (!forgotLoginId.trim()) {
+      setMessageType('error');
+      setMessage('Enter your username or email.');
+      return;
+    }
+    setMessage('');
+    setLoading(true);
+    try {
+      const { data } = await axios.post('/api/auth/forgot-password', { loginId: forgotLoginId.trim() });
+      setMessageType('success');
+      setMessage(data.message);
+      setForgotStep('reset');
+      setForgotCooldown(45);
+    } catch (err) {
+      setMessageType('error');
+      setMessage(err.response?.data?.message || 'Unable to request a code right now.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleForgotReset(event) {
+    event.preventDefault();
+    if (!forgotCode.trim() || !forgotNewPassword) {
+      setMessageType('error');
+      setMessage('Enter the code from your email and a new password.');
+      return;
+    }
+    if (forgotNewPassword !== forgotConfirmPassword) {
+      setMessageType('error');
+      setMessage('New password and confirm password must match.');
+      return;
+    }
+    setMessage('');
+    setLoading(true);
+    try {
+      const { data } = await axios.post('/api/auth/reset-password', {
+        loginId: forgotLoginId.trim(),
+        code: forgotCode.trim(),
+        newPassword: forgotNewPassword,
+      });
+      setLoginForm({ username: forgotLoginId.trim(), password: '' });
+      setMessageType('success');
+      setMessage(data.message || 'Password reset. You can now sign in.');
+      setMode('login');
+    } catch (err) {
+      setMessageType('error');
+      setMessage(err.response?.data?.message || 'Unable to reset password right now.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function copyRegistrationLink() {
     if (!registrationLink) return;
     try {
@@ -151,19 +237,27 @@ export default function Login() {
         <div style={{ ...styles.card, ...(isMobile ? styles.cardMobile : {}) }}>
           <BrandLogo showSystemName={false} />
 
-          <div style={{ ...styles.tabRow, ...(isMobile ? styles.tabRowMobile : {}) }}>
-            <button style={{ ...styles.tabBtn, ...(mode === 'login' ? styles.tabBtnActive : {}) }} onClick={() => switchMode('login')}>
-              Sign In
-            </button>
-            <button style={{ ...styles.tabBtn, ...(mode === 'register' ? styles.tabBtnActive : {}) }} onClick={() => switchMode('register')}>
-              Student Register
-            </button>
-          </div>
+          {mode !== 'forgot' && (
+            <div style={{ ...styles.tabRow, ...(isMobile ? styles.tabRowMobile : {}) }}>
+              <button style={{ ...styles.tabBtn, ...(mode === 'login' ? styles.tabBtnActive : {}) }} onClick={() => switchMode('login')}>
+                Sign In
+              </button>
+              <button style={{ ...styles.tabBtn, ...(mode === 'register' ? styles.tabBtnActive : {}) }} onClick={() => switchMode('register')}>
+                Student Register
+              </button>
+            </div>
+          )}
 
-          <h2 style={{ ...styles.heading, ...(isMobile ? styles.headingMobile : {}) }}>{mode === 'login' ? 'Welcome Back' : 'Student Self Registration'}</h2>
+          <h2 style={{ ...styles.heading, ...(isMobile ? styles.headingMobile : {}), ...(mode === 'forgot' ? { marginTop: '26px' } : {}) }}>
+            {mode === 'login' ? 'Welcome Back' : mode === 'forgot' ? 'Reset Your Password' : 'Student Self Registration'}
+          </h2>
           <p style={styles.subheading}>
             {mode === 'login'
               ? `Sign in to access the ${APP_SUBTITLE} portal.`
+              : mode === 'forgot'
+              ? (forgotStep === 'request'
+                ? "Enter your username or email and we'll send a verification code to your registered email."
+                : 'Enter the code we emailed you and choose a new password.')
               : 'Students can submit their own registration. Admin approval is required before sign in.'}
           </p>
 
@@ -193,7 +287,63 @@ export default function Login() {
               <button type="submit" style={{ ...styles.primaryBtn, opacity: loading ? 0.7 : 1 }} disabled={loading}>
                 {loading ? 'Signing in...' : 'Sign In'}
               </button>
+              <button type="button" style={styles.forgotLink} onClick={openForgotPassword}>Forgot password?</button>
             </form>
+          ) : mode === 'forgot' ? (
+            forgotStep === 'request' ? (
+              <form onSubmit={handleForgotRequest}>
+                <Field
+                  label="Username or Email"
+                  value={forgotLoginId}
+                  onChange={setForgotLoginId}
+                  autoComplete="username"
+                  autoFocus
+                  placeholder="Enter your username or email"
+                />
+                <button type="submit" style={{ ...styles.primaryBtn, opacity: loading ? 0.7 : 1 }} disabled={loading}>
+                  {loading ? 'Sending...' : 'Send Verification Code'}
+                </button>
+                <button type="button" style={styles.forgotLink} onClick={() => switchMode('login')}>Back to Sign In</button>
+              </form>
+            ) : (
+              <form onSubmit={handleForgotReset}>
+                <Field
+                  label="Verification Code"
+                  value={forgotCode}
+                  onChange={setForgotCode}
+                  autoFocus
+                  placeholder="6-digit code from your email"
+                />
+                <PasswordField
+                  label="New Password"
+                  value={forgotNewPassword}
+                  onChange={setForgotNewPassword}
+                  autoComplete="new-password"
+                  placeholder="At least 6 characters"
+                />
+                <PasswordField
+                  label="Confirm New Password"
+                  value={forgotConfirmPassword}
+                  onChange={setForgotConfirmPassword}
+                  autoComplete="new-password"
+                  placeholder="Repeat new password"
+                />
+                <button type="submit" style={{ ...styles.primaryBtn, opacity: loading ? 0.7 : 1 }} disabled={loading}>
+                  {loading ? 'Resetting...' : 'Reset Password'}
+                </button>
+                <div style={styles.forgotRow}>
+                  <button
+                    type="button"
+                    style={{ ...styles.forgotLink, opacity: forgotCooldown > 0 ? 0.5 : 1, cursor: forgotCooldown > 0 ? 'default' : 'pointer' }}
+                    onClick={forgotCooldown > 0 ? undefined : handleForgotRequest}
+                    disabled={forgotCooldown > 0}
+                  >
+                    {forgotCooldown > 0 ? `Resend code in ${forgotCooldown}s` : 'Resend code'}
+                  </button>
+                  <button type="button" style={styles.forgotLink} onClick={() => switchMode('login')}>Back to Sign In</button>
+                </div>
+              </form>
+            )
           ) : (
             <form onSubmit={handleRegister}>
               <div style={{ ...styles.formGrid, ...(isMobile ? styles.formGridSingle : {}) }}>
@@ -347,6 +497,8 @@ const styles = {
   passwordContainer: { position: 'relative', display: 'flex', alignItems: 'center' },
   togglePasswordBtn: { position: 'absolute', right: '10px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', padding: '4px 8px', color: '#1a237e', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px', transition: 'all 0.2s ease' },
   primaryBtn: { width: '100%', padding: '14px', background: 'linear-gradient(135deg, #1a237e, #234d81)', border: 'none', borderRadius: '12px', color: '#fff', fontFamily: "'DM Sans', sans-serif", fontSize: '15px', fontWeight: 800, cursor: 'pointer', marginTop: '8px' },
+  forgotLink: { display: 'block', width: '100%', textAlign: 'center', background: 'none', border: 'none', color: '#1a237e', fontSize: '13px', fontWeight: 700, cursor: 'pointer', marginTop: '14px', padding: '4px', fontFamily: "'DM Sans', sans-serif" },
+  forgotRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' },
   hint: { marginTop: '22px', padding: '14px 16px', background: '#f8fafc', borderRadius: '12px', fontSize: '12px', color: '#64748b', lineHeight: 1.8 },
   sidePanel: { display: 'flex' },
   sidePanelMobile: { width: '100%' },

@@ -40,9 +40,9 @@ export default function AdminAnalytics() {
     name: center.name,
     Users: center.users,
     Orders: center.orders,
-    Inventory: center.inventory,
-    'Damaged Units': center.damagedUnits || 0,
-    'Damaged Components': center.damagedComponents || 0,
+    'Line Items': center.inventory,
+    'Damaged/Consumed Units': center.damagedUnits || 0,
+    'Damaged/Consumed Components': center.damagedComponents || 0,
   }));
 
   return (
@@ -59,15 +59,15 @@ export default function AdminAnalytics() {
           <p className="text-2xl">{analytics.totalOrders}</p>
         </div>
         <div className="bg-yellow-100 p-4 rounded">
-          <h3 className="text-lg font-semibold">Total Inventory</h3>
+          <h3 className="text-lg font-semibold">Total Line Items</h3>
           <p className="text-2xl">{analytics.totalInventory}</p>
         </div>
         <div className="bg-red-100 p-4 rounded">
-          <h3 className="text-lg font-semibold">Damaged Units</h3>
+          <h3 className="text-lg font-semibold">Damaged/Consumed Units</h3>
           <p className="text-2xl">{analytics.totalDamagedUnits || 0}</p>
         </div>
         <div className="bg-orange-100 p-4 rounded">
-          <h3 className="text-lg font-semibold">Damaged Components</h3>
+          <h3 className="text-lg font-semibold">Damaged/Consumed Components</h3>
           <p className="text-2xl">{analytics.totalDamagedComponents || 0}</p>
         </div>
       </div>
@@ -83,9 +83,9 @@ export default function AdminAnalytics() {
             <Legend />
             <Bar dataKey="Users" fill="#8884d8" />
             <Bar dataKey="Orders" fill="#82ca9d" />
-            <Bar dataKey="Inventory" fill="#ffc658" />
-            <Bar dataKey="Damaged Units" fill="#ef4444" />
-            <Bar dataKey="Damaged Components" fill="#f97316" />
+            <Bar dataKey="Line Items" fill="#ffc658" />
+            <Bar dataKey="Damaged/Consumed Units" fill="#ef4444" />
+            <Bar dataKey="Damaged/Consumed Components" fill="#f97316" />
           </BarChart>
         </ResponsiveContainer>
       </div>

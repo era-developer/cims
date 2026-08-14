@@ -1,107 +1,120 @@
 const express = require('express');
-const {
-  addTransferRequest,
-  getTransferRequests,
-  updateTransferRequest,
-  getInventory,
-  updateInventoryItem,
-  logActivity,
-} = require('../utils/excel');
+const { getDb } = require('../utils/db');
 const { authMiddleware, adminOnly } = require('../middleware/auth');
-const { CENTERS, getCenterById } = require('../utils/centers');
+const { CENTERS, getCenterById, requireCenter } = require('../utils/centers');
 const { getAdminRecipient, sendTransferNotification } = require('../utils/email');
+const { logActivity } = require('../utils/logsDb');
+const { swapAsset } = require('../utils/assetSwap');
 
 const router = express.Router();
-
 const ADMIN_RECIPIENTS = [process.env.ADMIN_EMAIL].filter(Boolean);
+
+function loadTransferRow(db, code) {
+  return db.prepare(`
+    SELECT t.*, rc.name AS requestingCenterName, sc.name AS supplyCenterName
+    FROM transfers t
+    JOIN centers rc ON rc.id = t.requesting_center_id
+    LEFT JOIN centers sc ON sc.id = t.supply_center_id
+    WHERE t.transfer_code = ?
+  `).get(code);
+}
+
+function loadTransferItems(db, transferId) {
+  return db.prepare(`
+    SELECT id, catalog_id AS catalogId, name, qty_requested AS qty, unit FROM transfer_items WHERE transfer_id = ?
+  `).all(transferId);
+}
+
+// Only populated once a transfer is approved (that's when specific units
+// get assigned) -- matches orders.js's per-item asset visibility.
+function loadAssetsForTransferItem(db, itemId) {
+  return db.prepare(`
+    SELECT a.id, a.asset_tag AS assetTag, a.serial_number AS serialNumber, a.status
+    FROM transfer_item_assets tia JOIN assets a ON a.id = tia.asset_id
+    WHERE tia.transfer_item_id = ?
+    ORDER BY a.asset_tag
+  `).all(itemId);
+}
+
+function computeAvailableCenters(db, excludeCenterId, items) {
+  const available = [];
+  for (const center of CENTERS) {
+    if (center.id === excludeCenterId) continue;
+    const hasAll = items.every(item => {
+      const catalogRow = db.prepare('SELECT id FROM product_catalog WHERE center_id = ? AND name = ?').get(center.id, item.name);
+      if (!catalogRow) return false;
+      const count = db.prepare("SELECT COUNT(*) c FROM assets WHERE catalog_id = ? AND status = 'available'").get(catalogRow.id).c;
+      return count >= item.qty;
+    });
+    if (hasAll) available.push({ id: center.id, name: center.name });
+  }
+  return available;
+}
+
+function buildTransferResponse(db, row) {
+  const items = loadTransferItems(db, row.id);
+  const response = {
+    id: row.transfer_code,
+    requestingCenterId: row.requesting_center_id,
+    requestingCenterName: row.requestingCenterName,
+    requestedBy: row.requested_by,
+    requestDate: row.request_date,
+    status: row.status,
+    statusUpdatedAt: row.status_updated_at,
+    components: items.map(i => ({ id: String(i.catalogId), name: i.name, qty: i.qty, unit: i.unit, assets: loadAssetsForTransferItem(db, i.id) })),
+    programName: row.program_name || '',
+    responsiblePerson: row.responsible_person || '',
+    responsibleEmail: row.responsible_email || '',
+    purpose: row.purpose || '',
+    desiredReturnDate: row.desired_return_date || '',
+    notes: row.notes || '',
+    supplyCenterId: row.supply_center_id || '',
+    supplyCenterName: row.supplyCenterName || '',
+    approvedAt: row.approved_at || '',
+    supplierRemarks: row.supplier_remarks || '',
+    returnRequestedAt: row.return_requested_at || '',
+    returnedAt: row.returned_at || '',
+    returnNotes: row.return_notes || '',
+  };
+  if (row.status === 'Pending') {
+    response.availableCenters = computeAvailableCenters(db, row.requesting_center_id, items);
+  }
+  return response;
+}
 
 function normalizeComponent(raw) {
   const qty = Number(raw.qty || raw.quantity || 0);
   return {
-    id: String(raw.id || raw.componentId || '').trim(),
+    id: Number(raw.id || raw.componentId || 0),
     name: String(raw.name || '').trim(),
     qty: Number.isFinite(qty) ? qty : 0,
     unit: String(raw.unit || raw.uom || 'pcs').trim(),
-    link: String(raw.link || raw.url || '').trim(),
   };
 }
 
-async function findTransferById(transferId) {
-  const all = await getTransferRequests();
-  return all.find(request => request.id === transferId);
-}
-
-async function adjustStockForApproval(transfer, supplyCenterId) {
-  const receivingCenterId = transfer.requestingCenterId;
-  const components = transfer.components || [];
-  const supplyInventory = await getInventory(supplyCenterId);
-  const receivingInventory = await getInventory(receivingCenterId);
-
-  for (const entry of components) {
-    const supplyItem = supplyInventory.find(item => item.id === entry.id);
-    if (!supplyItem) {
-      throw new Error(`Component ${entry.name || entry.id} not found in supply center`);
-    }
-    if ((supplyItem.stock || 0) < entry.qty) {
-      throw new Error(`Insufficient stock for ${entry.name || entry.id} at ${getCenterById(supplyCenterId).name}`);
-    }
-  }
-
-  for (const entry of components) {
-    const supplyItem = supplyInventory.find(item => item.id === entry.id);
-    await updateInventoryItem(supplyItem.id, { stock: (supplyItem.stock || 0) - entry.qty }, supplyCenterId);
-    const receivingItem = receivingInventory.find(item => item.id === entry.id);
-    if (!receivingItem) {
-      throw new Error(`Component ${entry.name || entry.id} missing in receiving center inventory`);
-    }
-    await updateInventoryItem(receivingItem.id, { stock: (receivingItem.stock || 0) + entry.qty }, receivingCenterId);
-  }
-}
-
-async function adjustStockForReturn(transfer) {
-  const supplyCenterId = transfer.supplyCenterId;
-  const receivingCenterId = transfer.requestingCenterId;
-  if (!supplyCenterId) {
-    throw new Error('Supply center is not recorded for this transfer');
-  }
-  const components = transfer.components || [];
-  const supplyInventory = await getInventory(supplyCenterId);
-  const receivingInventory = await getInventory(receivingCenterId);
-
-  for (const entry of components) {
-    const receivingItem = receivingInventory.find(item => item.id === entry.id);
-    if (!receivingItem) {
-      throw new Error(`Component ${entry.name || entry.id} missing in receiving center inventory`);
-    }
-    await updateInventoryItem(receivingItem.id, {
-      stock: Math.max(0, (receivingItem.stock || 0) - entry.qty),
-    }, receivingCenterId);
-
-    const supplyItem = supplyInventory.find(item => item.id === entry.id);
-    if (!supplyItem) {
-      throw new Error(`Component ${entry.name || entry.id} missing in supply center inventory`);
-    }
-    await updateInventoryItem(supplyItem.id, {
-      stock: (supplyItem.stock || 0) + entry.qty,
-    }, supplyCenterId);
-  }
-}
-
-router.get('/', authMiddleware, adminOnly, async (req, res) => {
+router.get('/', authMiddleware, adminOnly, (req, res) => {
   try {
+    const db = getDb();
     const isSuper = req.user.role === 'super_admin';
-    let requests = [];
+    const scopedCenterId = isSuper ? String(req.query.centerId || '').trim() : req.user.centerId;
 
-    if (isSuper) {
-      const centerId = String(req.query.centerId || '').trim() || undefined;
-      requests = await getTransferRequests(centerId, { includeAvailability: true });
-    } else {
-      const centerId = req.user.centerId;
-      const allRequests = await getTransferRequests(undefined);
-      requests = allRequests.filter(request =>
-        request.requestingCenterId === centerId || request.supplyCenterId === centerId);
-    }
+    const rows = scopedCenterId
+      ? db.prepare(`
+          SELECT t.*, rc.name AS requestingCenterName, sc.name AS supplyCenterName
+          FROM transfers t
+          JOIN centers rc ON rc.id = t.requesting_center_id
+          LEFT JOIN centers sc ON sc.id = t.supply_center_id
+          WHERE t.requesting_center_id = ? OR t.supply_center_id = ?
+        `).all(scopedCenterId, scopedCenterId)
+      : db.prepare(`
+          SELECT t.*, rc.name AS requestingCenterName, sc.name AS supplyCenterName
+          FROM transfers t
+          JOIN centers rc ON rc.id = t.requesting_center_id
+          LEFT JOIN centers sc ON sc.id = t.supply_center_id
+        `).all();
 
+    const requests = rows.map(row => buildTransferResponse(db, row))
+      .sort((a, b) => new Date(b.requestDate || 0) - new Date(a.requestDate || 0));
     res.json(requests);
   } catch (err) {
     console.error('Transfer GET error:', err.message);
@@ -110,39 +123,46 @@ router.get('/', authMiddleware, adminOnly, async (req, res) => {
 });
 
 router.post('/', authMiddleware, adminOnly, async (req, res) => {
+  const db = getDb();
   try {
     const centerId = req.user.centerId;
-    if (!centerId) {
-      return res.status(400).json({ message: 'Center context is missing' });
-    }
+    if (!centerId) return res.status(400).json({ message: 'Center context is missing' });
+
     const rawComponents = Array.isArray(req.body.components) ? req.body.components : [];
-    const components = rawComponents
-      .map(normalizeComponent)
-      .filter(item => item.id && item.name && item.qty > 0);
-    if (!components.length) {
-      return res.status(400).json({ message: 'At least one valid component is required' });
+    const components = rawComponents.map(normalizeComponent).filter(item => item.id && item.name && item.qty > 0);
+    if (!components.length) return res.status(400).json({ message: 'At least one valid component is required' });
+
+    const transferCode = `TRF-${Date.now().toString(36).toUpperCase()}`;
+    const now = new Date().toISOString();
+
+    db.exec('BEGIN TRANSACTION');
+    let transferDbId;
+    try {
+      transferDbId = db.prepare(`
+        INSERT INTO transfers
+          (transfer_code, requesting_center_id, requested_by, status, program_name, responsible_person,
+           responsible_email, purpose, desired_return_date, notes, request_date)
+        VALUES (?, ?, ?, 'Pending', ?, ?, ?, ?, ?, ?, ?)
+      `).run(transferCode, centerId, req.user.username, String(req.body.programName || '').trim() || null,
+             String(req.body.responsiblePerson || '').trim() || null, String(req.body.responsibleEmail || '').trim() || null,
+             String(req.body.purpose || '').trim() || null, String(req.body.desiredReturnDate || '').trim() || null,
+             String(req.body.notes || '').trim() || null, now).lastInsertRowid;
+
+      for (const item of components) {
+        db.prepare('INSERT INTO transfer_items (transfer_id, catalog_id, name, qty_requested, unit) VALUES (?, ?, ?, ?, ?)')
+          .run(transferDbId, item.id, item.name, item.qty, item.unit);
+      }
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
     }
-    const payload = {
-      components,
-      programName: String(req.body.programName || '').trim(),
-      responsiblePerson: String(req.body.responsiblePerson || '').trim(),
-      responsibleEmail: String(req.body.responsibleEmail || '').trim(),
-      purpose: String(req.body.purpose || '').trim(),
-      desiredReturnDate: String(req.body.desiredReturnDate || '').trim(),
-      notes: String(req.body.notes || '').trim(),
-      requestedBy: req.user.username,
-    };
-    const transfer = await addTransferRequest(centerId, payload);
-    await logActivity('TRANSFER_REQUEST', req.user.username, {
-      role: req.user.role,
-      centerId,
-      info: `Requested ${components.length} components (Transfer ${transfer.id})`,
-    });
-    await sendTransferNotification({
-      transfer,
-      type: 'request',
-      recipients: ADMIN_RECIPIENTS,
-    });
+
+    const row = loadTransferRow(db, transferCode);
+    const transfer = buildTransferResponse(db, row);
+
+    await logActivity('TRANSFER_REQUEST', req.user.username, { role: req.user.role, centerId, info: `Requested ${components.length} components (Transfer ${transfer.id})` });
+    await sendTransferNotification({ transfer, type: 'request', recipients: ADMIN_RECIPIENTS });
     res.status(201).json(transfer);
   } catch (err) {
     console.error('Transfer POST error:', err.message);
@@ -151,42 +171,31 @@ router.post('/', authMiddleware, adminOnly, async (req, res) => {
 });
 
 router.post('/:id/return-request', authMiddleware, adminOnly, async (req, res) => {
+  const db = getDb();
   try {
-    const transferId = req.params.id;
-    const request = await findTransferById(transferId);
-    if (!request) {
-      return res.status(404).json({ message: 'Transfer not found' });
-    }
-    if (req.user.role !== 'super_admin' && req.user.centerId !== request.requestingCenterId) {
+    const row = loadTransferRow(db, req.params.id);
+    if (!row) return res.status(404).json({ message: 'Transfer not found' });
+    if (req.user.role !== 'super_admin' && req.user.centerId !== row.requesting_center_id) {
       return res.status(403).json({ message: 'Only the requesting center can ask for a return' });
     }
-    if (request.status !== 'Approved') {
+    if (row.status !== 'Approved') {
       return res.status(400).json({ message: 'Only approved transfers can be returned' });
     }
-    const now = new Date();
-    const reason = String(req.body.reason || '').trim();
-    const payload = {
-      status: 'Return Requested',
-      statusUpdatedAt: now,
-      returnRequestedAt: now,
-      returnNotes: reason || request.returnNotes || '',
-    };
-    if (String(req.body.courierName || '').trim()) {
-      payload.returnNotes += `\nCourier: ${req.body.courierName.trim()}`;
-    }
-    if (String(req.body.trackingId || '').trim()) {
-      payload.returnNotes += `\nTracking ID: ${req.body.trackingId.trim()}`;
-    }
-    const updated = await updateTransferRequest(transferId, payload);
-    await logActivity('TRANSFER_RETURN_REQUESTED', req.user.username, {
-      role: req.user.role,
-      centerId: request.requestingCenterId,
-      info: `Return requested for ${transferId}`,
-    });
-    const recipients = [
-      getAdminRecipient(request.supplyCenterId),
-      ...ADMIN_RECIPIENTS,
-    ].filter(Boolean);
+
+    const now = new Date().toISOString();
+    const reason = String(req.body.reason || req.body.notes || '').trim();
+    let returnNotes = reason || row.return_notes || '';
+    if (String(req.body.courierName || '').trim()) returnNotes += `\nCourier: ${req.body.courierName.trim()}`;
+    if (String(req.body.trackingId || '').trim()) returnNotes += `\nTracking ID: ${req.body.trackingId.trim()}`;
+
+    db.prepare(`
+      UPDATE transfers SET status = 'Return Requested', status_updated_at = ?, return_requested_at = ?, return_notes = ?
+      WHERE id = ?
+    `).run(now, now, returnNotes, row.id);
+
+    const updated = buildTransferResponse(db, loadTransferRow(db, req.params.id));
+    await logActivity('TRANSFER_RETURN_REQUESTED', req.user.username, { role: req.user.role, centerId: row.requesting_center_id, info: `Return requested for ${req.params.id}` });
+    const recipients = [getAdminRecipient(row.supply_center_id), ...ADMIN_RECIPIENTS].filter(Boolean);
     await sendTransferNotification({ transfer: updated, type: 'return-request', recipients });
     res.json(updated);
   } catch (err) {
@@ -199,81 +208,132 @@ router.put('/:id', authMiddleware, adminOnly, async (req, res) => {
   if (req.user.role !== 'super_admin') {
     return res.status(403).json({ message: 'Super admin access required' });
   }
+  const db = getDb();
   try {
-    const transferId = req.params.id;
-    const request = await findTransferById(transferId);
-    if (!request) {
-      return res.status(404).json({ message: 'Transfer not found' });
-    }
+    const row = loadTransferRow(db, req.params.id);
+    if (!row) return res.status(404).json({ message: 'Transfer not found' });
     const status = String(req.body.status || '').trim();
-    const now = new Date();
+    const now = new Date().toISOString();
+
     if (status === 'Approved') {
-      if (request.status !== 'Pending') {
-        return res.status(400).json({ message: 'Only pending transfers can be approved' });
-      }
+      if (row.status !== 'Pending') return res.status(400).json({ message: 'Only pending transfers can be approved' });
       const supplyCenterId = String(req.body.supplyCenterId || '').trim();
-      if (!supplyCenterId) {
-        return res.status(400).json({ message: 'Supply center selection is required' });
-      }
+      if (!supplyCenterId) return res.status(400).json({ message: 'Supply center selection is required' });
+      const supplyCenter = requireCenter(supplyCenterId);
+
       const approvedComponents = Array.isArray(req.body.components)
-        ? req.body.components.map(normalizeComponent).filter(item => item.id && item.name && item.qty > 0)
-        : (request.components || []);
-      if (!approvedComponents.length) {
-        return res.status(400).json({ message: 'At least one valid component is required for approval' });
+        ? req.body.components.map(normalizeComponent).filter(item => item.id && item.qty > 0)
+        : loadTransferItems(db, row.id);
+      if (!approvedComponents.length) return res.status(400).json({ message: 'At least one valid component is required for approval' });
+
+      db.exec('BEGIN TRANSACTION');
+      try {
+        // Check availability for everything before moving anything.
+        const plan = approvedComponents.map(comp => {
+          const reqCatalog = db.prepare('SELECT id, name FROM product_catalog WHERE id = ?').get(comp.id);
+          if (!reqCatalog) throw Object.assign(new Error(`Component ${comp.name || comp.id} not found`), { code: 'VALIDATION' });
+          const supplyCatalog = db.prepare('SELECT id FROM product_catalog WHERE center_id = ? AND name = ?').get(supplyCenterId, reqCatalog.name);
+          if (!supplyCatalog) throw Object.assign(new Error(`${reqCatalog.name} is not in ${supplyCenter.name}'s catalog`), { code: 'VALIDATION' });
+          const availableAssets = db.prepare("SELECT id FROM assets WHERE catalog_id = ? AND status = 'available' LIMIT ?").all(supplyCatalog.id, comp.qty);
+          if (availableAssets.length < comp.qty) {
+            throw Object.assign(new Error(`Insufficient stock for ${reqCatalog.name} at ${supplyCenter.name} (Available: ${availableAssets.length})`), { code: 'VALIDATION' });
+          }
+          return { reqCatalogId: comp.id, name: reqCatalog.name, qty: comp.qty, unit: comp.unit, assetIds: availableAssets.map(a => a.id) };
+        });
+
+        db.prepare('DELETE FROM transfer_item_assets WHERE transfer_item_id IN (SELECT id FROM transfer_items WHERE transfer_id = ?)').run(row.id);
+        db.prepare('DELETE FROM transfer_items WHERE transfer_id = ?').run(row.id);
+
+        for (const item of plan) {
+          const itemId = db.prepare('INSERT INTO transfer_items (transfer_id, catalog_id, name, qty_requested, unit) VALUES (?, ?, ?, ?, ?)')
+            .run(row.id, item.reqCatalogId, item.name, item.qty, item.unit).lastInsertRowid;
+
+          for (const assetId of item.assetIds) {
+            db.prepare(`
+              INSERT INTO asset_lifecycle_events (asset_id, event_type, from_status, to_status, center_id, transfer_id, notes, performed_by, occurred_at)
+              VALUES (?, 'transferred_out', 'available', 'available', ?, ?, ?, ?, ?)
+            `).run(assetId, supplyCenterId, row.id, `Transferred to ${row.requestingCenterName} (${row.transfer_code})`, req.user.username, now);
+            db.prepare('UPDATE assets SET center_id = ?, catalog_id = ? WHERE id = ?').run(row.requesting_center_id, item.reqCatalogId, assetId);
+            db.prepare(`
+              INSERT INTO asset_lifecycle_events (asset_id, event_type, from_status, to_status, center_id, transfer_id, notes, performed_by, occurred_at)
+              VALUES (?, 'transferred_in', 'available', 'available', ?, ?, ?, ?, ?)
+            `).run(assetId, row.requesting_center_id, row.id, `Received via transfer ${row.transfer_code} from ${supplyCenter.name}`, req.user.username, now);
+            db.prepare('INSERT INTO transfer_item_assets (transfer_item_id, asset_id) VALUES (?, ?)').run(itemId, assetId);
+          }
+        }
+
+        db.prepare(`
+          UPDATE transfers SET status = 'Approved', supply_center_id = ?, supplier_remarks = ?, approved_at = ?, status_updated_at = ?
+          WHERE id = ?
+        `).run(supplyCenterId, String(req.body.supplierRemarks || '').trim() || null, now, now, row.id);
+
+        db.exec('COMMIT');
+      } catch (err) {
+        db.exec('ROLLBACK');
+        if (err.code === 'VALIDATION') return res.status(400).json({ message: err.message });
+        throw err;
       }
-      await adjustStockForApproval({ ...request, components: approvedComponents }, supplyCenterId);
-      const updated = await updateTransferRequest(transferId, {
-        status: 'Approved',
-        statusUpdatedAt: now,
-        components: approvedComponents,
-        supplyCenterId,
-        supplyCenterName: getCenterById(supplyCenterId)?.name || '',
-        approvedAt: now,
-        supplierRemarks: String(req.body.supplierRemarks || '').trim(),
-      });
-      await logActivity('TRANSFER_APPROVED', req.user.username, {
-        role: req.user.role,
-        centerId: request.requestingCenterId,
-        info: `Transfer ${transferId} approved (supplied by ${supplyCenterId})`,
-      });
-      await logActivity('TRANSFER_SUPPLY', req.user.username, {
-        role: req.user.role,
-        centerId: supplyCenterId,
-        info: `Supplied transfer ${transferId}`,
-      });
-      const recipients = [
-        getAdminRecipient(supplyCenterId),
-        getAdminRecipient(request.requestingCenterId),
-      ].filter(Boolean);
+
+      const updated = buildTransferResponse(db, loadTransferRow(db, req.params.id));
+      await Promise.all([
+        logActivity('TRANSFER_APPROVED', req.user.username, { role: req.user.role, centerId: row.requesting_center_id, info: `Transfer ${req.params.id} approved (supplied by ${supplyCenterId})` }),
+        logActivity('TRANSFER_SUPPLY', req.user.username, { role: req.user.role, centerId: supplyCenterId, info: `Supplied transfer ${req.params.id}` }),
+      ]);
+      const recipients = [getAdminRecipient(supplyCenterId), getAdminRecipient(row.requesting_center_id)].filter(Boolean);
       await sendTransferNotification({ transfer: updated, type: 'approved', recipients });
       return res.json(updated);
     }
 
     if (status === 'Returned') {
-      if (!['Approved', 'Return Requested'].includes(request.status)) {
+      if (!['Approved', 'Return Requested'].includes(row.status)) {
         return res.status(400).json({ message: 'Only approved/return-requested transfers can be marked returned' });
       }
-      await adjustStockForReturn(request);
-      const updated = await updateTransferRequest(transferId, {
-        status: 'Returned',
-        statusUpdatedAt: now,
-        returnedAt: now,
-        returnNotes: String(req.body.returnNotes || request.returnNotes || '').trim(),
-      });
-      await logActivity('TRANSFER_RETURNED', req.user.username, {
-        role: req.user.role,
-        centerId: request.requestingCenterId,
-        info: `Transfer ${transferId} returned to ${request.supplyCenterId}`,
-      });
-      await logActivity('TRANSFER_RECEIVED_BACK', req.user.username, {
-        role: req.user.role,
-        centerId: request.supplyCenterId,
-        info: `Transfer ${transferId} components returned`,
-      });
-      const recipients = [
-        getAdminRecipient(request.supplyCenterId),
-        getAdminRecipient(request.requestingCenterId),
-      ].filter(Boolean);
+      if (!row.supply_center_id) return res.status(400).json({ message: 'Supply center is not recorded for this transfer' });
+      const supplyCenter = getCenterById(row.supply_center_id);
+
+      db.exec('BEGIN TRANSACTION');
+      try {
+        const items = loadTransferItems(db, row.id);
+        for (const item of items) {
+          const supplyCatalog = db.prepare('SELECT id FROM product_catalog WHERE center_id = ? AND name = ?').get(row.supply_center_id, item.name);
+          if (!supplyCatalog) throw Object.assign(new Error(`${item.name} is missing from ${supplyCenter?.name || 'the supply center'}'s catalog`), { code: 'VALIDATION' });
+
+          const links = db.prepare('SELECT asset_id FROM transfer_item_assets WHERE transfer_item_id = ?').all(item.id);
+          for (const link of links) {
+            const asset = db.prepare('SELECT status FROM assets WHERE id = ?').get(link.asset_id);
+            if (!asset || asset.status !== 'available') {
+              throw Object.assign(new Error(`${item.name}: one unit is currently ${asset ? asset.status : 'missing'} and can't be returned yet`), { code: 'VALIDATION' });
+            }
+            db.prepare(`
+              INSERT INTO asset_lifecycle_events (asset_id, event_type, from_status, to_status, center_id, transfer_id, notes, performed_by, occurred_at)
+              VALUES (?, 'transferred_out', 'available', 'available', ?, ?, ?, ?, ?)
+            `).run(link.asset_id, row.requesting_center_id, row.id, `Returned to ${supplyCenter?.name || row.supply_center_id} (${row.transfer_code})`, req.user.username, now);
+            db.prepare('UPDATE assets SET center_id = ?, catalog_id = ? WHERE id = ?').run(row.supply_center_id, supplyCatalog.id, link.asset_id);
+            db.prepare(`
+              INSERT INTO asset_lifecycle_events (asset_id, event_type, from_status, to_status, center_id, transfer_id, notes, performed_by, occurred_at)
+              VALUES (?, 'transferred_in', 'available', 'available', ?, ?, ?, ?, ?)
+            `).run(link.asset_id, row.supply_center_id, row.id, `Returned via transfer ${row.transfer_code} from ${row.requestingCenterName}`, req.user.username, now);
+          }
+        }
+
+        db.prepare(`
+          UPDATE transfers SET status = 'Returned', returned_at = ?, status_updated_at = ?, return_notes = ?
+          WHERE id = ?
+        `).run(now, now, String(req.body.returnNotes || row.return_notes || '').trim() || null, row.id);
+
+        db.exec('COMMIT');
+      } catch (err) {
+        db.exec('ROLLBACK');
+        if (err.code === 'VALIDATION') return res.status(400).json({ message: err.message });
+        throw err;
+      }
+
+      const updated = buildTransferResponse(db, loadTransferRow(db, req.params.id));
+      await Promise.all([
+        logActivity('TRANSFER_RETURNED', req.user.username, { role: req.user.role, centerId: row.requesting_center_id, info: `Transfer ${req.params.id} returned to ${row.supply_center_id}` }),
+        logActivity('TRANSFER_RECEIVED_BACK', req.user.username, { role: req.user.role, centerId: row.supply_center_id, info: `Transfer ${req.params.id} components returned` }),
+      ]);
+      const recipients = [getAdminRecipient(row.supply_center_id), getAdminRecipient(row.requesting_center_id)].filter(Boolean);
       await sendTransferNotification({ transfer: updated, type: 'returned', recipients });
       return res.json(updated);
     }
@@ -285,4 +345,68 @@ router.put('/:id', authMiddleware, adminOnly, async (req, res) => {
   }
 });
 
+// If the system-assigned unit for a component can't be physically found,
+// swap in a different available unit of the same component. :catalogId
+// matches the "id" already exposed per component in the transfer response
+// (the real transfer_items.id is internal and never sent to the frontend).
+router.put('/:id/items/:catalogId/swap-asset', authMiddleware, adminOnly, (req, res) => {
+  const db = getDb();
+  const { oldAssetId, newAssetId, reason } = req.body || {};
+  if (!oldAssetId || !newAssetId) return res.status(400).json({ message: 'oldAssetId and newAssetId are required' });
+
+  const row = loadTransferRow(db, req.params.id);
+  if (!row) return res.status(404).json({ message: 'Transfer not found' });
+  if (req.user.role !== 'super_admin' && req.user.centerId !== row.requesting_center_id) {
+    return res.status(403).json({ message: 'You cannot access a transfer from another center' });
+  }
+
+  const item = db.prepare('SELECT id FROM transfer_items WHERE transfer_id = ? AND catalog_id = ?').get(row.id, req.params.catalogId);
+  if (!item) return res.status(404).json({ message: 'Component not found on this transfer' });
+
+  const link = db.prepare('SELECT id FROM transfer_item_assets WHERE transfer_item_id = ? AND asset_id = ?').get(item.id, oldAssetId);
+  if (!link) return res.status(400).json({ message: 'That unit is not assigned to this component' });
+
+  db.exec('BEGIN TRANSACTION');
+  try {
+    // Transferred units stay 'available' the whole time (never reserved/
+    // issued by the transfer itself), so the old unit must be 'available'
+    // here rather than the reserved/issued default the other two flows use.
+    swapAsset(db, { oldAssetId, newAssetId, centerId: row.requesting_center_id, performedBy: req.user.username, reason }, ['available']);
+    db.prepare('UPDATE transfer_item_assets SET asset_id = ? WHERE id = ?').run(newAssetId, link.id);
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    return res.status(400).json({ message: err.message });
+  }
+
+  res.json({ message: 'Unit swapped', transferId: row.transfer_code });
+});
+
+// Reused by admin.js (Excel export of all transfers) and programs.js
+// (per-program report: which transfers a program's center itself requested).
+function getAllTransfers() {
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT t.*, rc.name AS requestingCenterName, sc.name AS supplyCenterName
+    FROM transfers t
+    JOIN centers rc ON rc.id = t.requesting_center_id
+    LEFT JOIN centers sc ON sc.id = t.supply_center_id
+  `).all();
+  return rows.map(row => buildTransferResponse(db, row));
+}
+
+function getTransfersForCenter(centerId) {
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT t.*, rc.name AS requestingCenterName, sc.name AS supplyCenterName
+    FROM transfers t
+    JOIN centers rc ON rc.id = t.requesting_center_id
+    LEFT JOIN centers sc ON sc.id = t.supply_center_id
+    WHERE t.requesting_center_id = ?
+  `).all(centerId);
+  return rows.map(row => buildTransferResponse(db, row));
+}
+
 module.exports = router;
+module.exports.getAllTransfers = getAllTransfers;
+module.exports.getTransfersForCenter = getTransfersForCenter;

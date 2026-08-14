@@ -14,8 +14,11 @@ import AdminInventory from './pages/AdminInventory';
 import AdminOrders from './pages/AdminOrders';
 import AdminUsers from './pages/AdminUsers';
 import AdminAnalytics from './pages/AdminAnalytics';
+import AdminInvoiceEntry from './pages/AdminInvoiceEntry';
 import AdminTransfers from './pages/AdminTransfers';
+import AdminProcurement from './pages/AdminProcurement';
 import MyCenter from './pages/MyCenter';
+import ProgramDetail from './pages/ProgramDetail';
 import RegisterLanding from './pages/RegisterLanding';
 
 function PrivateRoute({ children, role }) {
@@ -82,6 +85,11 @@ export default function App() {
                 <AppLayout><AdminInventory /></AppLayout>
               </PrivateRoute>
             } />
+            <Route path="/admin/invoices" element={
+              <PrivateRoute role={['admin', 'super_admin']}>
+                <AppLayout><AdminInvoiceEntry /></AppLayout>
+              </PrivateRoute>
+            } />
             <Route path="/admin/orders" element={
               <PrivateRoute role={['admin', 'super_admin']}>
                 <AppLayout><AdminOrders /></AppLayout>
@@ -90,6 +98,11 @@ export default function App() {
             <Route path="/admin/transfers" element={
               <PrivateRoute role="super_admin">
                 <AppLayout><AdminTransfers /></AppLayout>
+              </PrivateRoute>
+            } />
+            <Route path="/admin/procurement" element={
+              <PrivateRoute role="super_admin">
+                <AppLayout><AdminProcurement /></AppLayout>
               </PrivateRoute>
             } />
             <Route path="/admin/users" element={
@@ -105,6 +118,11 @@ export default function App() {
             <Route path="/admin/my-center" element={
               <PrivateRoute role={['admin', 'super_admin']}>
                 <AppLayout><MyCenter /></AppLayout>
+              </PrivateRoute>
+            } />
+            <Route path="/admin/programs/:id" element={
+              <PrivateRoute role={['admin', 'super_admin']}>
+                <AppLayout><ProgramDetail /></AppLayout>
               </PrivateRoute>
             } />
             <Route path="/register/:centerId" element={<RegisterLanding />} />

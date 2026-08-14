@@ -1,9 +1,13 @@
 const express = require('express');
-const { getInventory, addInventoryItem, updateInventoryItem, deleteInventoryItem, logActivity } = require('../utils/excel');
-const { authMiddleware, adminOnly } = require('../middleware/auth');
+const { getDb } = require('../utils/db');
+const { authMiddleware } = require('../middleware/auth');
 const { CENTERS } = require('../utils/centers');
 
 const router = express.Router();
+// Only Electronic components can actually be requested/checked out by
+// students; every other classification shows up for browsing/information
+// only (view details, no Add to Cart) -- keep in sync with orders.js.
+const CHECKOUT_ELIGIBLE_CLASSIFICATION = 'Electronic components';
 const ALLOWED_IMAGE_HOSTS = new Set([
   'drive.google.com',
   'drive.usercontent.google.com',
@@ -16,6 +20,19 @@ function isAllowedImageUrl(rawUrl) {
     return parsed.protocol === 'https:' && ALLOWED_IMAGE_HOSTS.has(parsed.hostname);
   } catch {
     return false;
+  }
+}
+
+// Stored as a JSON array of {title, url} -- curated by hand, not user input,
+// but parsed defensively since a malformed/missing value shouldn't break
+// the whole component listing.
+function parseReferenceVideos(raw) {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
   }
 }
 
@@ -52,74 +69,59 @@ function getRequestedCenterId(req) {
   return req.user.centerId;
 }
 
-// GET all components (all authenticated users)
+// Student/admin browse view -- one row per component type, live available
+// count from real physical assets (not a spreadsheet stock number).
 router.get('/', authMiddleware, async (req, res) => {
   try {
     let centerId = getRequestedCenterId(req);
-    
-    // Default to user's center if not specified, or first center for super_admin if no center selected
     if (!centerId) {
-      if (req.user.role === 'super_admin') {
-        // For super_admin, use first center if none specified
-        centerId = CENTERS.length > 0 ? CENTERS[0].id : '';
-      } else {
-        // For other admins, use their own center
-        centerId = req.user.centerId || '';
-      }
+      centerId = req.user.role === 'super_admin' ? (CENTERS[0]?.id || '') : (req.user.centerId || '');
     }
-    
     if (!centerId) return res.json([]);
-    
-    let items = [];
-    try {
-      items = (await getInventory(centerId)) || [];
-    } catch (err) {
-      console.error(`Inventory read error for ${centerId}:`, err.message);
-    }
-    
-    const active = req.user.role === 'student' ? items.filter(i => i?.active) : items;
-    res.json(active);
+
+    const db = getDb();
+    // Stock is pre-aggregated per catalog_id in a subquery (using the
+    // existing idx_assets_catalog index) before joining to product_catalog,
+    // rather than joining assets straight on and aggregating after -- the
+    // latter fans out to one row per physical unit first (tens of thousands
+    // per center) and only collapses back down at the end, which is the
+    // same query-shape bug found and fixed in the admin catalog-summary
+    // endpoint (see routes/assets.js's comment there for the full story).
+    const rows = db.prepare(`
+      SELECT pc.id AS id, pc.name AS name, c.name AS category, pc.description AS description,
+             pc.image AS image, pc.unit AS unit, pc.reference_videos AS referenceVideos,
+             COALESCE(ag.stock, 0) AS stock
+      FROM product_catalog pc
+      LEFT JOIN classifications c ON c.id = pc.classification_id
+      LEFT JOIN (
+        SELECT a.catalog_id, SUM(CASE WHEN a.status = 'available' THEN 1 ELSE 0 END) AS stock
+        FROM assets a
+        JOIN product_catalog pc2 ON pc2.id = a.catalog_id
+        WHERE pc2.center_id = ?
+        GROUP BY a.catalog_id
+      ) ag ON ag.catalog_id = pc.id
+      WHERE pc.center_id = ?
+      ORDER BY pc.name
+    `).all(centerId, centerId);
+
+    const shaped = rows.map(row => ({
+      id: String(row.id),
+      name: row.name,
+      category: row.category || 'General',
+      description: row.description || '',
+      image: row.image || '',
+      unit: row.unit || 'pcs',
+      stock: row.stock || 0,
+      location: null,
+      active: true,
+      checkoutEligible: row.category === CHECKOUT_ELIGIBLE_CLASSIFICATION,
+      referenceVideos: parseReferenceVideos(row.referenceVideos),
+    }));
+
+    res.json(shaped);
   } catch (err) {
-    console.error('Error fetching inventory:', err);
+    console.error('Error fetching components:', err);
     res.status(500).json({ message: 'Error fetching inventory' });
-  }
-});
-
-// POST add component (admin only)
-router.post('/', authMiddleware, adminOnly, async (req, res) => {
-  try {
-    const centerId = getRequestedCenterId(req);
-    const item = await addInventoryItem(req.body, centerId);
-    await logActivity('ADD_COMPONENT', req.user.username, { role: req.user.role, centerId, info: `Added: ${item.name}` });
-    res.status(201).json(item);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// PUT update component (admin only)
-router.put('/:id', authMiddleware, adminOnly, async (req, res) => {
-  try {
-    const centerId = getRequestedCenterId(req);
-    const ok = await updateInventoryItem(req.params.id, req.body, centerId);
-    if (!ok) return res.status(404).json({ message: 'Component not found' });
-    await logActivity('UPDATE_COMPONENT', req.user.username, { role: req.user.role, centerId, info: `Updated ID: ${req.params.id}` });
-    res.json({ message: 'Updated successfully' });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// DELETE component (admin only)
-router.delete('/:id', authMiddleware, adminOnly, async (req, res) => {
-  try {
-    const centerId = getRequestedCenterId(req);
-    const ok = await deleteInventoryItem(req.params.id, centerId);
-    if (!ok) return res.status(404).json({ message: 'Component not found' });
-    await logActivity('DELETE_COMPONENT', req.user.username, { role: req.user.role, centerId, info: `Deleted ID: ${req.params.id}` });
-    res.json({ message: 'Deleted successfully' });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
   }
 });
 

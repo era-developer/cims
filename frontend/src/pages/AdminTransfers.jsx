@@ -3,6 +3,7 @@ import axios from 'axios';
 import useViewport from '../hooks/useViewport';
 import { useAuth } from '../context/AuthContext';
 import { CENTERS } from '../centers';
+import AssetSwapPicker from '../components/AssetSwapPicker';
 
 const STATUS_STYLES = {
   Pending: { background: '#fff4e6', color: '#d97706' },
@@ -284,21 +285,39 @@ export default function AdminTransfers() {
                   {(request.components || []).map(component => {
                     const qtyValue = getComponentQty(request.id, component);
                     return (
-                      <div key={`${request.id}-${component.id}-${component.name}`} style={styles.componentRow}>
-                        <span>{component.name || component.id}</span>
-                        {canApprove ? (
-                          <label style={styles.editInputWrapper}>
-                            <input
-                              type="number"
-                              min="0"
-                              value={qtyValue}
-                              onChange={event => handleComponentQtyChange(request.id, component.id, event.target.value)}
-                              style={styles.qtyInput}
-                            />
-                            <span style={styles.qtyUnit}>{component.unit || 'pcs'}</span>
-                          </label>
-                        ) : (
-                          <span style={styles.qtyBadge}>{Number(component.qty) || 0} {component.unit || 'pcs'}</span>
+                      <div key={`${request.id}-${component.id}-${component.name}`} style={styles.componentBlock}>
+                        <div style={styles.componentRow}>
+                          <span>{component.name || component.id}</span>
+                          {canApprove ? (
+                            <label style={styles.editInputWrapper}>
+                              <input
+                                type="number"
+                                min="0"
+                                value={qtyValue}
+                                onChange={event => handleComponentQtyChange(request.id, component.id, event.target.value)}
+                                style={styles.qtyInput}
+                              />
+                              <span style={styles.qtyUnit}>{component.unit || 'pcs'}</span>
+                            </label>
+                          ) : (
+                            <span style={styles.qtyBadge}>{Number(component.qty) || 0} {component.unit || 'pcs'}</span>
+                          )}
+                        </div>
+                        {Array.isArray(component.assets) && component.assets.length > 0 && (
+                          <div style={styles.assetTagRow}>
+                            Assigned:{' '}
+                            {component.assets.map(a => (
+                              <span key={a.id} style={{ display: 'inline-flex', alignItems: 'center', marginRight: '10px' }}>
+                                {a.assetTag}{a.serialNumber ? ` (SN: ${a.serialNumber})` : ''}
+                                <AssetSwapPicker
+                                  asset={a}
+                                  catalogId={component.id}
+                                  swapUrl={`/api/transfers/${request.id}/items/${component.id}/swap-asset`}
+                                  onSwapped={() => fetchRequests(getCurrentParams())}
+                                />
+                              </span>
+                            ))}
+                          </div>
                         )}
                       </div>
                     );
@@ -457,7 +476,9 @@ const styles = {
   },
   detailText: { margin: '6px 0 0', color: '#1f2933', fontSize: 13 },
   componentList: { marginTop: 16, borderTop: '1px solid #e5e7eb', paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 10 },
+  componentBlock: { display: 'flex', flexDirection: 'column', gap: 4 },
   componentRow: { display: 'flex', justifyContent: 'space-between', fontWeight: 600, color: '#1e1b4b' },
+  assetTagRow: { fontSize: 11, color: '#64748b', fontWeight: 400 },
   qtyBadge: { fontSize: 13, color: '#0f172a' },
   editInputWrapper: { display: 'flex', alignItems: 'center', gap: 6 },
   qtyInput: {

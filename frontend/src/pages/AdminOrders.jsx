@@ -4,6 +4,9 @@ import { useSearchParams } from 'react-router-dom';
 import { CENTERS } from '../centers';
 import { useAuth } from '../context/AuthContext';
 import useViewport from '../hooks/useViewport';
+import AssetSwapPicker from '../components/AssetSwapPicker';
+import AssetConditionFix from '../components/AssetConditionFix';
+import AssetConditionPicker from '../components/AssetConditionPicker';
 
 const STATUS_STYLES = {
   Pending: { bg: '#fff9c4', color: '#f57f17', label: 'Pending' },
@@ -30,6 +33,7 @@ export default function AdminOrders() {
   const [editorMode, setEditorMode] = useState('');
   const [remarks, setRemarks] = useState('');
   const [returnDraft, setReturnDraft] = useState([]);
+  const [returnDamageReason, setReturnDamageReason] = useState('');
   const [approvalModal, setApprovalModal] = useState(null); // State for the new approval modal
   const [approvalItems, setApprovalItems] = useState([]); // State for items in the approval modal
   const [processing, setProcessing] = useState(false);
@@ -60,6 +64,7 @@ export default function AdminOrders() {
         order.studentName?.toLowerCase().includes(query) ||
         order.orderId?.toLowerCase().includes(query) ||
         order.college?.toLowerCase().includes(query) ||
+        order.programName?.toLowerCase().includes(query) ||
         order.projectName?.toLowerCase().includes(query));
     }
     setFiltered(data);
@@ -115,6 +120,7 @@ export default function AdminOrders() {
     setEditorMode('return');
     setRemarks(order.adminRemarks || '');
     setReturnDraft(buildReturnDraft(order));
+    setReturnDamageReason('');
   }
 
   async function handleStatus(orderId, status, payload = {}) {
@@ -141,17 +147,22 @@ export default function AdminOrders() {
     const returnItems = returnDraft
       .map(item => ({
         id: item.id,
-        returnedQty: Number(item.processReturnedQty) || 0,
-        damagedQty: Number(item.processDamagedQty) || 0,
+        returnedAssetIds: item.assets.filter(a => a.condition === 'good').map(a => a.id),
+        damagedAssetIds: item.assets.filter(a => a.condition === 'damaged').map(a => a.id),
       }))
-      .filter(item => item.returnedQty > 0 || item.damagedQty > 0);
+      .filter(item => item.returnedAssetIds.length || item.damagedAssetIds.length);
 
     if (!returnItems.length) {
-      setPageMsg('Enter at least one returned or damaged quantity before saving.');
+      setPageMsg('Select at least one returned or damaged unit before saving.');
+      return;
+    }
+    const anyDamaged = returnItems.some(item => item.damagedAssetIds.length);
+    if (anyDamaged && !returnDamageReason.trim()) {
+      setPageMsg('Enter a reason for the unit(s) being returned damaged.');
       return;
     }
 
-    await handleStatus(order.orderId, 'Returned', { returnItems });
+    await handleStatus(order.orderId, 'Returned', { returnItems, damageReason: returnDamageReason.trim() });
   }
 
   async function handleConfirmApproval() {
@@ -173,17 +184,10 @@ export default function AdminOrders() {
     handleApprovalQtyChange(itemId, 0);
   }
 
-  function updateReturnDraft(itemId, field, rawValue) {
-    const value = Math.max(0, Number(rawValue) || 0);
-    setReturnDraft(current => current.map(item => {
-      if (item.id !== itemId) return item;
-      if (field === 'processReturnedQty') {
-        const max = Math.max(0, item.pendingQty - item.processDamagedQty);
-        return { ...item, processReturnedQty: Math.min(value, max) };
-      }
-      const max = Math.max(0, item.pendingQty - item.processReturnedQty);
-      return { ...item, processDamagedQty: Math.min(value, max) };
-    }));
+  function setAssetCondition(itemId, assetId, condition) {
+    setReturnDraft(current => current.map(item => (
+      item.id !== itemId ? item : { ...item, assets: item.assets.map(a => (a.id === assetId ? { ...a, condition } : a)) }
+    )));
   }
 
   const counts = {
@@ -277,10 +281,18 @@ export default function AdminOrders() {
                 {isExpanded && (
                   <>
                     <div style={styles.orderDetails}>
-                      <div style={styles.detailRow}><span style={styles.dl}>Project</span><span>{order.projectName}</span></div>
+                      <div style={styles.detailRow}><span style={styles.dl}>Program</span><span>{order.programName}</span></div>
+                      {order.projectName && <div style={styles.detailRow}><span style={styles.dl}>Project</span><span>{order.projectName}</span></div>}
                       <div style={styles.detailRow}><span style={styles.dl}>Course</span><span>{order.courseName}</span></div>
                       <div style={styles.detailRow}><span style={styles.dl}>Team</span><span>{order.teamName || '-'}</span></div>
+                      {order.teamMembers?.length > 0 && (
+                        <div style={{ ...styles.detailRow, gridColumn: '1 / -1' }}>
+                          <span style={styles.dl}>Team Members</span>
+                          <span>{order.teamMembers.map(m => `${m.name}${m.mobile ? ` (${m.mobile})` : ''}`).join(', ')}</span>
+                        </div>
+                      )}
                       <div style={styles.detailRow}><span style={styles.dl}>Guide</span><span>{order.facultyGuide || '-'}</span></div>
+                      {order.termsAcceptedAt && <div style={styles.detailRow}><span style={styles.dl}>Terms Accepted</span><span>{formatDateTime(order.termsAcceptedAt)}</span></div>}
                       {order.reservedAt && <div style={styles.detailRow}><span style={styles.dl}>Reserved At</span><span>{formatDateTime(order.reservedAt)}</span></div>}
                       {order.issuedAt && <div style={styles.detailRow}><span style={styles.dl}>Issued At</span><span>{formatDateTime(order.issuedAt)}</span></div>}
                       {showReturnTracking && order.returnRequestedAt && <div style={styles.detailRow}><span style={styles.dl}>Return Requested</span><span>{formatDateTime(order.returnRequestedAt)}</span></div>}
@@ -288,7 +300,7 @@ export default function AdminOrders() {
                       {showReturnTracking && order.returnedAt && <div style={styles.detailRow}><span style={styles.dl}>Closed At</span><span>{formatDateTime(order.returnedAt)}</span></div>}
                       <div style={{ ...styles.detailRow, gridColumn: '1 / -1' }}>
                         <span style={styles.dl}>Ordered Components</span>
-                        {renderItemsTable(order.items, order.components)}
+                        {renderItemsTable(order.items, order.components, order.orderId, fetchOrders)}
                       </div>
                       {showReturnTracking && (
                         <div style={{ ...styles.detailRow, gridColumn: '1 / -1' }}>
@@ -361,53 +373,32 @@ export default function AdminOrders() {
                         {selected === order.orderId && editorMode === 'return' ? (
                           <div style={styles.actionExpanded}>
                             <div style={styles.returnPanelTitle}>Return Entry</div>
-                            <div style={styles.tableScroll}>
-                              <table style={styles.returnEditTable}>
-                                <thead>
-                                  <tr>
-                                    <th style={styles.returnEditTh}>Component</th>
-                                    <th style={styles.returnEditTh}>Ordered</th>
-                                    <th style={styles.returnEditTh}>Returned</th>
-                                    <th style={styles.returnEditTh}>Damaged</th>
-                                    <th style={styles.returnEditTh}>Pending</th>
-                                    <th style={styles.returnEditTh}>Good Now</th>
-                                    <th style={styles.returnEditTh}>Damaged Now</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {returnDraft.map(item => (
-                                    <tr key={`${order.orderId}-${item.id}`}>
-                                      <td style={styles.returnEditTd}>{item.name}</td>
-                                      <td style={styles.returnEditTd}>{item.orderedQty}</td>
-                                      <td style={styles.returnEditTd}>{item.returnedQty}</td>
-                                      <td style={styles.returnEditTd}>{item.damagedQty}</td>
-                                      <td style={styles.returnEditTd}>{item.pendingQty}</td>
-                                      <td style={styles.returnEditTd}>
-                                        <input
-                                          type="number"
-                                          min="0"
-                                          max={Math.max(0, item.pendingQty - item.processDamagedQty)}
-                                          value={item.processReturnedQty}
-                                          onChange={event => updateReturnDraft(item.id, 'processReturnedQty', event.target.value)}
-                                          style={styles.qtyInput}
-                                        />
-                                      </td>
-                                      <td style={styles.returnEditTd}>
-                                        <input
-                                          type="number"
-                                          min="0"
-                                          max={Math.max(0, item.pendingQty - item.processReturnedQty)}
-                                          value={item.processDamagedQty}
-                                          onChange={event => updateReturnDraft(item.id, 'processDamagedQty', event.target.value)}
-                                          style={styles.qtyInput}
-                                        />
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
+                            <p style={styles.returnPanelHint}>Pick the condition of each specific unit being returned right now. Leave a unit as "Not returned" if the student still has it.</p>
+                            <div style={styles.returnItemList}>
+                              {returnDraft.map(item => (
+                                <div key={`${order.orderId}-${item.id}`} style={styles.returnItemCard}>
+                                  <div style={styles.returnItemHeader}>
+                                    <span style={styles.returnItemName}>{item.name}</span>
+                                    <span style={styles.returnItemMeta}>
+                                      Ordered {item.orderedQty} · Returned {item.returnedQty} · Damaged {item.damagedQty} · Pending {item.pendingQty}
+                                    </span>
+                                  </div>
+                                  <AssetConditionPicker
+                                    assets={item.assets}
+                                    onChange={(assetId, condition) => setAssetCondition(item.id, assetId, condition)}
+                                  />
+                                </div>
+                              ))}
                             </div>
 
+                            {returnDraft.some(item => item.assets.some(a => a.condition === 'damaged')) && (
+                              <input
+                                style={styles.remarksInput}
+                                value={returnDamageReason}
+                                onChange={event => setReturnDamageReason(event.target.value)}
+                                placeholder="Reason for the damaged unit(s) -- required"
+                              />
+                            )}
                             <input
                               style={styles.remarksInput}
                               value={remarks}
@@ -453,6 +444,7 @@ export default function AdminOrders() {
                     <tr>
                       <th style={styles.returnEditTh}>Component</th>
                       <th style={styles.returnEditTh}>Requested</th>
+                      <th style={styles.returnEditTh}>Assigned Unit(s)</th>
                       <th style={styles.returnEditTh}>Issuing Now</th>
                     </tr>
                   </thead>
@@ -463,6 +455,21 @@ export default function AdminOrders() {
                             <tr key={item.id}>
                               <td style={styles.returnEditTd}>{item.name}</td>
                               <td style={styles.returnEditTd}>{originalItem?.qty || item.qty}</td>
+                              <td style={{ ...styles.returnEditTd, fontSize: '12px', color: '#475569' }}>
+                                {Array.isArray(originalItem?.assets) && originalItem.assets.length
+                                  ? originalItem.assets.map(a => (
+                                      <span key={a.id} style={{ display: 'inline-flex', alignItems: 'center', marginRight: '10px' }}>
+                                        {a.assetTag}{a.serialNumber ? ` (SN: ${a.serialNumber})` : ''}
+                                        <AssetSwapPicker
+                                          asset={a}
+                                          catalogId={item.id}
+                                          swapUrl={`/api/orders/${approvalModal.orderId}/items/${item.id}/swap-asset`}
+                                          onSwapped={fetchOrders}
+                                        />
+                                      </span>
+                                    ))
+                                  : '-'}
+                              </td>
                               <td style={styles.returnEditTd}>
                                 <div style={styles.approvalInputRow}>
                                   <input
@@ -524,16 +531,17 @@ function formatDateTime(value) {
 }
 
 function buildReturnDraft(order) {
+  const itemsById = new Map((order.items || []).map(item => [item.id, item]));
   return getReturnSummary(order)
     .filter(item => item.pendingQty > 0)
-    .map(item => ({
-      ...item,
-      processReturnedQty: 0,
-      processDamagedQty: 0,
-    }));
+    .map(item => {
+      const sourceItem = itemsById.get(item.id);
+      const issuedAssets = Array.isArray(sourceItem?.assets) ? sourceItem.assets.filter(a => a.status === 'issued') : [];
+      return { ...item, assets: issuedAssets.map(a => ({ ...a, condition: 'skip' })) };
+    });
 }
 
-function renderItemsTable(items, fallback) {
+function renderItemsTable(items, fallback, orderId, onSwapped) {
   const safeItems = Array.isArray(items) && items.length ? items : parseFallbackItems(fallback);
   if (!safeItems.length) {
     return <span style={{ fontWeight: 600 }}>{fallback || 'No component details available'}</span>;
@@ -547,6 +555,7 @@ function renderItemsTable(items, fallback) {
             <th style={styles.itemTh}>Component</th>
             <th style={styles.itemTh}>Qty</th>
             <th style={styles.itemTh}>Unit</th>
+            <th style={styles.itemTh}>Assigned Unit(s)</th>
           </tr>
         </thead>
         <tbody>
@@ -555,6 +564,33 @@ function renderItemsTable(items, fallback) {
               <td style={styles.itemTd}>{item.name}</td>
               <td style={styles.itemTd}>{item.qty}</td>
               <td style={styles.itemTd}>{item.unit || 'pcs'}</td>
+              <td style={{ ...styles.itemTd, fontSize: '12px', color: '#475569' }}>
+                {Array.isArray(item.assets) && item.assets.length
+                  ? item.assets.map(a => (
+                      <span key={a.id} style={{ display: 'inline-block', marginRight: '10px', marginBottom: '4px', verticalAlign: 'top' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                          {a.assetTag}{a.serialNumber ? ` (SN: ${a.serialNumber})` : ''}
+                          {orderId && (
+                            <>
+                              <AssetSwapPicker
+                                asset={a}
+                                catalogId={item.id}
+                                swapUrl={`/api/orders/${orderId}/items/${item.id}/swap-asset`}
+                                onSwapped={onSwapped}
+                              />
+                              <AssetConditionFix asset={a} onFixed={onSwapped} />
+                            </>
+                          )}
+                        </span>
+                        {a.correctionReason && (
+                          <div style={{ fontSize: '10.5px', color: '#92400e', maxWidth: '220px' }}>
+                            Note{a.correctionBy ? ` (${a.correctionBy})` : ''}: {a.correctionReason}
+                          </div>
+                        )}
+                      </span>
+                    ))
+                  : '-'}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -594,7 +630,7 @@ function renderReturnSummaryTable(summary) {
             <th style={styles.itemTh}>Component</th>
             <th style={styles.itemTh}>Ordered</th>
             <th style={styles.itemTh}>Returned</th>
-            <th style={styles.itemTh}>Damaged</th>
+            <th style={styles.itemTh}>Damaged/Consumed</th>
             <th style={styles.itemTh}>Pending</th>
           </tr>
         </thead>
@@ -666,6 +702,12 @@ const styles = {
   reviewBtn: { background: 'linear-gradient(135deg, #1a237e, #3949ab)', color: '#fff', border: 'none', padding: '9px 18px', borderRadius: '9px', cursor: 'pointer', fontWeight: 700, fontSize: '13px' },
   actionExpanded: { display: 'flex', flexDirection: 'column', gap: '12px' },
   returnPanelTitle: { fontSize: '13px', fontWeight: 700, color: '#17355f' },
+  returnPanelHint: { fontSize: '12px', color: '#6b7280', margin: '2px 0 0' },
+  returnItemList: { display: 'flex', flexDirection: 'column', gap: '10px' },
+  returnItemCard: { background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px 14px' },
+  returnItemHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '10px', flexWrap: 'wrap', marginBottom: '6px' },
+  returnItemName: { fontSize: '13px', fontWeight: 700, color: '#1a1a2e' },
+  returnItemMeta: { fontSize: '11px', color: '#6b7280' },
   returnEditTable: { width: '100%', minWidth: '760px', borderCollapse: 'collapse', background: '#fff', borderRadius: '10px', overflow: 'hidden' },
   returnEditTh: { textAlign: 'left', fontSize: '11px', color: '#17355f', background: '#e8eef8', padding: '8px 10px', borderBottom: '1px solid #dbe3f0' },
   returnEditTd: { padding: '8px 10px', borderBottom: '1px solid #eef2f7', fontSize: '12px', color: '#334155' },

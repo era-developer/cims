@@ -59,6 +59,7 @@ export default function ComponentDetails() {
   }
 
   function handleAddToCart(component, qty = 1) {
+    if (component.checkoutEligible === false) return;
     addToCart(component, qty);
     showToast(`${qty} ${component.unit || 'item'} added for ${component.name}.`);
   }
@@ -113,6 +114,7 @@ export default function ComponentDetails() {
     );
   }
 
+  const canCheckout = component.checkoutEligible !== false;
   const stockColor = component.stock > 10 ? '#2e7d32' : component.stock > 0 ? '#ef6c00' : '#c62828';
   const stockBg = component.stock > 10 ? '#e8f5e9' : component.stock > 0 ? '#fff3e0' : '#fce4ec';
   const stockLabel = component.stock > 10 ? 'Ready to issue' : component.stock > 0 ? 'Limited stock' : 'Currently unavailable';
@@ -151,13 +153,9 @@ export default function ComponentDetails() {
           <div style={styles.infoPanel}>
             <div style={styles.breadcrumb}>Components / {component.category || 'General'}</div>
             <h1 style={{ ...styles.title, ...(isMobile ? styles.titleMobile : {}) }}>{component.name}</h1>
-            <p style={styles.subtitle}>
-              {component.description || 'Component information will appear here once added by the admin.'}
-            </p>
 
             <div style={styles.metaWrap}>
               <span style={styles.metaChip}>{component.category || 'General'}</span>
-              <span style={styles.metaChip}>{component.location || 'Location not set'}</span>
               <span style={styles.metaChip}>{component.unit || 'pcs'}</span>
             </div>
 
@@ -165,46 +163,58 @@ export default function ComponentDetails() {
               <div>
                 <div style={styles.stockTitle}>Availability</div>
                 <div style={styles.stockRow}>
-                  <span style={{ ...styles.stockPill, background: stockBg, color: stockColor }}>{stockLabel}</span>
-                  <span style={styles.stockCount}>{component.stock} available</span>
+                  {canCheckout ? (
+                    <>
+                      <span style={{ ...styles.stockPill, background: stockBg, color: stockColor }}>{stockLabel}</span>
+                      <span style={styles.stockCount}>{component.stock} available</span>
+                    </>
+                  ) : (
+                    <span style={{ ...styles.stockPill, background: '#eef2ff', color: '#3730a3' }}>Shown for information only</span>
+                  )}
                 </div>
               </div>
             </div>
 
-            <div style={{ ...styles.actionRow, ...(isMobile ? styles.actionRowMobile : {}) }}>
-              <div style={{ ...styles.qtyPanel, ...(isMobile ? styles.fullWidthBtn : {}) }}>
-                <div style={styles.qtyLabel}>{inCart ? 'Cart Quantity' : 'Select Quantity'}</div>
-                <div style={styles.qtyControls}>
-                  <button
-                    style={{ ...styles.qtyBtn, ...(!inCart && displayedQty <= 1 ? styles.qtyBtnDisabled : {}) }}
-                    onClick={() => changeMainQuantity(-1)}
-                    disabled={!inCart && displayedQty <= 1}>
-                    -
-                  </button>
-                  <span style={styles.qtyValue}>{displayedQty}</span>
-                  <button
-                    style={{ ...styles.qtyBtn, ...(component.stock === 0 || displayedQty >= component.stock ? styles.qtyBtnDisabled : {}) }}
-                    onClick={() => changeMainQuantity(1)}
-                    disabled={component.stock === 0 || displayedQty >= component.stock}>
-                    +
-                  </button>
+            {canCheckout ? (
+              <div style={{ ...styles.actionRow, ...(isMobile ? styles.actionRowMobile : {}) }}>
+                <div style={{ ...styles.qtyPanel, ...(isMobile ? styles.fullWidthBtn : {}) }}>
+                  <div style={styles.qtyLabel}>{inCart ? 'Cart Quantity' : 'Select Quantity'}</div>
+                  <div style={styles.qtyControls}>
+                    <button
+                      style={{ ...styles.qtyBtn, ...(!inCart && displayedQty <= 1 ? styles.qtyBtnDisabled : {}) }}
+                      onClick={() => changeMainQuantity(-1)}
+                      disabled={!inCart && displayedQty <= 1}>
+                      -
+                    </button>
+                    <span style={styles.qtyValue}>{displayedQty}</span>
+                    <button
+                      style={{ ...styles.qtyBtn, ...(component.stock === 0 || displayedQty >= component.stock ? styles.qtyBtnDisabled : {}) }}
+                      onClick={() => changeMainQuantity(1)}
+                      disabled={component.stock === 0 || displayedQty >= component.stock}>
+                      +
+                    </button>
+                  </div>
                 </div>
+
+                {inCart ? (
+                  <div style={styles.inCartBadge}>In cart and ready to request</div>
+                ) : (
+                  <button
+                    style={{ ...styles.primaryBtn, ...(isMobile ? styles.fullWidthBtn : {}), ...(component.stock === 0 ? styles.primaryBtnDisabled : {}) }}
+                    onClick={() => handleAddToCart(component, desiredQty)}
+                    disabled={component.stock === 0}>
+                    {component.stock === 0 ? 'Unavailable' : `Add ${desiredQty} to Cart`}
+                  </button>
+                )}
+                <button style={{ ...styles.secondaryBtn, ...(isMobile ? styles.fullWidthBtn : {}) }} onClick={() => navigate('/cart')}>Go to Cart</button>
               </div>
+            ) : (
+              <div style={styles.actionHint}>
+                This item is provided for information only and isn't available to request through the portal.
+              </div>
+            )}
 
-              {inCart ? (
-                <div style={styles.inCartBadge}>In cart and ready to request</div>
-              ) : (
-                <button
-                  style={{ ...styles.primaryBtn, ...(isMobile ? styles.fullWidthBtn : {}), ...(component.stock === 0 ? styles.primaryBtnDisabled : {}) }}
-                  onClick={() => handleAddToCart(component, desiredQty)}
-                  disabled={component.stock === 0}>
-                  {component.stock === 0 ? 'Unavailable' : `Add ${desiredQty} to Cart`}
-                </button>
-              )}
-              <button style={{ ...styles.secondaryBtn, ...(isMobile ? styles.fullWidthBtn : {}) }} onClick={() => navigate('/cart')}>Go to Cart</button>
-            </div>
-
-            {component.stock > 0 && (
+            {canCheckout && component.stock > 0 && (
               <div style={styles.actionHint}>
                 Adjust the quantity here itself before sending the component request.
               </div>
@@ -215,16 +225,25 @@ export default function ComponentDetails() {
                 <div style={styles.detailLabel}>Description</div>
                 <p style={styles.detailText}>{component.description || 'No description added for this component yet.'}</p>
               </div>
-              <div style={styles.detailCard}>
-                <div style={styles.detailLabel}>Quick Info</div>
-                <div style={styles.infoList}>
-                  <div style={styles.infoRow}><span>Category</span><strong>{component.category || '-'}</strong></div>
-                  <div style={styles.infoRow}><span>Unit</span><strong>{component.unit || '-'}</strong></div>
-                  <div style={styles.infoRow}><span>Storage</span><strong>{component.location || '-'}</strong></div>
-                  <div style={styles.infoRow}><span>Stock</span><strong>{component.stock}</strong></div>
+            </div>
+
+            {Array.isArray(component.referenceVideos) && component.referenceVideos.length > 0 && (
+              <div style={{ ...styles.detailCard, marginTop: '14px' }}>
+                <div style={styles.detailLabel}>Reference Videos</div>
+                <div style={styles.videoList}>
+                  {component.referenceVideos.map(video => (
+                    <a
+                      key={video.url}
+                      href={video.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={styles.videoLink}>
+                      {video.title}
+                    </a>
+                  ))}
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
 
@@ -278,8 +297,9 @@ export default function ComponentDetails() {
                       <div style={styles.suggestionName}>{item.name}</div>
                       <div style={styles.suggestionDesc}>{item.description || 'No description available yet.'}</div>
                     <div style={{ ...styles.suggestionFooter, ...(isMobile ? styles.suggestionFooterMobile : {}) }}>
-                      <span style={styles.suggestionStock}>{item.stock} available</span>
-                      <button
+                      <span style={styles.suggestionStock}>{item.checkoutEligible === false ? 'Info only' : `${item.stock} available`}</span>
+                      {item.checkoutEligible !== false && (
+                        <button
                           type="button"
                           style={{ ...styles.miniAddBtn, ...(isMobile ? styles.fullWidthBtn : {}), ...(item.stock === 0 ? styles.miniAddBtnDisabled : {}) }}
                           onClick={event => {
@@ -289,6 +309,7 @@ export default function ComponentDetails() {
                           disabled={item.stock === 0}>
                           {itemInCart ? `In Cart (${itemInCart.qty})` : item.stock === 0 ? 'Unavailable' : 'Add'}
                         </button>
+                      )}
                       </div>
                     </div>
                   </div>
@@ -344,12 +365,14 @@ const styles = {
   primaryBtnDisabled: { background: '#e5e7eb', color: '#94a3b8', cursor: 'not-allowed' },
   secondaryBtn: { background: '#17355f', color: '#fff', border: 'none', padding: '12px 18px', borderRadius: '12px', cursor: 'pointer', fontWeight: 700, fontSize: '14px' },
   inCartBadge: { background: '#e8f5e9', color: '#2e7d32', padding: '12px 16px', borderRadius: '12px', fontSize: '14px', fontWeight: 800 },
-  detailGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' },
+  detailGrid: { display: 'grid', gridTemplateColumns: '1fr', gap: '14px' },
   detailCard: { background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '16px' },
   detailLabel: { fontSize: '12px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '10px' },
-  detailText: { fontSize: '14px', color: '#334155', lineHeight: 1.7 },
-  infoList: { display: 'flex', flexDirection: 'column', gap: '10px' },
-  infoRow: { display: 'flex', justifyContent: 'space-between', gap: '16px', fontSize: '14px', color: '#334155' },
+  // pre-line so a description with real line breaks (e.g. a "Key specs"
+  // bullet list) renders as-is instead of collapsing onto one line.
+  detailText: { fontSize: '14px', color: '#334155', lineHeight: 1.7, whiteSpace: 'pre-line' },
+  videoList: { display: 'flex', flexDirection: 'column', gap: '8px' },
+  videoLink: { fontSize: '13px', color: '#1a237e', fontWeight: 700, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px' },
   section: { background: '#fff', borderRadius: '24px', padding: '24px', boxShadow: '0 12px 32px rgba(26,35,126,0.08)' },
   sectionHeader: { marginBottom: '18px' },
   sectionKicker: { fontSize: '12px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px' },
@@ -362,7 +385,12 @@ const styles = {
   suggestionBody: { padding: '14px' },
   suggestionCategory: { fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' },
   suggestionName: { fontSize: '16px', fontWeight: 800, color: '#13233f', lineHeight: 1.3, marginBottom: '8px' },
-  suggestionDesc: { fontSize: '12px', color: '#64748b', lineHeight: 1.6, minHeight: '58px', marginBottom: '12px' },
+  // Clamped to 3 lines -- descriptions can now run to a full paragraph plus
+  // a specs list, and this is just a preview card, not the full detail view.
+  suggestionDesc: {
+    fontSize: '12px', color: '#64748b', lineHeight: 1.6, minHeight: '58px', marginBottom: '12px',
+    display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+  },
   suggestionFooter: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' },
   suggestionFooterMobile: { flexDirection: 'column', alignItems: 'stretch' },
   suggestionStock: { fontSize: '12px', fontWeight: 700, color: '#17355f' },

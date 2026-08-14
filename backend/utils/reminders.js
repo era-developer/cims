@@ -1,5 +1,5 @@
-const { getOrders, updateOrderStatus } = require('./excel');
 const { sendReturnReminder } = require('./email');
+const { CENTERS } = require('./centers');
 
 function startOfDay(date) {
   const normalized = new Date(date);
@@ -23,7 +23,12 @@ function shouldSendReminder(order, now = new Date()) {
 }
 
 async function processReturnReminders() {
-  const orders = await getOrders();
+  // Lazy require: orders.js requires db.js at module load, and this file is
+  // itself required by server.js before the DB necessarily needs opening --
+  // avoids any import-order surprises.
+  const { getOrdersForCenter, markReminderSent } = require('../routes/orders');
+
+  const orders = CENTERS.flatMap(center => getOrdersForCenter(center.id));
   const candidates = orders.filter(order => shouldSendReminder(order));
   let sentCount = 0;
 
@@ -32,9 +37,7 @@ async function processReturnReminders() {
       const result = await sendReturnReminder(order, order.centerId);
       if (!result?.ok) continue;
 
-      await updateOrderStatus(order.orderId, order.status, order.adminRemarks, {
-        reminderSentAt: new Date().toISOString(),
-      });
+      markReminderSent(order.orderId, new Date().toISOString());
       sentCount += 1;
     } catch (err) {
       console.error(`[REMINDER ERROR] ${order.orderId}: ${err.message}`);

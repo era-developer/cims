@@ -1,5 +1,16 @@
 const nodemailer = require('nodemailer');
+const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
+
+// Same source file the order/invoice PDFs embed (backend/assets/logo.png).
+// Referenced via a cid: attachment rather than a hosted URL -- most mail
+// clients block remote images by default until the user clicks "show
+// images", so an inline attachment is the only way the logo reliably shows
+// up without an extra click.
+const LOGO_PATH = path.join(__dirname, '..', 'assets', 'logo.png');
+const LOGO_EXISTS = fs.existsSync(LOGO_PATH);
+const LOGO_CID = 'cimslogo';
 
 function readEnv(name) {
   const value = process.env[name];
@@ -55,6 +66,31 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+// Spam filters weight the presence of a text/plain alternative heavily --
+// an HTML-only email is a well-known trigger. Since every email here is
+// built from our own controlled markup (never arbitrary user HTML), a
+// straightforward tag-strip gives a faithful, readable plain-text part
+// without hand-writing a parallel text template for every message type.
+function htmlToText(html) {
+  return String(html || '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<(br|\/tr|\/p|\/div|\/h[1-6]|\/li)\s*\/?>/gi, '\n')
+    .replace(/<li[^>]*>/gi, '- ')
+    .replace(/<\/table>/gi, '\n')
+    .replace(/<td[^>]*>/gi, ' | ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .split('\n').map(line => line.trim()).join('\n')
+    .trim();
+}
+
 function readCenterSpecificEnv(centerId, keySuffix) {
   if (!centerId) return '';
   const key = `${centerId.toUpperCase().replace(/-/g, '_')}_${keySuffix}`;
@@ -87,6 +123,7 @@ function getStudentDetails(order) {
     college: order.college,
     department: order.department,
     courseName: order.courseName,
+    programName: order.programName,
     projectName: order.projectName,
     teamName: order.teamName,
     facultyGuide: order.facultyGuide,
@@ -197,7 +234,7 @@ function returnSummaryTable(summary = []) {
           <th style="padding:8px 12px;border:1px solid #dbe3f0;text-align:left;">Component</th>
           <th style="padding:8px 12px;border:1px solid #dbe3f0;">Ordered</th>
           <th style="padding:8px 12px;border:1px solid #dbe3f0;">Returned</th>
-          <th style="padding:8px 12px;border:1px solid #dbe3f0;">Damaged</th>
+          <th style="padding:8px 12px;border:1px solid #dbe3f0;">Damaged/Consumed</th>
           <th style="padding:8px 12px;border:1px solid #dbe3f0;">Pending</th>
         </tr>
       </thead>
@@ -225,7 +262,7 @@ function buildPolicyNotes(status, audience = 'student') {
         isAdmin
           ? 'Please verify quantities, project purpose, and student details before approving the request.'
           : 'Wait for admin approval before collecting any component from the lab.',
-        'Damaged, missing, or misused components should be recorded during issue/return handling.',
+        'Damaged/consumed, missing, or misused components should be recorded during issue/return handling.',
       ]),
     };
   }
@@ -238,7 +275,7 @@ function buildPolicyNotes(status, audience = 'student') {
         isAdmin
           ? 'Issue only the approved quantities and record any substitutions or remarks in the portal.'
           : 'Please use the issued components carefully and keep them safe until return.',
-        'Any damaged or missing component should be declared during return so inventory can be updated correctly.',
+        'Any damaged/consumed or missing component should be declared during return so inventory can be updated correctly.',
       ]),
     };
   }
@@ -262,9 +299,9 @@ function buildPolicyNotes(status, audience = 'student') {
       html: noteList([
         'The student has initiated the return process for the issued components.',
         isAdmin
-          ? 'Verify physical quantities, damage, and pending items before closing the order.'
-          : 'Bring all issued components back together with any damaged parts, even if they are not working.',
-        'Damage and shortage details must be captured during verification so the final summary stays accurate.',
+          ? 'Verify physical quantities, damage/consumption, and pending items before closing the order.'
+          : 'Bring all issued components back together with any damaged/consumed parts, even if they are not working.',
+        'Damaged/consumed and shortage details must be captured during verification so the final summary stays accurate.',
       ]),
     };
   }
@@ -277,7 +314,7 @@ function buildPolicyNotes(status, audience = 'student') {
         isAdmin
           ? 'Keep the order open until pending quantities are received or remarks clearly explain the shortage.'
           : 'Please return the remaining pending components as soon as possible.',
-        'Any damaged quantity should stay recorded separately from pending quantity for accountability.',
+        'Any damaged/consumed quantity should stay recorded separately from pending quantity for accountability.',
       ]),
     };
   }
@@ -288,9 +325,9 @@ function buildPolicyNotes(status, audience = 'student') {
       html: noteList([
         'The table below represents the issued components and the verified return summary for this order.',
         isAdmin
-          ? 'Check the damage and pending columns before treating the order as fully closed in records.'
-          : 'If any damage or shortage is shown, please follow the lab policy or admin guidance for closure.',
-        'All damages, shortages, and remarks should remain attached to the order for audit and inventory tracking.',
+          ? 'Check the damaged/consumed and pending columns before treating the order as fully closed in records.'
+          : 'If any damage/consumption or shortage is shown, please follow the lab policy or admin guidance for closure.',
+        'All damaged/consumed amounts, shortages, and remarks should remain attached to the order for audit and inventory tracking.',
       ]),
     };
   }
@@ -299,33 +336,47 @@ function buildPolicyNotes(status, audience = 'student') {
     title: 'Notes',
     html: noteList([
       'Please review the latest order status and remarks in the portal.',
-      'Keep component issue, return, damage, and shortage records aligned with the physical stock.',
+      'Keep component issue, return, damage/consumption, and shortage records aligned with the physical stock.',
     ]),
   };
 }
 
 function wrapEmail(title, subtitle, bodyHtml) {
   const siteUrl = getSiteUrl();
+  // A plain text link (not a filled button) reads less like a marketing
+  // email to spam heuristics, while still being a real, working link.
   const footerLink = siteUrl
-    ? `<div style="margin-top:12px;"><a href="${escapeHtml(siteUrl)}" style="color:#1a237e;font-weight:600;text-decoration:none;">Open CIMS Portal</a></div>`
+    ? `<p style="margin:16px 0 0;"><a href="${escapeHtml(siteUrl)}" style="color:#1a237e;font-weight:700;text-decoration:underline;">Open CIMS Portal &rarr;</a></p>`
     : '';
+
+  // White letterhead, not a filled navy band -- the real logo is dark
+  // navy/orange on a transparent background (same asset the order/invoice
+  // PDFs use), so it needs white behind it or the navy parts of the mark
+  // disappear. Matches the PDF letterhead: logo on white, navy accent rule,
+  // then content.
+  const logoHtml = LOGO_EXISTS
+    ? `<img src="cid:${LOGO_CID}" alt="Comedkares Innovation Hub" style="height:34px;display:block;margin-bottom:12px;" />`
+    : `<div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#64748b;font-weight:700;margin-bottom:10px;">Comedkares Innovation Hub &middot; CIMS</div>`;
 
   return `
 <!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"></head>
-<body style="margin:0;padding:24px;background:#f4f7fb;font-family:Arial,sans-serif;color:#16213e;">
-  <div style="max-width:680px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #dbe3f0;">
-    <div style="background:#1a237e;color:#ffffff;padding:24px 32px;">
-      <h1 style="margin:0;font-size:24px;">${escapeHtml(title)}</h1>
-      <p style="margin:8px 0 0;color:#ffffff;">${escapeHtml(subtitle)}</p>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body style="margin:0;padding:24px;background:#f4f7fb;font-family:Arial,Helvetica,sans-serif;color:#16213e;">
+  <div style="max-width:680px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #dbe3f0;">
+    <div style="background:#ffffff;padding:24px 28px 18px;">
+      ${logoHtml}
+      <h1 style="margin:0;font-size:21px;font-weight:700;color:#1a1a2e;">${escapeHtml(title)}</h1>
+      <p style="margin:6px 0 0;color:#64748b;font-size:13px;">${escapeHtml(subtitle)}</p>
     </div>
-    <div style="padding:28px 32px;">
+    <div style="height:3px;background:#1a237e;line-height:3px;font-size:0;">&nbsp;</div>
+    <div style="padding:24px 28px;">
       ${bodyHtml}
       ${footerLink}
     </div>
-    <div style="padding:14px 32px;background:#f8fafc;color:#64748b;font-size:12px;text-align:center;">
-      CIMS automated notification
+    <div style="padding:14px 28px;background:#f8fafc;color:#64748b;font-size:12px;text-align:center;border-top:1px solid #e2e8f0;">
+      Automated notification from the CIMS Component Inventory Management System, Comedkares Innovation Hub.<br>
+      For urgent matters, use the Reply-To contact shown on this email instead of this address.
     </div>
   </div>
 </body>
@@ -343,7 +394,16 @@ function statusTheme(status) {
 
 async function sendMessage(transporter, options) {
   try {
-    const info = await transporter.sendMail(options);
+    const needsLogo = LOGO_EXISTS && typeof options.html === 'string' && options.html.includes(`cid:${LOGO_CID}`);
+    const attachments = [
+      ...(options.attachments || []),
+      ...(needsLogo ? [{ filename: 'logo.png', path: LOGO_PATH, cid: LOGO_CID }] : []),
+    ];
+    const info = await transporter.sendMail({
+      ...options,
+      attachments: attachments.length ? attachments : undefined,
+      text: options.text || htmlToText(options.html),
+    });
     console.log('[EMAIL SENT]', options.to, info.messageId || '');
     return { ok: true, messageId: info.messageId || '' };
   } catch (err) {
@@ -444,7 +504,8 @@ async function sendOrderNotification(order, centerId) {
       <p style="margin:0 0 4px;"><strong>College:</strong> ${escapeHtml(details.college)}</p>
       <p style="margin:0 0 4px;"><strong>Department:</strong> ${escapeHtml(details.department)}</p>
       <p style="margin:0 0 4px;"><strong>Course:</strong> ${escapeHtml(details.courseName)}</p>
-      <p style="margin:0 0 4px;"><strong>Project:</strong> ${escapeHtml(details.projectName)}</p>
+      <p style="margin:0 0 4px;"><strong>Program:</strong> ${escapeHtml(details.programName || '-')}</p>
+      ${details.projectName ? `<p style="margin:0 0 4px;"><strong>Project:</strong> ${escapeHtml(details.projectName)}</p>` : ''}
       <p style="margin:0 0 4px;"><strong>Team:</strong> ${escapeHtml(details.teamName)}</p>
       <p style="margin:0 0 4px;"><strong>Faculty Guide:</strong> ${escapeHtml(details.facultyGuide)}</p>
       ${expectedReturnDate ? `<p style="margin:0 0 12px;"><strong>Expected return date:</strong> ${escapeHtml(expectedReturnDate)}</p>` : ''}
@@ -471,7 +532,8 @@ async function sendOrderNotification(order, centerId) {
       <p style="margin:0 0 12px;color:#475569;">The requested stock has been reserved for review. You will receive another email when the admin approves, rejects, or completes the return.</p>
       <h3 style="margin:20px 0 8px;color:#1a237e;">Requested items</h3>
       ${componentTable(items)}
-      ${details.projectName ? `<p style="margin:16px 0 0;"><strong>Project:</strong> ${escapeHtml(details.projectName)}</p>` : ''}
+      <p style="margin:16px 0 0;"><strong>Program:</strong> ${escapeHtml(details.programName || '-')}</p>
+      ${details.projectName ? `<p style="margin:4px 0 0;"><strong>Project:</strong> ${escapeHtml(details.projectName)}</p>` : ''}
       <div style="margin-top:16px;padding:14px 16px;background:#f8fafc;border:1px solid #dbe3f0;border-radius:10px;">
         <strong style="color:#1a237e;">${escapeHtml(studentPendingNotes.title)}</strong>
         ${studentPendingNotes.html}
@@ -482,7 +544,7 @@ async function sendOrderNotification(order, centerId) {
   const tasks = [];
   if (adminRecipient) {
     tasks.push(sendMessage(transporter, {
-      from: `"CIMS System" <${config.user}>`,
+      from: `"Comedkares Innovation Hub - CIMS" <${config.user}>`,
       to: adminRecipient,
       replyTo: buildReplyTo(studentRecipient, config.user),
       subject: `[CIMS] New order ${order.orderId} from ${details.studentName || order.username}`,
@@ -491,7 +553,7 @@ async function sendOrderNotification(order, centerId) {
   }
   if (studentRecipient) {
     tasks.push(sendMessage(transporter, {
-      from: `"CIMS System" <${config.user}>`,
+      from: `"Comedkares Innovation Hub - CIMS" <${config.user}>`,
       to: studentRecipient,
       replyTo: buildReplyTo(adminRecipient, config.user),
       subject: `[CIMS] Order received ${order.orderId}`,
@@ -500,6 +562,58 @@ async function sendOrderNotification(order, centerId) {
   }
 
   await Promise.allSettled(tasks);
+}
+
+async function sendProcurementNotification({ request, type, recipients = [] }) {
+  if (!recipients.length) return;
+  if (!(await ensureEmailReady(`Procurement request ${request.id}`))) {
+    return;
+  }
+
+  const config = getSmtpConfig();
+  const transporter = createTransporter();
+
+  const typeLabels = {
+    request: 'New component request',
+    'status-update': `Request ${request.status}`,
+  };
+  const subject = type === 'request'
+    ? `[CIMS] New component request from ${escapeHtml(request.centerName)}`
+    : `[CIMS] Your component request is now: ${escapeHtml(request.status)}`;
+
+  const summary = `
+    <p style="margin:0 0 8px;"><strong>Center:</strong> ${escapeHtml(request.centerName)}</p>
+    <p style="margin:0 0 8px;"><strong>Requested by:</strong> ${escapeHtml(request.requestedBy)}</p>
+    <p style="margin:0 0 8px;"><strong>Program:</strong> ${escapeHtml(request.programName || 'N/A')}</p>
+    <p style="margin:0 0 8px;"><strong>Status:</strong> ${escapeHtml(request.status)}</p>
+    ${request.adminRemarks ? `<p style="margin:0 0 8px;"><strong>Remarks:</strong> ${escapeHtml(request.adminRemarks)}</p>` : ''}
+  `;
+
+  const bodyHtml = `
+    ${summary}
+    <h3 style="margin:16px 0 8px;color:#1a237e;">Requested components</h3>
+    ${componentTable((request.items || []).map(i => ({ name: i.componentName, qty: i.qtyApproved ?? i.qtyRequested, unit: 'pcs' })))}
+  `;
+
+  const eventSubtitle = type === 'request'
+    ? `From ${request.centerName || 'a center'}.`
+    : `Request from ${request.centerName || 'a center'} is now: ${request.status}.`;
+  const html = wrapEmail(
+    typeLabels[type] || 'Component request update',
+    eventSubtitle,
+    bodyHtml,
+  );
+
+  const to = recipients.filter(Boolean).join(', ');
+  if (!to) return;
+
+  await sendMessage(transporter, {
+    from: `"Comedkares Innovation Hub - CIMS" <${config.user}>`,
+    to,
+    replyTo: buildReplyTo(config.user, ''),
+    subject,
+    html,
+  });
 }
 
 async function sendTransferNotification({ transfer, type, recipients = [] }) {
@@ -544,8 +658,8 @@ async function sendTransferNotification({ transfer, type, recipients = [] }) {
   `;
 
   const html = wrapEmail(
-    `Transfer ${transfer.id}`,
     typeLabels[type] || 'Component transfer update',
+    `Transfer ${transfer.id} · ${transfer.requestingCenterName || 'Center transfer'}`,
     bodyHtml,
   );
 
@@ -553,7 +667,7 @@ async function sendTransferNotification({ transfer, type, recipients = [] }) {
   if (!to) return;
 
   await sendMessage(transporter, {
-    from: `"CIMS System" <${config.user}>`,
+    from: `"Comedkares Innovation Hub - CIMS" <${config.user}>`,
     to,
     replyTo: buildReplyTo(config.user, ''),
     subject,
@@ -627,7 +741,8 @@ async function sendStatusUpdate(order, status, remarks, centerId) {
       ${sharedBlock(adminNotes)}
       <p style="margin:16px 0 4px;"><strong>Student:</strong> ${escapeHtml(details.studentName || order.username)}</p>
       <p style="margin:0 0 4px;"><strong>Email:</strong> ${escapeHtml(order.studentEmail)}</p>
-      <p style="margin:0 0 4px;"><strong>Project:</strong> ${escapeHtml(details.projectName)}</p>
+      <p style="margin:0 0 4px;"><strong>Program:</strong> ${escapeHtml(details.programName || '-')}</p>
+      ${details.projectName ? `<p style="margin:0 0 4px;"><strong>Project:</strong> ${escapeHtml(details.projectName)}</p>` : ''}
       <p style="margin:0;"><strong>Current status:</strong> ${escapeHtml(status)}</p>
     `,
   );
@@ -644,7 +759,7 @@ async function sendStatusUpdate(order, status, remarks, centerId) {
   const tasks = [];
   if (adminRecipient) {
     tasks.push(sendMessage(transporter, {
-      from: `"CIMS System" <${config.user}>`,
+      from: `"Comedkares Innovation Hub - CIMS" <${config.user}>`,
       to: adminRecipient,
       replyTo: buildReplyTo(studentRecipient, config.user),
       subject: `[CIMS] ${status}: ${order.orderId}`,
@@ -653,7 +768,7 @@ async function sendStatusUpdate(order, status, remarks, centerId) {
   }
   if (studentRecipient) {
     tasks.push(sendMessage(transporter, {
-      from: `"CIMS System" <${config.user}>`,
+      from: `"Comedkares Innovation Hub - CIMS" <${config.user}>`,
       to: studentRecipient,
       replyTo: buildReplyTo(adminRecipient, config.user),
       subject: `[CIMS] ${status}: ${order.orderId}`,
@@ -696,7 +811,7 @@ async function sendReturnReminder(order, centerId) {
         <strong style="color:#1a237e;">Return notes and policy</strong>
         ${noteList([
           'Please return all issued components in working condition wherever possible.',
-          'If any component is damaged or missing, inform the lab/admin during the return process so the order summary can be updated correctly.',
+          'If any component is damaged/consumed or missing, inform the lab/admin during the return process so the order summary can be updated correctly.',
           'Use the portal return option or contact the lab/admin if you need clarification before returning the components.',
         ])}
       </div>
@@ -704,10 +819,51 @@ async function sendReturnReminder(order, centerId) {
   );
 
   return sendMessage(transporter, {
-    from: `"CIMS System" <${config.user}>`,
+    from: `"Comedkares Innovation Hub - CIMS" <${config.user}>`,
     to: studentRecipient,
     replyTo: buildReplyTo(adminRecipient, config.user),
     subject: `[CIMS] Return reminder for ${order.orderId}`,
+    html,
+  });
+}
+
+// Shared by forgot-password (routes/auth.js) and student order confirmation
+// (routes/orders.js) -- same code-in-a-box template, different copy per
+// purpose. targetEmail is passed explicitly by the caller rather than read
+// off the user record: forgot-password always uses the account's on-file
+// email (the whole point is proving control of that account), while order
+// confirmation sends to whatever email the student has on the checkout form
+// at that moment, which may not be saved to their profile.
+async function sendOtpEmail({ targetEmail, centerId, code, purpose, expiresInMinutes }) {
+  if (!targetEmail) return { ok: false, skipped: true, reason: 'no_email' };
+  if (!(await ensureEmailReady(`OTP (${purpose}) to ${targetEmail}`))) {
+    return { ok: false, skipped: true };
+  }
+
+  const config = getSmtpConfig();
+  const transporter = createTransporter();
+  const copy = purpose === 'password_reset'
+    ? { title: 'Reset your CIMS password', subtitle: 'Use this code to reset your password.', subject: '[CIMS] Password reset code' }
+    : { title: 'Confirm your order', subtitle: 'Use this code to confirm and submit your component request.', subject: '[CIMS] Order confirmation code' };
+
+  const html = wrapEmail(
+    copy.title,
+    copy.subtitle,
+    `
+      <div style="text-align:center;padding:22px 16px;background:#eef2ff;border-radius:12px;margin-bottom:18px;">
+        <div style="font-size:13px;color:#475569;margin-bottom:8px;">Your verification code</div>
+        <div style="font-size:34px;font-weight:800;letter-spacing:8px;color:#1a237e;">${escapeHtml(code)}</div>
+      </div>
+      <p style="margin:0 0 8px;color:#475569;">This code expires in ${escapeHtml(String(expiresInMinutes))} minutes and can only be used once.</p>
+      <p style="margin:0;color:#94a3b8;font-size:12px;">If you didn't request this, you can safely ignore this email -- no changes will be made without the code above.</p>
+    `,
+  );
+
+  return sendMessage(transporter, {
+    from: `"Comedkares Innovation Hub - CIMS" <${config.user}>`,
+    to: targetEmail,
+    replyTo: buildReplyTo(getAdminRecipient(centerId), config.user),
+    subject: copy.subject,
     html,
   });
 }
@@ -724,6 +880,8 @@ module.exports = {
   sendOrderNotification,
   sendStatusUpdate,
   sendTransferNotification,
+  sendProcurementNotification,
   sendReturnReminder,
+  sendOtpEmail,
   verifyEmailConnection,
 };

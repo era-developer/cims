@@ -23,6 +23,7 @@ export default function MyOrders() {
   const [processingId, setProcessingId] = useState('');
   const [pageMsg, setPageMsg] = useState('');
   const [search, setSearch] = useState('');
+  const [downloadingId, setDownloadingId] = useState('');
 
   useEffect(() => {
     fetchOrders();
@@ -64,12 +65,32 @@ export default function MyOrders() {
     return (
       String(order.orderId || '').toLowerCase().includes(query) ||
       String(order.college || '').toLowerCase().includes(query) ||
+      String(order.programName || '').toLowerCase().includes(query) ||
       String(order.projectName || '').toLowerCase().includes(query) ||
       String(order.courseName || '').toLowerCase().includes(query) ||
       String(order.status || '').toLowerCase().includes(query) ||
       itemText.toLowerCase().includes(query)
     );
   });
+
+  async function downloadOrderPdf(orderId) {
+    setDownloadingId(orderId);
+    try {
+      const response = await axios.get(`/api/orders/${orderId}/pdf`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${orderId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      setPageMsg('Unable to download this order right now.');
+    } finally {
+      setDownloadingId('');
+    }
+  }
 
   async function handleReturnRequest(orderId) {
     setProcessingId(orderId);
@@ -94,7 +115,7 @@ export default function MyOrders() {
         <div style={styles.header}>
           <div>
             <h1 style={styles.title}>My Orders</h1>
-            <p style={styles.sub}>Track requested, returned, damaged, and pending components here.</p>
+            <p style={styles.sub}>Track requested, returned, damaged/consumed, and pending components here.</p>
           </div>
           <div style={{ ...styles.countBadge, ...(isMobile ? styles.fullWidthBadge : {}) }}>{orders.length} Total</div>
         </div>
@@ -148,8 +169,17 @@ export default function MyOrders() {
 
                   {isOpen && (
                     <div style={styles.orderBody}>
+                      <div style={{ ...styles.actionBar, ...(isMobile ? styles.actionBarMobile : {}), marginBottom: '14px' }}>
+                        <button
+                          style={{ ...styles.downloadBtn, ...(isMobile ? styles.fullWidthBadge : {}), opacity: downloadingId === order.orderId ? 0.7 : 1 }}
+                          onClick={event => { event.stopPropagation(); downloadOrderPdf(order.orderId); }}
+                          disabled={downloadingId === order.orderId}>
+                          {downloadingId === order.orderId ? 'Preparing PDF...' : 'Download Order Summary (PDF)'}
+                        </button>
+                      </div>
                       <div style={styles.detailGrid}>
-                        <div style={styles.detailItem}><span style={styles.detailLabel}>Project</span><span>{order.projectName}</span></div>
+                        <div style={styles.detailItem}><span style={styles.detailLabel}>Program</span><span>{order.programName}</span></div>
+                        {order.projectName && <div style={styles.detailItem}><span style={styles.detailLabel}>Project</span><span>{order.projectName}</span></div>}
                         <div style={styles.detailItem}><span style={styles.detailLabel}>Course</span><span>{order.courseName}</span></div>
                         <div style={styles.detailItem}><span style={styles.detailLabel}>Team</span><span>{order.teamName || '-'}</span></div>
                         <div style={styles.detailItem}><span style={styles.detailLabel}>Faculty Guide</span><span>{order.facultyGuide || '-'}</span></div>
@@ -208,13 +238,13 @@ export default function MyOrders() {
                       {order.status === 'Partially Returned' && (
                         <div style={styles.waitingBox}>
                           Some items are still pending with you. Remaining components must be handed back to close the order fully.
-                          {damagedTotal > 0 && <div style={styles.damageNote}>Damaged quantity recorded so far: {damagedTotal}</div>}
+                          {damagedTotal > 0 && <div style={styles.damageNote}>Damaged/Consumed quantity recorded so far: {damagedTotal}</div>}
                         </div>
                       )}
 
                       {order.status === 'Returned' && damagedTotal > 0 && (
                         <div style={styles.damageBox}>
-                          This order was closed with {damagedTotal} damaged component(s) recorded by the admin.
+                          This order was closed with {damagedTotal} damaged/consumed component(s) recorded by the admin.
                         </div>
                       )}
                     </div>
@@ -267,6 +297,7 @@ function renderItemsTable(items, fallback) {
             <th style={styles.itemTh}>Component</th>
             <th style={styles.itemTh}>Qty</th>
             <th style={styles.itemTh}>Unit</th>
+            <th style={styles.itemTh}>Assigned Unit(s)</th>
           </tr>
         </thead>
         <tbody>
@@ -275,6 +306,18 @@ function renderItemsTable(items, fallback) {
               <td style={styles.itemTd}>{item.name}</td>
               <td style={styles.itemTd}>{item.qty}</td>
               <td style={styles.itemTd}>{item.unit || 'pcs'}</td>
+              <td style={{ ...styles.itemTd, fontSize: '12px', color: '#475569' }}>
+                {Array.isArray(item.assets) && item.assets.length
+                  ? item.assets.map(a => (
+                      <div key={a.id} style={{ marginBottom: '4px' }}>
+                        {a.assetTag}{a.serialNumber ? ` (SN: ${a.serialNumber})` : ''}
+                        {a.correctionReason && (
+                          <div style={{ fontSize: '10.5px', color: '#92400e' }}>Note: {a.correctionReason}</div>
+                        )}
+                      </div>
+                    ))
+                  : '-'}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -296,7 +339,7 @@ function renderReturnSummaryTable(summary) {
             <th style={styles.itemTh}>Component</th>
             <th style={styles.itemTh}>Ordered</th>
             <th style={styles.itemTh}>Returned</th>
-            <th style={styles.itemTh}>Damaged</th>
+            <th style={styles.itemTh}>Damaged/Consumed</th>
             <th style={styles.itemTh}>Pending</th>
           </tr>
         </thead>
@@ -357,6 +400,7 @@ const styles = {
   actionBar: { marginTop: '16px', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' },
   actionBarMobile: { flexDirection: 'column', alignItems: 'stretch' },
   returnBtn: { background: 'linear-gradient(135deg, #1565c0, #1e88e5)', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '9px', cursor: 'pointer', fontWeight: 700, fontSize: '13px' },
+  downloadBtn: { background: 'linear-gradient(135deg, #1a237e, #3949ab)', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '9px', cursor: 'pointer', fontWeight: 700, fontSize: '13px' },
   actionHint: { fontSize: '12px', color: '#6b7280', maxWidth: '460px' },
   waitingBox: { marginTop: '16px', background: '#fff3e0', border: '1px solid #fdba74', color: '#9a3412', padding: '12px 14px', borderRadius: '10px', fontSize: '13px', fontWeight: 600 },
   damageNote: { marginTop: '8px', color: '#b91c1c' },

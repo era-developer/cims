@@ -21,4 +21,11 @@ function adminOnly(req, res, next) {
   next();
 }
 
-module.exports = { authMiddleware, adminOnly };
+function superAdminOnly(req, res, next) {
+  if (req.user.role !== 'super_admin') {
+    return res.status(403).json({ message: 'Super admin access required' });
+  }
+  next();
+}
+
+module.exports = { authMiddleware, adminOnly, superAdminOnly };

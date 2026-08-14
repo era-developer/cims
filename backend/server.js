@@ -3,7 +3,6 @@ const cors = require('cors');
 const path = require('path');
 require('dotenv').config();
 
-const { initAllCenterData } = require('./utils/excel');
 const { verifyEmailConnection } = require('./utils/email');
 const { verifyWhatsAppConnection } = require('./utils/whatsapp');
 const { processReturnReminders } = require('./utils/reminders');
@@ -17,6 +16,13 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// Every /api response is per-user, dynamic data -- never let a browser,
+// proxy, or tunnel cache it and serve a stale copy on the next fetch.
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  next();
+});
+
 // Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/components', require('./routes/components'));
@@ -24,14 +30,37 @@ app.use('/api/orders', require('./routes/orders'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/transfers', require('./routes/transfers'));
 app.use('/api/webhooks', require('./routes/webhooks'));
+app.use('/api/invoices', require('./routes/invoices'));
+app.use('/api/assets', require('./routes/assets'));
+app.use('/api/programs', require('./routes/programs'));
+app.use('/api/internal-issues', require('./routes/internal-issues'));
+app.use('/api/procurement', require('./routes/procurement'));
+
+// Catalog photos, either the small original curated set or ones uploaded
+// via POST /api/assets/upload-image (see routes/assets.js) -- same-origin
+// static files, so no CORS/hotlink proxy is needed the way externally
+// -hosted (Drive) component photos require. Filenames are random UUIDs
+// assigned once at upload time and never reused, so it's safe to let
+// browsers cache them indefinitely instead of re-fetching on every visit.
+app.use('/catalog-images', express.static(path.join(__dirname, 'data', 'catalog_images'), {
+  maxAge: '30d',
+  immutable: true,
+}));
 
 // Serve frontend build in production
 const frontendBuild = path.join(__dirname, '../frontend/build');
 const frontendIndex = path.join(frontendBuild, 'index.html');
 
 if (fs.existsSync(frontendIndex)) {
-  app.use(express.static(frontendBuild));
-  app.get(/^\/(?!api(?:\/|$)).*/, (req, res) => res.sendFile(frontendIndex));
+  // Hashed JS/CSS bundles (main.<hash>.js) are safe to cache forever -- their
+  // filename changes whenever their content does. index.html is NOT hashed,
+  // so it must always be revalidated, or browsers keep loading an old JS
+  // bundle reference after every new deploy and never see the update.
+  app.use(express.static(frontendBuild, { index: false }));
+  app.get(/^\/(?!api(?:\/|$)).*/, (req, res) => {
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.sendFile(frontendIndex);
+  });
 } else {
   app.get(/^\/(?!api(?:\/|$)).*/, (_, res) => {
     res
@@ -158,18 +187,11 @@ app.get('/api/health', async (_, res) => {
   res.json({ status: 'CIMS Running', time: new Date(), email, whatsapp });
 });
 
-// Init Excel files on first run
-async function init() {
-  console.log('Initializing center-wise workbooks and user directories...');
-  await initAllCenterData();
-}
-
 const PORT = process.env.PORT || 5000;
 const REMINDER_INTERVAL_MS = 60 * 60 * 1000;
 app.listen(PORT, async () => {
   console.log(`\n🚀 CIMS Backend running on http://localhost:${PORT}`);
   console.log(`📊 API Health: http://localhost:${PORT}/api/health`);
-  await init();
   const emailStatus = await verifyEmailConnection();
   if (emailStatus.ok) {
     console.log(`[EMAIL READY] ${emailStatus.message}`);

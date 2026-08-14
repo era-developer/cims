@@ -27,14 +27,17 @@ export default function Navbar() {
       ? [
           { path: '/admin', label: 'Dashboard' },
           { path: '/admin/inventory', label: 'Inventory' },
+          { path: '/admin/invoices', label: 'Invoices' },
           { path: '/admin/orders', label: 'Orders' },
           { path: '/admin/transfers', label: 'Transfers' },
+          { path: '/admin/procurement', label: 'Requests' },
           { path: '/admin/my-center', label: 'My Center' },
           { path: '/admin/users', label: 'Users' },
         ]
       : [
           { path: '/admin', label: 'Dashboard' },
           { path: '/admin/inventory', label: 'Inventory' },
+          { path: '/admin/invoices', label: 'Invoices' },
           { path: '/admin/orders', label: 'Orders' },
           { path: '/admin/my-center', label: 'My Center' },
           { path: '/admin/users', label: 'Users' },

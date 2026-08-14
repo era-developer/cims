@@ -1,6 +1,6 @@
 const express = require('express');
 
-const { logActivity } = require('../utils/excel');
+const { logActivity } = require('../utils/logsDb');
 const { recordIncomingWhatsAppMessage, isAuthorizedInboundRequest } = require('../utils/whatsapp');
 
 const router = express.Router();

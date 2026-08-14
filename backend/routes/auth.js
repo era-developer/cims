@@ -1,31 +1,15 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { addUser, findUser, findUserById, updateUser, logActivity } = require('../utils/excel');
+const { serializeUser, findUserByLogin, findUserById, createUser, updateUser } = require('../utils/usersDb');
+const { logActivity } = require('../utils/logsDb');
 const { getCenterById } = require('../utils/centers');
 const { authMiddleware } = require('../middleware/auth');
+const { getDb } = require('../utils/db');
+const { createOtp, verifyOtp, otpErrorMessage } = require('../utils/otp');
+const { sendOtpEmail } = require('../utils/email');
 
 const router = express.Router();
-
-function serializeUser(user) {
-  return {
-    id: user.id,
-    username: user.username,
-    role: user.role,
-    fullName: user.fullName,
-    email: user.email,
-    mobile: user.mobile || '',
-    altMobile: user.altMobile || '',
-    college: user.college || '',
-    graduationYear: user.graduationYear || '',
-    degree: user.degree || '',
-    department: user.department || '',
-    centerId: user.centerId || '',
-    centerName: user.centerName || '',
-    source: user.source,
-    active: user.active,
-  };
-}
 
 router.post('/register', async (req, res) => {
   try {
@@ -51,11 +35,9 @@ router.post('/register', async (req, res) => {
     }
     if (!getCenterById(payload.centerId)) return res.status(400).json({ message: 'Invalid center selected' });
 
-    await addUser(payload);
+    await createUser(payload);
     await logActivity('REGISTER_REQUEST', payload.username, {
-      role: 'student',
-      centerId: payload.centerId,
-      info: 'Student self-registration submitted for admin approval',
+      role: 'student', centerId: payload.centerId, info: 'Student self-registration submitted for admin approval',
     });
 
     res.status(201).json({
@@ -73,7 +55,7 @@ router.post('/login', async (req, res) => {
     const password = String(req.body.password || '');
     if (!loginId || !password) return res.status(400).json({ message: 'Username/email and password required' });
 
-    const user = await findUser(loginId);
+    const user = findUserByLogin(loginId);
     if (!user) return res.status(401).json({ message: 'Invalid credentials' });
     if (!user.active) {
       const approvalMessage = user.source === 'self'
@@ -98,11 +80,7 @@ router.post('/login', async (req, res) => {
       { expiresIn: '8h' }
     );
 
-    await logActivity('LOGIN', user.username, {
-      role: user.role,
-      centerId: user.centerId,
-      info: 'Logged in successfully',
-    });
+    await logActivity('LOGIN', user.username, { role: user.role, centerId: user.centerId, info: 'Logged in successfully' });
     res.json({
       token,
       user: serializeUser(user),
@@ -113,9 +91,70 @@ router.post('/login', async (req, res) => {
   }
 });
 
+// Always returns the same generic message whether or not the account/email
+// actually exists -- otherwise this endpoint would let anyone probe for
+// valid usernames/emails by watching which ones get a different response.
+const FORGOT_PASSWORD_GENERIC_MESSAGE = 'If an account with that username or email exists and has an email on file, a verification code has been sent to it.';
+
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const loginId = String(req.body.loginId || req.body.username || '').trim();
+    if (!loginId) return res.status(400).json({ message: 'Enter your username or email.' });
+
+    const user = findUserByLogin(loginId);
+    if (user && user.active && user.email) {
+      const db = getDb();
+      const { code, expiresInMinutes } = await createOtp(db, { userId: user.id, purpose: 'password_reset', targetEmail: user.email });
+      // A null code means a still-valid code from a recent request already
+      // exists -- nothing new to send, the earlier email already has a
+      // working code. Still respond with the same generic message either way.
+      if (code) {
+        await sendOtpEmail({ targetEmail: user.email, centerId: user.centerId, code, purpose: 'password_reset', expiresInMinutes });
+        await logActivity('PASSWORD_RESET_REQUESTED', user.username, { role: user.role, centerId: user.centerId, info: 'Password reset code requested' });
+      }
+    }
+    res.json({ message: FORGOT_PASSWORD_GENERIC_MESSAGE });
+  } catch (err) {
+    console.error(err);
+    res.json({ message: FORGOT_PASSWORD_GENERIC_MESSAGE }); // never leak internal errors on this endpoint either
+  }
+});
+
+router.post('/reset-password', async (req, res) => {
+  try {
+    const loginId = String(req.body.loginId || req.body.username || '').trim();
+    const code = String(req.body.code || '').trim();
+    const newPassword = String(req.body.newPassword || '');
+    if (!loginId || !code || !newPassword) {
+      return res.status(400).json({ message: 'Username/email, code, and new password are required.' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: 'New password must be at least 6 characters.' });
+    }
+
+    const user = findUserByLogin(loginId);
+    // Same code-verification failure message whether the account doesn't
+    // exist or the code is simply wrong -- avoids re-opening the account
+    // -enumeration hole that the generic message on /forgot-password closes.
+    if (!user) return res.status(400).json({ message: 'Invalid or expired code.' });
+
+    const db = getDb();
+    const result = await verifyOtp(db, { userId: user.id, purpose: 'password_reset', code });
+    if (!result.ok) return res.status(400).json({ message: otpErrorMessage(result.reason) });
+
+    await updateUser(user.id, { password: newPassword });
+    await logActivity('PASSWORD_RESET', user.username, { role: user.role, centerId: user.centerId, info: 'Password reset via emailed code' });
+
+    res.json({ message: 'Password reset successfully. You can now sign in with your new password.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Unable to reset password right now.' });
+  }
+});
+
 router.get('/profile', authMiddleware, async (req, res) => {
   try {
-    const user = await findUserById(req.user.id);
+    const user = findUserById(req.user.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
     res.json({ user: serializeUser(user) });
   } catch (err) {
@@ -126,7 +165,7 @@ router.get('/profile', authMiddleware, async (req, res) => {
 
 router.put('/profile', authMiddleware, async (req, res) => {
   try {
-    const user = await findUserById(req.user.id);
+    const user = findUserById(req.user.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
     const updates = {
@@ -142,9 +181,7 @@ router.put('/profile', authMiddleware, async (req, res) => {
 
     const updated = await updateUser(req.user.id, updates);
     await logActivity('UPDATE_PROFILE', req.user.username, {
-      role: req.user.role,
-      centerId: user.centerId,
-      info: 'Student profile updated from checkout/profile flow',
+      role: req.user.role, centerId: user.centerId, info: 'Student profile updated from checkout/profile flow',
     });
     res.json({ message: 'Profile updated', user: serializeUser(updated) });
   } catch (err) {

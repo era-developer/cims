@@ -94,6 +94,7 @@ export default function StudentDashboard() {
   }
 
   function handleAddToCart(component) {
+    if (component.checkoutEligible === false) return;
     addToCart(component, 1);
     setToast(`${component.name} added to cart.`);
     setTimeout(() => setToast(''), 2200);
@@ -197,6 +198,7 @@ export default function StudentDashboard() {
 }
 
 function ComponentCard({ comp, inCart, cartQty, onAddToCart, onOpenDetails, isMobile }) {
+  const canCheckout = comp.checkoutEligible !== false;
   const stockColor = comp.stock > 10 ? '#2e7d32' : comp.stock > 0 ? '#f57f17' : '#c62828';
   const stockBg = comp.stock > 10 ? '#e8f5e9' : comp.stock > 0 ? '#fff9c4' : '#fce4ec';
   const stockLabel = comp.stock > 10 ? 'In Stock' : comp.stock > 0 ? 'Low Stock' : 'Out of Stock';
@@ -230,8 +232,8 @@ function ComponentCard({ comp, inCart, cartQty, onAddToCart, onOpenDetails, isMo
             <span style={styles.cardIcon}>{CATEGORY_ICONS[comp.category] || CATEGORY_ICONS.default}</span>
           </div>
         )}
-        <div style={{ ...styles.stockBadge, background: stockBg, color: stockColor }}>
-          {stockLabel}
+        <div style={{ ...styles.stockBadge, ...(canCheckout ? { background: stockBg, color: stockColor } : styles.infoBadge) }}>
+          {canCheckout ? stockLabel : 'Info Only'}
         </div>
       </div>
 
@@ -240,14 +242,19 @@ function ComponentCard({ comp, inCart, cartQty, onAddToCart, onOpenDetails, isMo
         <h3 style={styles.cardName}>{comp.name}</h3>
         <p style={styles.cardDesc}>{comp.description}</p>
         <div style={styles.cardMeta}>
-          <span style={styles.metaChip}>{comp.location}</span>
           <span style={styles.metaChip}>{comp.unit}</span>
         </div>
         <div style={{ ...styles.cardFooter, ...(isMobile ? styles.cardFooterMobile : {}) }}>
-          <div style={styles.stockInfo}>
-            <span style={{ ...styles.stockNum, color: stockColor }}>{comp.stock}</span>
-            <span style={styles.stockLabel}>available</span>
-          </div>
+          {canCheckout ? (
+            <div style={styles.stockInfo}>
+              <span style={{ ...styles.stockNum, color: stockColor }}>{comp.stock}</span>
+              <span style={styles.stockLabel}>available</span>
+            </div>
+          ) : (
+            <div style={styles.stockInfo}>
+              <span style={styles.infoOnlyNote}>For information only</span>
+            </div>
+          )}
           <div style={{ ...styles.cardActions, ...(isMobile ? styles.cardActionsMobile : {}) }}>
             <button
               style={styles.detailBtn}
@@ -257,7 +264,7 @@ function ComponentCard({ comp, inCart, cartQty, onAddToCart, onOpenDetails, isMo
               }}>
               View Details
             </button>
-            {inCart ? (
+            {!canCheckout ? null : inCart ? (
               <div style={styles.inCartBadge}>In Cart ({cartQty})</div>
             ) : (
               <button
@@ -316,6 +323,8 @@ const styles = {
   cardImgPlaceholder: { width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   cardIcon: { fontSize: '18px', fontWeight: 800, color: '#17355f', background: 'rgba(255,255,255,0.84)', padding: '12px 16px', borderRadius: '999px', letterSpacing: '0.08em' },
   stockBadge: { position: 'absolute', top: '10px', right: '10px', padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 700 },
+  infoBadge: { background: '#eef2ff', color: '#3730a3' },
+  infoOnlyNote: { fontSize: '12px', color: '#6b7280', fontStyle: 'italic' },
   cardBody: { padding: '16px' },
   cardCat: { fontSize: '11px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' },
   cardName: { fontFamily: "'DM Sans', sans-serif", fontSize: '16px', fontWeight: 800, color: '#1a1a2e', marginBottom: '8px', lineHeight: '1.3' },

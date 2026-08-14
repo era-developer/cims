@@ -18,9 +18,31 @@ logs/
 # IDE / OS files
 .DS_Store
 Thumbs.db
+desktop.ini
+**/desktop.ini
+
+# Cloud-sync temp folders
+.tmp.driveupload/
+
+# Python virtualenv
+.venv/
+
+# Claude Code local state
+.claude/settings.local.json
+.claude/*.lock
 
 # Build output
 frontend/build/
+
+# SQLite databases and snapshots (runtime/test data, not source)
+*.db
+*.db-shm
+*.db-wal
+backend/data_v1_snapshot_for_migration_dryrun/
+data_v1_snapshot_for_migration_dryrun/
+
+# Debug/scratch dumps
+backend/classification_dump.txt
 
 # Backend runtime data
 backend/data/*.xlsx
