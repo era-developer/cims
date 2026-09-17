@@ -103,13 +103,16 @@ export default function Login() {
   }, [forgotCooldown > 0]);
 
   // A QR label opens the short link with ?unit=<tag>; a signed-out visit to
-  // /unit/<tag> comes back as ?next=/unit/<tag>. Either way, once signed in
-  // (now or already), go straight to that unit's page.
+  // any protected page (a unit page, an order opened from a notification)
+  // comes back as ?next=/that/path. Either way, once signed in (now or
+  // already), go straight there. Only in-app paths are honoured, never a
+  // full URL, so the parameter cannot bounce anyone off the portal.
   const unitParam = searchParams.get('unit');
   const nextParam = searchParams.get('next');
+  const safeNext = nextParam && nextParam.startsWith('/') && !nextParam.startsWith('//') ? nextParam : '';
   const afterLogin = unitParam
     ? `/unit/${encodeURIComponent(String(unitParam).trim().toUpperCase())}`
-    : (nextParam && nextParam.startsWith('/unit/') ? nextParam : '');
+    : safeNext;
   useEffect(() => {
     if (signedIn && afterLogin) navigate(afterLogin, { replace: true });
   }, [signedIn, afterLogin, navigate]);

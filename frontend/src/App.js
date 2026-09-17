@@ -30,9 +30,10 @@ function PrivateRoute({ children, role }) {
   const { user, loading } = useAuth();
   if (loading) return <div style={{ padding: '80px', textAlign: 'center', color: '#6b7280', fontFamily: "'DM Sans', sans-serif" }}>Loading {APP_SHORT_NAME}...</div>;
   if (!user) {
-    // A QR label opened while signed out: come back here after login.
+    // Opened while signed out (a QR label, a notification tap, a pasted
+    // link): come back to this exact page after login.
     const wanted = window.location.pathname + window.location.search;
-    const next = wanted.startsWith('/unit/') ? `?next=${encodeURIComponent(wanted)}` : '';
+    const next = wanted && wanted !== '/' ? `?next=${encodeURIComponent(wanted)}` : '';
     return <Navigate to={`/${next}`} replace />;
   }
   const allowedRoles = Array.isArray(role) ? role : role ? [role] : [];

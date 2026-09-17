@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import useViewport from '../hooks/useViewport';
+import NotificationsCard from '../components/NotificationsCard';
 
 const INITIAL_FORM = {
   fullName: '',
@@ -118,6 +119,8 @@ export default function MyProfile() {
             </div>
           </form>
         </div>
+
+        <NotificationsCard style={{ marginTop: '16px' }} />
       </div>
     </div>
   );

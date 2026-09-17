@@ -1,4 +1,5 @@
 const { sendReturnReminder } = require('./email');
+const { notifyStudentReturnReminder } = require('./push');
 const { listCenters } = require('./centers');
 
 function startOfDay(date) {
@@ -38,6 +39,7 @@ async function processReturnReminders() {
       if (!result?.ok) continue;
 
       markReminderSent(order.orderId, new Date().toISOString());
+      notifyStudentReturnReminder(order);
       sentCount += 1;
     } catch (err) {
       console.error(`[REMINDER ERROR] ${order.orderId}: ${err.message}`);

@@ -113,6 +113,11 @@ SMTP_PASS=<gmail app password>
 # Public URL (email footers, registration QR)
 SITE_URL=http://localhost:5001
 
+# Browser push notifications (generate once: node -e "console.log(require('web-push').generateVAPIDKeys())")
+VAPID_PUBLIC_KEY=<from generateVAPIDKeys>
+VAPID_PRIVATE_KEY=<from generateVAPIDKeys>
+VAPID_SUBJECT=mailto:<contact address>
+
 # WhatsApp via n8n (optional)
 N8N_WHATSAPP_ENABLED=false
 # N8N_WHATSAPP_OUTBOUND_WEBHOOK=

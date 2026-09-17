@@ -5,6 +5,7 @@ const path = require('path');
 const PDFDocument = require('pdfkit');
 const { getDb } = require('../utils/db');
 const { sendOrderNotification, sendStatusUpdate, sendOtpEmail } = require('../utils/email');
+const push = require('../utils/push');
 const { authMiddleware, adminOnly } = require('../middleware/auth');
 const { swapAsset } = require('../utils/assetSwap');
 const { createOtp, verifyOtp, otpErrorMessage } = require('../utils/otp');
@@ -353,6 +354,7 @@ router.post('/', authMiddleware, async (req, res) => {
   const row = loadOrderRows(db, centerId).find(r => r.order_id === orderId);
   const orderForNotification = buildOrderResponse(db, row);
   sendOrderNotification(orderForNotification, centerId).catch(console.error);
+  push.notifyAdminsNewOrder(orderForNotification, { excludeUserId: req.user.id });
 
   res.status(201).json({ message: 'Order placed successfully', orderId });
 });
@@ -606,7 +608,9 @@ router.put('/:orderId/return-request', authMiddleware, (req, res) => {
       .run(now, row.id);
 
     const updatedRow = { ...row, status: 'Return Requested', return_requested_at: now };
-    sendStatusUpdate(buildOrderResponse(db, updatedRow), 'Return Requested', req.body?.remarks || '', row.center_id).catch(console.error);
+    const returnOrder = buildOrderResponse(db, updatedRow);
+    sendStatusUpdate(returnOrder, 'Return Requested', req.body?.remarks || '', row.center_id).catch(console.error);
+    push.notifyAdminsReturnRequested(returnOrder, { excludeUserId: req.user.id });
 
     res.json({ message: 'Return request submitted. Please hand the components back to the lab/admin.' });
   } catch (err) {
@@ -882,6 +886,7 @@ router.put('/:orderId/status', authMiddleware, adminOnly, (req, res) => {
     const refreshedRow = loadOrderRows(db, null).find(r => r.order_id === row.order_id) || row;
     const orderForNotification = { ...buildOrderResponse(db, refreshedRow), rejectedItems: rejectedItemsForEmail };
     sendStatusUpdate(orderForNotification, finalStatus, remarks, row.center_id).catch(console.error);
+    push.notifyStudentOrderStatus(orderForNotification, finalStatus);
 
     res.json({ message: `Order ${finalStatus}`, status: finalStatus });
   } catch (err) {

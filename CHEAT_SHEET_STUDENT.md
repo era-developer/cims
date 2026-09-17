@@ -40,6 +40,11 @@
 - `Partially Returned`: some quantity still pending.
 - `Returned`: fully closed.
 
+## 4a) Notifications
+- Tap **Enable** on the yellow bar (Browse page) to get order updates on this device.
+- Manage or test: `My Profile` → Notifications on this device.
+- iPhone: add KIMS to Home Screen first.
+
 ## 5) Return process
 
 1. Open approved order in `My Orders`.

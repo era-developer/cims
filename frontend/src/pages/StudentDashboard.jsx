@@ -5,6 +5,7 @@ import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import SmartImage from '../components/SmartImage';
 import useViewport from '../hooks/useViewport';
+import NotificationsCard from '../components/NotificationsCard';
 
 const CATEGORY_ICONS = {
   Microcontroller: 'MCU',
@@ -132,6 +133,7 @@ export default function StudentDashboard() {
       </div>
 
       <div style={{ ...styles.content, ...(isMobile ? styles.contentMobile : {}) }}>
+        <NotificationsCard compact style={{ marginBottom: '14px' }} />
         <div style={{ ...styles.toolbar, ...(isMobile ? styles.toolbarMobile : {}) }}>
           <div style={styles.searchWrap}>
             <span style={styles.searchIcon}>Search</span>

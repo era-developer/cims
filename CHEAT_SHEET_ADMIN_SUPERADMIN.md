@@ -88,6 +88,11 @@ From `Settings`:
 - Add / rename business heads (funding entities on invoices). Launch
   default is `ERA Foundation`.
 
+## 7a) Notifications on your device
+- Dashboard yellow bar → **Enable** to get new orders, return requests and registrations instantly.
+- Manage / test: **My Center** (admin) or **Settings** (super admin).
+- You never get a notification for an action you took yourself.
+
 ## 8) Downloads for reporting
 
 From dashboard:

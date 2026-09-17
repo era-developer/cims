@@ -349,6 +349,35 @@ Admin emails go to the center's own notification email if set in
 `Settings`, otherwise the org-wide order notification email. No email ever
 contains a password.
 
+### 9.5 Browser / phone notifications (push)
+Alongside e-mail, KIMS sends instant notifications to any device where the
+person enabled them. Nothing is sent to anyone who has not opted in.
+
+| Event | Student gets | Admins of that center + super admins get |
+|---|---|---|
+| Student places an order | - | New order (who, what) |
+| Order approved | Approved, what to collect, return-by date | - |
+| Order rejected | Rejected, with the reason | - |
+| Student requests a return | - | Return requested (what is coming back) |
+| Partial / full return recorded | What is still outstanding / order closed | - |
+| Day before expected return | Return reminder | - |
+| Student self-registers | - | New registration to approve |
+
+The admin who performs an action never receives their own notification.
+Tapping a notification opens the order on the right page.
+
+**Enabling:** a yellow bar on the dashboard offers **Enable** while a device is
+not yet enabled. The full switch (**Enable / Turn off / Send me a test**, plus
+the number of enabled devices) is on **My Center** for admins and on
+**Settings** for the super admin; students have it on **My Profile**. Each
+browser/phone is enabled separately. iPhone/iPad requires the portal to be
+added to the Home Screen first.
+
+**Housekeeping:** subscriptions are stored per user and removed automatically
+when the browser drops them or the user is deleted. The server keys live in
+`backend.env` (`VAPID_*`, see KIMS_DEPLOYMENT.md); regenerating them
+silently invalidates every device, so leave them alone.
+
 ## 10) Report downloads and audit
 
 Use Dashboard download section for exports:

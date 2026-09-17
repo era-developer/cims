@@ -8,6 +8,7 @@ const { authMiddleware } = require('../middleware/auth');
 const { getDb } = require('../utils/db');
 const { createOtp, verifyOtp, otpErrorMessage } = require('../utils/otp');
 const { sendOtpEmail, sendRegistrationSubmitted, sendPasswordChanged } = require('../utils/email');
+const push = require('../utils/push');
 
 const router = express.Router();
 
@@ -45,6 +46,7 @@ router.post('/register', async (req, res) => {
       centerId: payload.centerId,
       centerName: getCenterById(payload.centerId)?.name || '',
     }).catch(err => console.error('[email] registration notice failed:', err.message));
+    push.notifyAdminsNewRegistration({ centerId: payload.centerId, fullName: payload.fullName, username: payload.username });
 
     res.status(201).json({
       message: 'Registration submitted successfully. Please wait for admin approval before signing in.',

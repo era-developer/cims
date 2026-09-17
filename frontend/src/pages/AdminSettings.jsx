@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useCenters } from '../context/CentersContext';
 import useViewport from '../hooks/useViewport';
 import BackBar from '../components/BackBar';
+import NotificationsCard from '../components/NotificationsCard';
 
 // Super-admin settings: who order notifications go to, which business heads
 // invoices can be booked against, and which centers exist.
@@ -316,6 +317,9 @@ Continue?`;
 
       {message && <div style={styles.successBanner}>{message}</div>}
       {error && <div style={styles.errorBanner}>{error}</div>}
+
+      {/* ---------- Browser notifications for the signed-in admin ---------- */}
+      <NotificationsCard style={{ marginBottom: '18px' }} />
 
       {/* ---------- Notification contacts ---------- */}
       <div style={styles.card}>

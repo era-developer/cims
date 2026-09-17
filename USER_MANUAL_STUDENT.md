@@ -97,6 +97,25 @@ Important:
 - Admin may reduce quantities during approval if full quantity is not available.
 - If reduced, only approved quantities are issued.
 
+### 4.1 Notifications on your phone
+KIMS can notify you the moment an admin acts on your order — approved,
+rejected, a return recorded, or a reminder the day before a return is due —
+even when the portal is closed.
+
+- A yellow **Get notified on this device** bar appears on the Browse page. Tap
+  **Enable** and allow notifications when the browser asks.
+- To turn it off, send yourself a test, or check which devices are enabled, go
+  to **My Profile → Notifications on this device**.
+- Each device is separate: enable it on your phone and on your laptop if you
+  use both.
+- **iPhone/iPad:** notifications only work after adding KIMS to the Home Screen
+  (Share → Add to Home Screen) and opening it from there.
+- If you tapped *Block* by mistake, allow notifications for the site from the
+  browser's address-bar site settings and try again.
+
+Tapping a notification opens that order in My Orders (after sign-in if needed).
+Notifications never contain passwords or codes.
+
 ## 5) Return flow for students
 
 1. In `My Orders`, open an `Approved` order.
@@ -119,6 +138,7 @@ and saved your password there.
 ## 7) My Profile
 
 Use `My Profile` to keep your details updated. Updated data helps future checkout auto-fill and cleaner order records.
+The **Notifications on this device** card at the bottom turns phone/browser notifications on or off (see 4.1).
 
 ## 8) Student best practices
 

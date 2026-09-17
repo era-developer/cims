@@ -5,6 +5,7 @@ import { APP_LONG_NAME, APP_SHORT_NAME, APP_SUBTITLE } from '../brand';
 import { useCenters } from '../context/CentersContext';
 import { useAuth } from '../context/AuthContext';
 import useViewport from '../hooks/useViewport';
+import NotificationsCard from '../components/NotificationsCard';
 import { formatInr } from '../utils/currency';
 
 // Append one line here as each V2.1 phase ships, so the notice on the
@@ -190,6 +191,8 @@ export default function AdminDashboard() {
             <button style={{ ...styles.secondaryAction, ...(isMobile ? styles.fullWidthBtn : {}) }} onClick={() => navigate(inventoryPath)}>Manage Inventory</button>
           </div>
         </div>
+
+        <NotificationsCard compact style={{ marginBottom: '14px' }} />
 
         <div style={styles.superBar}>
           <div style={styles.filterBarRow}>

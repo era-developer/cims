@@ -109,6 +109,18 @@ N8N_WHATSAPP_SHARED_SECRET=<shared secret>
 
 Until then the WhatsApp handoff button is simply hidden from students.
 
+### 2a. Browser push notifications — configured
+
+Web Push (VAPID) via the MIT `web-push` package; no third-party account. The
+key pair was generated on 2026-09-17 into `backend.env` as
+`VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT`. The public key
+is baked into every device subscription, so **never regenerate it** unless you
+accept that every user has to enable notifications again. Subscriptions live
+in the `push_subscriptions` table (migration 022) and go away with the user.
+Delivery goes browser → its vendor push service (FCM for Chrome/Android,
+Mozilla, Apple); KIMS only ever talks to those endpoints. If the keys are
+missing the feature switches itself off and the UI hides.
+
 ### 3. Public URL — configured (Tailscale Funnel)
 
 KIMS is reachable worldwide at **<https://kalampragati.s.gy/kims>** (a short.io

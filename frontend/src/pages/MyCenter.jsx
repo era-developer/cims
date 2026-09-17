@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import ProgramSelect, { resolveProgramName, OTHER_PROGRAM } from '../components/ProgramSelect';
 import { useCenters } from '../context/CentersContext';
+import NotificationsCard from '../components/NotificationsCard';
 
 const PROGRAM_STATUS_META = {
   planning: { label: 'Planning', color: '#1d4ed8', bg: '#dbeafe' },
@@ -998,6 +999,8 @@ export default function MyCenter() {
           </div>
         </div>
       )}
+
+      <NotificationsCard style={{ marginTop: '16px' }} />
     </div>
   );
 }
