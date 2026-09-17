@@ -74,6 +74,12 @@ if (fs.existsSync(frontendIndex)) {
   // filename changes whenever their content does. index.html is NOT hashed,
   // so it must always be revalidated, or browsers keep loading an old JS
   // bundle reference after every new deploy and never see the update.
+  // The service worker and manifest must never be served stale, or a deploy
+  // would not be picked up until the browser's HTTP cache expired.
+  app.get(['/sw.js', '/manifest.json'], (req, res, next) => {
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    next();
+  });
   app.use(express.static(frontendBuild, { index: false }));
   app.get(/^\/(?!api(?:\/|$)).*/, (req, res) => {
     res.set('Cache-Control', 'no-cache, no-store, must-revalidate');

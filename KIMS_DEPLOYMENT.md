@@ -153,6 +153,21 @@ Note on Comedkare: its `comedkares-cims.duckdns.org:5000` address is plain
 HTTP with a router port-forward, so its logins cross the internet unencrypted.
 It is untouched here, but the same Funnel approach would fix it.
 
+## Installable app (PWA)
+
+The portal is a Progressive Web App: `frontend/public/manifest.json`, icons
+under `frontend/public/icons/`, and a service worker `frontend/public/sw.js`
+that caches the app shell and component photos (never `/api/`). On Android
+Chrome the sign-in page shows an **Install KIMS app** button; on iPhone it
+shows the *Share -> Add to Home Screen* hint. Installation needs HTTPS, which
+the public URL provides.
+
+Each `npm run build` stamps the worker's cache name with the bundle hash
+(`frontend/scripts/stamp-sw.js`), so a deploy installs a fresh worker and old
+shells are discarded. The server sends `no-store` for `sw.js` and
+`manifest.json`. Use `npm run build` (not `react-scripts build` directly) so
+the stamp step runs.
+
 ## Where the data lives
 
 Everything the portal stores is under `backend\data`, laid out so a person can

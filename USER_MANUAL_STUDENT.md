@@ -24,6 +24,14 @@ Notes:
 - You can also register through the center registration link/QR.
 - If login says approval is pending, contact your center admin.
 
+### 1.1a Install KIMS as an app (optional)
+KIMS can be added to your phone's home screen and opens like an app:
+- **Android (Chrome):** open the KIMS link, then tap **Install KIMS app on this
+  phone** on the sign-in page (or the browser menu -> *Install app*).
+- **iPhone (Safari):** open the KIMS link, tap **Share**, then **Add to Home
+  Screen**.
+The app updates itself; there is nothing to reinstall.
+
 ### 1.2 Sign in
 1. Open the login page.
 2. Enter `Username or Email` and `Password`.

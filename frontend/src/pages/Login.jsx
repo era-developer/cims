@@ -50,6 +50,31 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [registrationLink, setRegistrationLink] = useState('');
 
+  // "Install app": Chrome/Edge/Android fire beforeinstallprompt when the site
+  // qualifies as a PWA; we hold the event and trigger it from a button.
+  // Safari on iPhone never fires it, so there we show the manual steps.
+  const [installPrompt, setInstallPrompt] = useState(null);
+  const [showIosHint, setShowIosHint] = useState(false);
+  const isStandalone = typeof window !== 'undefined'
+    && (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true);
+  const isIos = typeof navigator !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent);
+
+  useEffect(() => {
+    const onPrompt = event => { event.preventDefault(); setInstallPrompt(event); };
+    window.addEventListener('beforeinstallprompt', onPrompt);
+    return () => window.removeEventListener('beforeinstallprompt', onPrompt);
+  }, []);
+
+  async function installApp() {
+    if (installPrompt) {
+      installPrompt.prompt();
+      await installPrompt.userChoice.catch(() => {});
+      setInstallPrompt(null);
+      return;
+    }
+    setShowIosHint(current => !current);
+  }
+
   // Preselect the first center once the list arrives, so a registering
   // student is never looking at an empty required dropdown. Only fills a
   // blank value, so it never overwrites a choice the user already made.
@@ -436,6 +461,16 @@ export default function Login() {
             </div>
             <div style={styles.linkBox}>{registrationLink || 'Open this page in the browser to generate the registration link.'}</div>
             <button style={styles.secondaryBtn} onClick={copyRegistrationLink}>Copy Registration Link</button>
+            {!isStandalone && (installPrompt || isIos) && (
+              <button type="button" style={styles.secondaryLinkBtn} onClick={installApp}>
+                Install {APP_SHORT_NAME} app on this phone
+              </button>
+            )}
+            {showIosHint && (
+              <div style={styles.iosHint}>
+                On iPhone: tap the <strong>Share</strong> button in Safari, then <strong>Add to Home Screen</strong>.
+              </div>
+            )}
             {/* Hidden unless a guide URL is configured for this deployment --
                 the previous hardcoded link pointed at Comedkare's document. */}
             {STUDENT_USER_GUIDE_URL && (
@@ -565,5 +600,6 @@ const styles = {
   qrWrap: { background: '#fff', borderRadius: '18px', padding: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' },
   linkBox: { background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.18)', color: 'rgba(255,255,255,0.92)', borderRadius: '12px', padding: '12px', fontSize: '12px', lineHeight: 1.6, wordBreak: 'break-word', marginBottom: '14px' },
   secondaryBtn: { width: '100%', padding: '12px 14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.24)', background: 'rgba(255,255,255,0.14)', color: '#fff', fontFamily: "'DM Sans', sans-serif", fontSize: '14px', fontWeight: 700, cursor: 'pointer' },
+  iosHint: { marginTop: '10px', padding: '10px 12px', borderRadius: '10px', background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.9)', fontSize: '12px', lineHeight: 1.5 },
   secondaryLinkBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', padding: '12px 14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.24)', background: 'rgba(255,255,255,0.14)', color: '#fff', fontFamily: "'DM Sans', sans-serif", fontSize: '14px', fontWeight: 700, cursor: 'pointer', textDecoration: 'none', marginTop: '12px', boxSizing: 'border-box' },
 };
