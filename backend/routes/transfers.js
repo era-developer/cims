@@ -7,7 +7,14 @@ const { logActivity } = require('../utils/logsDb');
 const { swapAsset } = require('../utils/assetSwap');
 
 const router = express.Router();
-const ADMIN_RECIPIENTS = [process.env.ADMIN_EMAIL].filter(Boolean);
+// Super-admin recipients for org-level events. Resolved at send time from
+// Settings (falls back to the legacy ADMIN_EMAIL / CENTER_EMAIL env vars), so
+// changing the responsible admin in the UI takes effect without a restart.
+function superAdminRecipients() {
+  const settings = require('../utils/settings');
+  const fromSettings = settings.getOrderEmail(null);
+  return [...new Set([fromSettings, process.env.ADMIN_EMAIL].filter(Boolean))];
+}
 
 function loadTransferRow(db, code) {
   return db.prepare(`
@@ -162,7 +169,7 @@ router.post('/', authMiddleware, adminOnly, async (req, res) => {
     const transfer = buildTransferResponse(db, row);
 
     await logActivity('TRANSFER_REQUEST', req.user.username, { role: req.user.role, centerId, info: `Requested ${components.length} components (Transfer ${transfer.id})` });
-    await sendTransferNotification({ transfer, type: 'request', recipients: ADMIN_RECIPIENTS });
+    await sendTransferNotification({ transfer, type: 'request', recipients: superAdminRecipients() });
     res.status(201).json(transfer);
   } catch (err) {
     console.error('Transfer POST error:', err.message);
@@ -195,7 +202,7 @@ router.post('/:id/return-request', authMiddleware, adminOnly, async (req, res) =
 
     const updated = buildTransferResponse(db, loadTransferRow(db, req.params.id));
     await logActivity('TRANSFER_RETURN_REQUESTED', req.user.username, { role: req.user.role, centerId: row.requesting_center_id, info: `Return requested for ${req.params.id}` });
-    const recipients = [getAdminRecipient(row.supply_center_id), ...ADMIN_RECIPIENTS].filter(Boolean);
+    const recipients = [getAdminRecipient(row.supply_center_id), ...superAdminRecipients()].filter(Boolean);
     await sendTransferNotification({ transfer: updated, type: 'return-request', recipients });
     res.json(updated);
   } catch (err) {

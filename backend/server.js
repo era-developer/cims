@@ -14,6 +14,14 @@ if (!fs.existsSync(path.join(__dirname, 'data'))) mkdirSync(path.join(__dirname,
 // health endpoint never depend on the database being open.
 const APP_SHORT_NAME = process.env.ORG_SHORT_NAME || 'KIMS';
 
+// A missing JWT_SECRET used to fall back to a hardcoded default shared by
+// every deployment of this codebase -- so a token from one portal would have
+// verified on another. Refuse to start instead of silently degrading.
+if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
+  console.error('[FATAL] JWT_SECRET is missing or shorter than 32 characters. Set it in backend/.env.');
+  process.exit(1);
+}
+
 const app = express();
 
 app.use(cors());

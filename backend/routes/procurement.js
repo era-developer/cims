@@ -11,7 +11,14 @@ const { sendProcurementNotification, getAdminRecipient } = require('../utils/ema
 
 const router = express.Router();
 
-const ADMIN_RECIPIENTS = [process.env.ADMIN_EMAIL].filter(Boolean);
+// Super-admin recipients for org-level events. Resolved at send time from
+// Settings (falls back to the legacy ADMIN_EMAIL / CENTER_EMAIL env vars), so
+// changing the responsible admin in the UI takes effect without a restart.
+function superAdminRecipients() {
+  const settings = require('../utils/settings');
+  const fromSettings = settings.getOrderEmail(null);
+  return [...new Set([fromSettings, process.env.ADMIN_EMAIL].filter(Boolean))];
+}
 const STATUS_TIMESTAMP_COLUMN = {
   Approved: 'approved_at', 'Order Placed': 'order_placed_at', 'In Transit': 'in_transit_at', Received: 'received_at',
 };
@@ -109,7 +116,7 @@ router.post('/', authMiddleware, adminOnly, (req, res) => {
 
     db.exec('COMMIT');
     const detail = loadRequestDetail(db, requestId);
-    sendProcurementNotification({ request: detail, type: 'request', recipients: ADMIN_RECIPIENTS }).catch(() => {});
+    sendProcurementNotification({ request: detail, type: 'request', recipients: superAdminRecipients() }).catch(() => {});
     res.status(201).json(detail);
   } catch (err) {
     db.exec('ROLLBACK');

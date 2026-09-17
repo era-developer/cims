@@ -1,4 +1,5 @@
 const express = require('express');
+const { getOrgName, getOrgShortName } = require('../utils/settings');
 const fs = require('fs');
 const path = require('path');
 const PDFDocument = require('pdfkit');
@@ -299,7 +300,9 @@ router.post('/', authMiddleware, async (req, res) => {
     // traceability/reporting via project_id. Project Name is separate,
     // free-text, student-entered context -- not mandatory, no FK.
     const projectId = getOrCreateProject(db, centerId, studentDetails.programName);
-    orderId = `CIMS-${Date.now().toString(36).toUpperCase()}`;
+    // Prefixed with the org short name (KIMS-...), so an order id says
+    // which portal it came from when both programmes share a WhatsApp inbox.
+    orderId = `${require('../utils/settings').getOrgShortName()}-${Date.now().toString(36).toUpperCase()}`;
     const now = new Date().toISOString();
 
     db.prepare(`
@@ -386,8 +389,8 @@ function pdfDateTime(value) {
 function pdfSectionTitle(doc, title) {
   doc.moveDown(0.7);
   const y = doc.y;
-  doc.rect(50, y + 1, 3, 11).fill('#1a237e');
-  doc.fillColor('#1a237e').font('Helvetica-Bold').fontSize(11).text(title, 60, y);
+  doc.rect(50, y + 1, 3, 11).fill('#2d2a6e');
+  doc.fillColor('#2d2a6e').font('Helvetica-Bold').fontSize(11).text(title, 60, y);
   doc.fillColor('#000');
   doc.moveDown(0.5);
   doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor('#e2e8f0').stroke();
@@ -455,14 +458,14 @@ router.get('/:orderId/pdf', authMiddleware, (req, res) => {
   if (LOGO_PATH) {
     doc.image(LOGO_PATH, 50, 30, { width: 170 });
   } else {
-    doc.font('Helvetica-Bold').fontSize(18).fillColor('#1a237e').text('Comedkares Innovation Hub', 50, 34);
+    doc.font('Helvetica-Bold').fontSize(18).fillColor('#2d2a6e').text(getOrgName(), 50, 34);
   }
-  doc.font('Helvetica-Bold').fontSize(13).fillColor('#1a237e').text(order.orderId, 0, 30, { align: 'right', width: contentRight });
+  doc.font('Helvetica-Bold').fontSize(13).fillColor('#2d2a6e').text(order.orderId, 0, 30, { align: 'right', width: contentRight });
   doc.font('Helvetica-Bold').fontSize(9).fillColor('#c2410c').text(order.status, 0, 50, { align: 'right', width: contentRight });
   doc.font('Helvetica').fontSize(7.5).fillColor('#9ca3af').text(`Generated ${pdfDateTime(new Date().toISOString())}`, 0, 66, { align: 'right', width: contentRight });
   doc.fillColor('#000');
 
-  doc.rect(0, 92, pageWidth, 3).fill('#1a237e');
+  doc.rect(0, 92, pageWidth, 3).fill('#2d2a6e');
   doc.fillColor('#000');
 
   doc.y = 112;
@@ -577,7 +580,7 @@ router.get('/:orderId/pdf', authMiddleware, (req, res) => {
   doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor('#e2e8f0').stroke();
   doc.moveDown(0.5);
   doc.font('Helvetica').fontSize(7.5).fillColor('#9ca3af')
-    .text('This is a system-generated record from CIMS (Comedkares Innovation Hub Inventory Management System). Not a priced invoice -- no monetary value is assigned to issued components.', 50, doc.y, { width: 495 });
+    .text(`This is a system-generated record from ${getOrgShortName()} (${getOrgName()} Inventory Management System). Not a priced invoice -- no monetary value is assigned to issued components.`, 50, doc.y, { width: 495 });
 
   doc.end();
 });

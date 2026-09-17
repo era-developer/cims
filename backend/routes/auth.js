@@ -7,7 +7,7 @@ const { getCenterById } = require('../utils/centers');
 const { authMiddleware } = require('../middleware/auth');
 const { getDb } = require('../utils/db');
 const { createOtp, verifyOtp, otpErrorMessage } = require('../utils/otp');
-const { sendOtpEmail } = require('../utils/email');
+const { sendOtpEmail, sendRegistrationSubmitted, sendPasswordChanged } = require('../utils/email');
 
 const router = express.Router();
 
@@ -35,10 +35,16 @@ router.post('/register', async (req, res) => {
     }
     if (!getCenterById(payload.centerId)) return res.status(400).json({ message: 'Invalid center selected' });
 
-    await createUser(payload);
+    const created = await createUser(payload);
     await logActivity('REGISTER_REQUEST', payload.username, {
       role: 'student', centerId: payload.centerId, info: 'Student self-registration submitted for admin approval',
     });
+    // Fire-and-forget: the registration is saved regardless of mail delivery.
+    sendRegistrationSubmitted({
+      user: created || payload,
+      centerId: payload.centerId,
+      centerName: getCenterById(payload.centerId)?.name || '',
+    }).catch(err => console.error('[email] registration notice failed:', err.message));
 
     res.status(201).json({
       message: 'Registration submitted successfully. Please wait for admin approval before signing in.',
@@ -76,7 +82,7 @@ router.post('/login', async (req, res) => {
         centerId: user.centerId || '',
         centerName: user.centerName || '',
       },
-      process.env.JWT_SECRET || 'cims_secret',
+      process.env.JWT_SECRET,
       { expiresIn: '8h' }
     );
 
@@ -128,8 +134,8 @@ router.post('/reset-password', async (req, res) => {
     if (!loginId || !code || !newPassword) {
       return res.status(400).json({ message: 'Username/email, code, and new password are required.' });
     }
-    if (newPassword.length < 6) {
-      return res.status(400).json({ message: 'New password must be at least 6 characters.' });
+    if (newPassword.length < 8) {
+      return res.status(400).json({ message: 'New password must be at least 8 characters.' });
     }
 
     const user = findUserByLogin(loginId);
@@ -144,6 +150,8 @@ router.post('/reset-password', async (req, res) => {
 
     await updateUser(user.id, { password: newPassword });
     await logActivity('PASSWORD_RESET', user.username, { role: user.role, centerId: user.centerId, info: 'Password reset via emailed code' });
+    sendPasswordChanged({ user, centerId: user.centerId, method: 'reset' })
+      .catch(err => console.error('[email] password-reset notice failed:', err.message));
 
     res.json({ message: 'Password reset successfully. You can now sign in with your new password.' });
   } catch (err) {
@@ -220,6 +228,8 @@ router.post('/change-password', authMiddleware, async (req, res) => {
     await logActivity('PASSWORD_CHANGED', user.username, {
       role: user.role, centerId: user.centerId, info: 'Password changed by the user',
     });
+    sendPasswordChanged({ user, centerId: user.centerId, method: 'changed' })
+      .catch(err => console.error('[email] password-change notice failed:', err.message));
     res.json({ message: 'Password changed. Use the new password next time you sign in.' });
   } catch (err) {
     console.error(err);

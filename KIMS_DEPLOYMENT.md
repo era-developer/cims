@@ -22,6 +22,8 @@ fully isolated from each other.
 **Nothing in `D:\KIMS` may point at CIMS's port, database, service name or
 mailbox.** The JWT secrets in particular must stay different: a shared secret
 would make a token issued by one portal valid on the other.
+The server now refuses to start if `JWT_SECRET` is missing or under 32
+characters, so it can never fall back to a default shared with CIMS.
 
 `D:\cims` is the live Comedkare deployment. Do not run KIMS scripts against it.
 

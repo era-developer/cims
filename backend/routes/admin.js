@@ -4,6 +4,7 @@ const { logActivity, getLogs } = require('../utils/logsDb');
 const { getWhatsappMessages } = require('../utils/whatsappDb');
 const { listUsers, createUser, updateUser, deleteUser, serializeUser, findUserById } = require('../utils/usersDb');
 const { verifyWhatsAppConnection } = require('../utils/whatsapp');
+const { sendAccountCreated, sendAccountApproved } = require('../utils/email');
 const {
   listCenters,
   getCenterById,
@@ -550,8 +551,17 @@ router.post('/users', authMiddleware, adminOnly, async (req, res) => {
         return res.status(403).json({ message: 'Only a super admin can create a super admin account' });
       }
     }
-    await createUser(payload);
+    const created = await createUser(payload);
     await logActivity('CREATE_USER', req.user.username, { role: req.user.role, centerId: payload.centerId || req.user.centerId, info: `Created user: ${req.body.username}` });
+    // Welcome mail never carries the password; the admin hands that over.
+    if (created) {
+      sendAccountCreated({
+        user: created,
+        centerId: created.centerId,
+        centerName: created.centerId ? getCenterById(created.centerId)?.name || '' : '',
+        createdBy: req.user.fullName || req.user.username,
+      }).catch(err => console.error('[email] account-created notice failed:', err.message));
+    }
     res.status(201).json({ message: 'User created' });
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -575,6 +585,15 @@ router.put('/users/:id', authMiddleware, adminOnly, async (req, res) => {
     }
     const updated = await updateUser(req.params.id, payload);
     await logActivity('UPDATE_USER', req.user.username, { role: req.user.role, centerId: updated.centerId || current.centerId || req.user.centerId, info: `Updated user: ${updated.username}` });
+    // The approval moment: a self-registered account flipping inactive ->
+    // active is the student's cue that they can sign in.
+    if (!current.active && updated.active && current.source === 'self') {
+      sendAccountApproved({
+        user: updated,
+        centerId: updated.centerId,
+        centerName: updated.centerId ? getCenterById(updated.centerId)?.name || '' : '',
+      }).catch(err => console.error('[email] account-approved notice failed:', err.message));
+    }
     res.json({ message: 'User updated', user: serializeUser(updated) });
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -1051,7 +1070,7 @@ router.get('/download/:type', authMiddleware, adminOnly, async (req, res) => {
       const infoSheet = wb.addWorksheet('Summary', { views: [{ showGridLines: false }] });
       infoSheet.mergeCells('A1:C1');
       const titleCell = infoSheet.getCell('A1');
-      titleCell.value = 'CIMS Asset Value Report';
+      titleCell.value = `${settings.getOrgShortName()} Asset Value Report`;
       titleCell.font = { bold: true, size: 18, color: { argb: 'FF1A237E' } };
       infoSheet.getRow(1).height = 30;
       infoSheet.mergeCells('A2:C2');

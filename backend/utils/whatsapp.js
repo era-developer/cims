@@ -59,7 +59,8 @@ function getStudentRecipient(order) {
 }
 
 function extractOrderId(text = '') {
-  const match = String(text || '').match(/CIMS-[A-Z0-9]+/i);
+  // Order ids are <ORG>-<base36>, e.g. KIMS-M1ABCD; older CIMS-... ids still match.
+  const match = String(text || '').match(/\b[A-Z]{2,8}-[A-Z0-9]{4,}\b/i);
   return match ? match[0].toUpperCase() : '';
 }
 
@@ -107,7 +108,7 @@ function buildOrderEvent(order) {
       admin: getAdminWhatsAppRecipient(order.centerId), // Use the new function
       student: getStudentRecipient(order),
     },
-    source: 'cims',
+    source: require('./settings').getOrgShortName().toLowerCase(),
   };
 }
 
@@ -140,7 +141,7 @@ function buildStatusEvent(order, status, remarks) {
       admin: getAdminWhatsAppRecipient(order.centerId), // Use the new function
       student: getStudentRecipient(order),
     },
-    source: 'cims',
+    source: require('./settings').getOrgShortName().toLowerCase(),
   };
 }
 
@@ -205,7 +206,7 @@ async function logOutboundWhatsapp(payload, result) {
     centerId: payload.centerId || '',
     ts: new Date(),
     direction: 'outbound',
-    from: 'cims-via-n8n',
+    from: `${require('./settings').getOrgShortName().toLowerCase()}-via-n8n`,
     to: targets,
     profileName: payload.student?.name || '',
     body: JSON.stringify(payload),

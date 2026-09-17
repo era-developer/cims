@@ -8,6 +8,7 @@ const { getDb } = require('../utils/db');
 const { authMiddleware, adminOnly, superAdminOnly } = require('../middleware/auth');
 const { requireCenter, listCenters, getCenterById } = require('../utils/centers');
 const { listBusinessHeads } = require('../utils/businessHeads');
+const { getOrgName, getOrgShortName } = require('../utils/settings');
 const { isCriticalAssetName } = require('../utils/classifications');
 const { createAssetTagGenerator } = require('../utils/assetTag');
 
@@ -267,8 +268,8 @@ function pdfDateTime(value) {
 function pdfSectionTitle(doc, title) {
   doc.moveDown(0.7);
   const y = doc.y;
-  doc.rect(50, y + 1, 3, 11).fill('#1a237e');
-  doc.fillColor('#1a237e').font('Helvetica-Bold').fontSize(11).text(title, 60, y);
+  doc.rect(50, y + 1, 3, 11).fill('#2d2a6e');
+  doc.fillColor('#2d2a6e').font('Helvetica-Bold').fontSize(11).text(title, 60, y);
   doc.fillColor('#000');
   doc.moveDown(0.5);
   doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor('#e2e8f0').stroke();
@@ -323,14 +324,14 @@ router.get('/:id/pdf', authMiddleware, adminOnly, (req, res) => {
   if (LOGO_PATH) {
     doc.image(LOGO_PATH, 50, 30, { width: 170 });
   } else {
-    doc.font('Helvetica-Bold').fontSize(18).fillColor('#1a237e').text('Comedkares Innovation Hub', 50, 34);
+    doc.font('Helvetica-Bold').fontSize(18).fillColor('#2d2a6e').text(getOrgName(), 50, 34);
   }
-  doc.font('Helvetica-Bold').fontSize(13).fillColor('#1a237e').text(invoice.invoice_number, 0, 30, { align: 'right', width: contentRight });
+  doc.font('Helvetica-Bold').fontSize(13).fillColor('#2d2a6e').text(invoice.invoice_number, 0, 30, { align: 'right', width: contentRight });
   doc.font('Helvetica-Bold').fontSize(9).fillColor('#c2410c').text('PURCHASE INVOICE RECORD', 0, 50, { align: 'right', width: contentRight });
   doc.font('Helvetica').fontSize(7.5).fillColor('#9ca3af').text(`Generated ${pdfDateTime(new Date().toISOString())}`, 0, 66, { align: 'right', width: contentRight });
   doc.fillColor('#000');
 
-  doc.rect(0, 92, pageWidth, 3).fill('#1a237e');
+  doc.rect(0, 92, pageWidth, 3).fill('#2d2a6e');
   doc.fillColor('#000');
 
   doc.y = 112;
@@ -397,7 +398,7 @@ router.get('/:id/pdf', authMiddleware, adminOnly, (req, res) => {
   doc.moveDown(0.3);
   const totalBoxY = doc.y;
   doc.rect(345, totalBoxY, 200, 34).fill('#eef2ff');
-  doc.fillColor('#1a237e').font('Helvetica-Bold').fontSize(9).text('TOTAL BILL VALUE', 355, totalBoxY + 7, { width: 180, align: 'right' });
+  doc.fillColor('#2d2a6e').font('Helvetica-Bold').fontSize(9).text('TOTAL BILL VALUE', 355, totalBoxY + 7, { width: 180, align: 'right' });
   doc.fontSize(15).text(pdfMoney(invoice.total_bill_value), 355, totalBoxY + 17, { width: 180, align: 'right' });
   doc.fillColor('#000');
   doc.y = totalBoxY + 46;
@@ -406,7 +407,7 @@ router.get('/:id/pdf', authMiddleware, adminOnly, (req, res) => {
   doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor('#e2e8f0').stroke();
   doc.moveDown(0.5);
   doc.font('Helvetica').fontSize(7.5).fillColor('#9ca3af')
-    .text('This is a system-generated record from CIMS (Comedkares Innovation Hub Inventory Management System).', 50, doc.y, { width: 495 });
+    .text(`This is a system-generated record from ${getOrgShortName()} (${getOrgName()} Inventory Management System).`, 50, doc.y, { width: 495 });
 
   doc.end();
 });

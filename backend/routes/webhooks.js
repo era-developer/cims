@@ -20,7 +20,7 @@ router.post('/whatsapp', async (req, res) => {
 
     res.json({
       ok: true,
-      message: 'CIMS received the WhatsApp payload.',
+      message: `${require('../utils/settings').getOrgShortName()} received the WhatsApp payload.`,
       orderId: details.orderId,
     });
   } catch (err) {

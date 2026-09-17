@@ -249,7 +249,7 @@ function componentTable(items) {
   return `
     <table style="border-collapse:collapse;width:100%;margin-top:12px;">
       <thead>
-        <tr style="background:#1a237e;color:#fff;">
+        <tr style="background:#2d2a6e;color:#fff;">
           <th style="padding:8px 12px;border:1px solid #dbe3f0;text-align:left;">Component</th>
           <th style="padding:8px 12px;border:1px solid #dbe3f0;">Qty</th>
           <th style="padding:8px 12px;border:1px solid #dbe3f0;">Unit</th>
@@ -284,7 +284,7 @@ function returnSummaryTable(summary = []) {
   return `
     <table style="border-collapse:collapse;width:100%;margin-top:12px;">
       <thead>
-        <tr style="background:#17355f;color:#fff;">
+        <tr style="background:#2d2a6e;color:#fff;">
           <th style="padding:8px 12px;border:1px solid #dbe3f0;text-align:left;">Component</th>
           <th style="padding:8px 12px;border:1px solid #dbe3f0;">Ordered</th>
           <th style="padding:8px 12px;border:1px solid #dbe3f0;">Returned</th>
@@ -315,7 +315,7 @@ function buildPolicyNotes(status, audience = 'student') {
         'Components are only requested at this stage. Issue them only after approval and stock verification.',
         isAdmin
           ? 'Please verify quantities, project purpose, and student details before approving the request.'
-          : 'Wait for admin approval before collecting any component from the lab.',
+          : 'Wait for admin approval before collecting any component from the center.',
         'Damaged/consumed, missing, or misused components should be recorded during issue/return handling.',
       ]),
     };
@@ -380,7 +380,7 @@ function buildPolicyNotes(status, audience = 'student') {
         'The table below represents the issued components and the verified return summary for this order.',
         isAdmin
           ? 'Check the damaged/consumed and pending columns before treating the order as fully closed in records.'
-          : 'If any damage/consumption or shortage is shown, please follow the lab policy or admin guidance for closure.',
+          : 'If any damage/consumption or shortage is shown, please follow the center policy or admin guidance for closure.',
         'All damaged/consumed amounts, shortages, and remarks should remain attached to the order for audit and inventory tracking.',
       ]),
     };
@@ -400,7 +400,7 @@ function wrapEmail(title, subtitle, bodyHtml) {
   // A plain text link (not a filled button) reads less like a marketing
   // email to spam heuristics, while still being a real, working link.
   const footerLink = siteUrl
-    ? `<p style="margin:16px 0 0;"><a href="${escapeHtml(siteUrl)}" style="color:#1a237e;font-weight:700;text-decoration:underline;">Open ${escapeHtml(getOrgShortName())} Portal &rarr;</a></p>`
+    ? `<p style="margin:16px 0 0;"><a href="${escapeHtml(siteUrl)}" style="color:#2d2a6e;font-weight:700;text-decoration:underline;">Open ${escapeHtml(getOrgShortName())} Portal &rarr;</a></p>`
     : '';
 
   // White letterhead, not a filled navy band -- the real logo is dark
@@ -411,7 +411,7 @@ function wrapEmail(title, subtitle, bodyHtml) {
   const orgName = getOrgName();
   const orgShortName = getOrgShortName();
   const logoHtml = LOGO_EXISTS
-    ? `<img src="cid:${LOGO_CID}" alt="${escapeHtml(orgName)}" style="height:34px;display:block;margin-bottom:12px;" />`
+    ? `<img src="cid:${LOGO_CID}" alt="${escapeHtml(orgName)}" style="height:48px;display:block;margin-bottom:14px;" />`
     : `<div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#64748b;font-weight:700;margin-bottom:10px;">${escapeHtml(orgName)} &middot; ${escapeHtml(orgShortName)}</div>`;
 
   return `
@@ -425,7 +425,7 @@ function wrapEmail(title, subtitle, bodyHtml) {
       <h1 style="margin:0;font-size:21px;font-weight:700;color:#1a1a2e;">${escapeHtml(title)}</h1>
       <p style="margin:6px 0 0;color:#64748b;font-size:13px;">${escapeHtml(subtitle)}</p>
     </div>
-    <div style="height:3px;background:#1a237e;line-height:3px;font-size:0;">&nbsp;</div>
+    <div style="height:3px;background:#2d2a6e;line-height:3px;font-size:0;">&nbsp;</div>
     <div style="padding:24px 28px;">
       ${bodyHtml}
       ${footerLink}
@@ -548,12 +548,12 @@ async function sendOrderNotification(order, centerId) {
     'New component order',
     `A student has placed a new ${getOrgShortName()} request.`,
     `
-      <div style="padding:14px 16px;background:#eef2ff;border-left:4px solid #1a237e;border-radius:8px;margin-bottom:20px;">
+      <div style="padding:14px 16px;background:#eef2ff;border-left:4px solid #2d2a6e;border-radius:8px;margin-bottom:20px;">
         <strong>Order ID:</strong> ${escapeHtml(order.orderId)}<br>
         <strong>Date:</strong> ${escapeHtml(when)}<br>
         <strong>Status:</strong> Pending
       </div>
-      <h3 style="margin:0 0 8px;color:#1a237e;">Student details</h3>
+      <h3 style="margin:0 0 8px;color:#2d2a6e;">Student details</h3>
       <p style="margin:0 0 4px;"><strong>Name:</strong> ${escapeHtml(details.studentName)}</p>
       <p style="margin:0 0 4px;"><strong>Email:</strong> ${escapeHtml(order.studentEmail)}</p>
       <p style="margin:0 0 4px;"><strong>Mobile:</strong> ${escapeHtml(details.mobile)}</p>
@@ -565,11 +565,11 @@ async function sendOrderNotification(order, centerId) {
       <p style="margin:0 0 4px;"><strong>Team:</strong> ${escapeHtml(details.teamName)}</p>
       <p style="margin:0 0 4px;"><strong>Faculty Guide:</strong> ${escapeHtml(details.facultyGuide)}</p>
       ${expectedReturnDate ? `<p style="margin:0 0 12px;"><strong>Expected return date:</strong> ${escapeHtml(expectedReturnDate)}</p>` : ''}
-      <h3 style="margin:20px 0 8px;color:#1a237e;">Requested items</h3>
+      <h3 style="margin:20px 0 8px;color:#2d2a6e;">Requested items</h3>
       ${componentTable(items)}
       ${details.purpose ? `<div style="margin-top:16px;padding:14px 16px;background:#fff9c4;border-radius:8px;"><strong>Purpose:</strong> ${escapeHtml(details.purpose)}</div>` : ''}
       <div style="margin-top:16px;padding:14px 16px;background:#f8fafc;border:1px solid #dbe3f0;border-radius:10px;">
-        <strong style="color:#1a237e;">${escapeHtml(adminPendingNotes.title)}</strong>
+        <strong style="color:#2d2a6e;">${escapeHtml(adminPendingNotes.title)}</strong>
         ${adminPendingNotes.html}
       </div>
     `,
@@ -579,19 +579,19 @@ async function sendOrderNotification(order, centerId) {
     'Order received',
     `Your request has been recorded in ${getOrgShortName()} and is waiting for admin review.`,
     `
-      <div style="padding:14px 16px;background:#eef2ff;border-left:4px solid #1a237e;border-radius:8px;margin-bottom:20px;">
+      <div style="padding:14px 16px;background:#eef2ff;border-left:4px solid #2d2a6e;border-radius:8px;margin-bottom:20px;">
         <strong>Order ID:</strong> ${escapeHtml(order.orderId)}<br>
         <strong>Date:</strong> ${escapeHtml(when)}<br>
         <strong>Status:</strong> Pending
       </div>
       ${expectedReturnDate ? `<p style="margin:0 0 12px;color:#475569;"><strong>Expected return date:</strong> ${escapeHtml(expectedReturnDate)}</p>` : ''}
       <p style="margin:0 0 12px;color:#475569;">The requested stock has been reserved for review. You will receive another email when the admin approves, rejects, or completes the return.</p>
-      <h3 style="margin:20px 0 8px;color:#1a237e;">Requested items</h3>
+      <h3 style="margin:20px 0 8px;color:#2d2a6e;">Requested items</h3>
       ${componentTable(items)}
       <p style="margin:16px 0 0;"><strong>Program:</strong> ${escapeHtml(details.programName || '-')}</p>
       ${details.projectName ? `<p style="margin:4px 0 0;"><strong>Project:</strong> ${escapeHtml(details.projectName)}</p>` : ''}
       <div style="margin-top:16px;padding:14px 16px;background:#f8fafc;border:1px solid #dbe3f0;border-radius:10px;">
-        <strong style="color:#1a237e;">${escapeHtml(studentPendingNotes.title)}</strong>
+        <strong style="color:#2d2a6e;">${escapeHtml(studentPendingNotes.title)}</strong>
         ${studentPendingNotes.html}
       </div>
     `,
@@ -647,7 +647,7 @@ async function sendProcurementNotification({ request, type, recipients = [] }) {
 
   const bodyHtml = `
     ${summary}
-    <h3 style="margin:16px 0 8px;color:#1a237e;">Requested components</h3>
+    <h3 style="margin:16px 0 8px;color:#2d2a6e;">Requested components</h3>
     ${componentTable((request.items || []).map(i => ({ name: i.componentName, qty: i.qtyApproved ?? i.qtyRequested, unit: 'pcs' })))}
   `;
 
@@ -708,7 +708,7 @@ async function sendTransferNotification({ transfer, type, recipients = [] }) {
 
   const bodyHtml = `
     ${summary}
-    <h3 style="margin:16px 0 8px;color:#1a237e;">Requested components</h3>
+    <h3 style="margin:16px 0 8px;color:#2d2a6e;">Requested components</h3>
     ${componentTable(transfer.components || [])}
     <p style="margin-top:12px;color:#475569;">${escapeHtml(footerNote)}</p>
   `;
@@ -764,13 +764,13 @@ async function sendStatusUpdate(order, status, remarks, centerId) {
   let itemsSectionHtml = '';
   if (showReturnSummary) {
     itemsSectionHtml = `
-      <h3 style="margin:20px 0 8px;color:#1a237e;">Return Summary</h3>
+      <h3 style="margin:20px 0 8px;color:#2d2a6e;">Return Summary</h3>
       ${returnSummaryTable(returnSummary)}
     `;
   } else {
     const itemHeading = status === 'Approved' ? 'Components Issued' : 'Requested Components';
     itemsSectionHtml = `
-      <h3 style="margin:20px 0 8px;color:#1a237e;">${escapeHtml(itemHeading)}</h3>
+      <h3 style="margin:20px 0 8px;color:#2d2a6e;">${escapeHtml(itemHeading)}</h3>
       ${componentTable(items)}
     `;
   }
@@ -785,7 +785,7 @@ async function sendStatusUpdate(order, status, remarks, centerId) {
     ${itemsSectionHtml}
     ${rejectedItemsHtml}
     <div style="margin-top:16px;padding:14px 16px;background:#f8fafc;border:1px solid #dbe3f0;border-radius:10px;">
-      <strong style="color:#1a237e;">${escapeHtml(audienceNotes.title)}</strong>
+      <strong style="color:#2d2a6e;">${escapeHtml(audienceNotes.title)}</strong>
       ${audienceNotes.html}
     </div>
   `;
@@ -860,15 +860,15 @@ async function sendReturnReminder(order, centerId) {
         <strong>Order ID:</strong> ${escapeHtml(order.orderId)}<br>
         <strong>Expected return date:</strong> ${escapeHtml(expectedReturnDate)}
       </div>
-      <p style="margin:0 0 12px;color:#475569;">This is a reminder to return the issued components by the expected date to help the lab keep inventory accurate for other students.</p>
-      <h3 style="margin:20px 0 8px;color:#1a237e;">Components issued</h3>
+      <p style="margin:0 0 12px;color:#475569;">This is a reminder to return the issued components by the expected date to help the center keep inventory accurate for other students.</p>
+      <h3 style="margin:20px 0 8px;color:#2d2a6e;">Components issued</h3>
       ${componentTable(items)}
       <div style="margin-top:16px;padding:14px 16px;background:#f8fafc;border:1px solid #dbe3f0;border-radius:10px;">
-        <strong style="color:#1a237e;">Return notes and policy</strong>
+        <strong style="color:#2d2a6e;">Return notes and policy</strong>
         ${noteList([
           'Please return all issued components in working condition wherever possible.',
-          'If any component is damaged/consumed or missing, inform the lab/admin during the return process so the order summary can be updated correctly.',
-          'Use the portal return option or contact the lab/admin if you need clarification before returning the components.',
+          'If any component is damaged/consumed or missing, inform the center admin during the return process so the order summary can be updated correctly.',
+          'Use the portal return option or contact the center admin if you need clarification before returning the components.',
         ])}
       </div>
     `,
@@ -908,7 +908,7 @@ async function sendOtpEmail({ targetEmail, centerId, code, purpose, expiresInMin
     `
       <div style="text-align:center;padding:22px 16px;background:#eef2ff;border-radius:12px;margin-bottom:18px;">
         <div style="font-size:13px;color:#475569;margin-bottom:8px;">Your verification code</div>
-        <div style="font-size:34px;font-weight:800;letter-spacing:8px;color:#1a237e;">${escapeHtml(code)}</div>
+        <div style="font-size:34px;font-weight:800;letter-spacing:8px;color:#2d2a6e;">${escapeHtml(code)}</div>
       </div>
       <p style="margin:0 0 8px;color:#475569;">This code expires in ${escapeHtml(String(expiresInMinutes))} minutes and can only be used once.</p>
       <p style="margin:0;color:#94a3b8;font-size:12px;">If you didn't request this, you can safely ignore this email -- no changes will be made without the code above.</p>
@@ -924,7 +924,173 @@ async function sendOtpEmail({ targetEmail, centerId, code, purpose, expiresInMin
   });
 }
 
+// ---------- Account lifecycle ----------
+//
+// The order lifecycle was fully covered by email, but the account lifecycle
+// was silent: a student who registered heard nothing until they tried to log
+// in, the center admin was never told there was someone to approve, and an
+// account created by an admin got no welcome. These close those gaps.
+//
+// None of these emails ever contains a password. An admin-created account's
+// initial password is handed over by the admin in person; the email tells the
+// user how to change it and how to reset it if they never received one.
+
+function accountFacts(user, centerName) {
+  return `
+    <div style="padding:14px 16px;background:#eef2ff;border-left:4px solid #2d2a6e;border-radius:8px;margin-bottom:20px;">
+      <strong>Username:</strong> ${escapeHtml(user.username)}<br>
+      <strong>Name:</strong> ${escapeHtml(user.fullName || '')}<br>
+      ${centerName ? `<strong>Center:</strong> ${escapeHtml(centerName)}<br>` : ''}
+      <strong>Role:</strong> ${escapeHtml(String(user.role || 'student').replace('_', ' '))}
+    </div>
+  `;
+}
+
+// Student self-registered: confirm to the student, and tell the center admin
+// there is a pending approval.
+async function sendRegistrationSubmitted({ user, centerId, centerName }) {
+  if (!(await ensureEmailReady(`Registration ${user.username}`))) return;
+
+  const config = getSmtpConfig();
+  const transporter = createTransporter();
+  const adminRecipient = getAdminRecipient(centerId);
+  const org = getOrgShortName();
+
+  const tasks = [];
+
+  if (user.email) {
+    tasks.push(sendMessage(transporter, {
+      from: `"${getSenderName()}" <${config.user}>`,
+      to: user.email,
+      replyTo: buildReplyTo(adminRecipient, config.user),
+      subject: `[${org}] Registration received - awaiting approval`,
+      html: wrapEmail(
+        'Registration received',
+        `Thanks for registering with ${getOrgName()}.`,
+        `
+          ${accountFacts(user, centerName)}
+          <p style="margin:0 0 12px;color:#475569;">Your account is waiting for the center admin to approve it. You will get another email once it is active, and can then sign in with the username above and the password you chose.</p>
+          <p style="margin:0;color:#475569;">If you do not hear back within a couple of working days, contact your center admin.</p>
+        `,
+      ),
+    }));
+  }
+
+  if (adminRecipient) {
+    tasks.push(sendMessage(transporter, {
+      from: `"${getSenderName()}" <${config.user}>`,
+      to: adminRecipient,
+      replyTo: buildReplyTo(user.email, config.user),
+      subject: `[${org}] New student registration to approve: ${user.fullName || user.username}`,
+      html: wrapEmail(
+        'New registration awaiting approval',
+        `A student has registered for ${centerName || 'your center'}.`,
+        `
+          ${accountFacts(user, centerName)}
+          <p style="margin:0 0 4px;"><strong>Email:</strong> ${escapeHtml(user.email || '-')}</p>
+          <p style="margin:0 0 4px;"><strong>Mobile:</strong> ${escapeHtml(user.mobile || '-')}</p>
+          <p style="margin:0 0 4px;"><strong>College:</strong> ${escapeHtml(user.college || '-')}</p>
+          <p style="margin:0 0 4px;"><strong>Department:</strong> ${escapeHtml(user.department || '-')}</p>
+          <p style="margin:0 0 12px;"><strong>Graduation year:</strong> ${escapeHtml(user.graduationYear || '-')}</p>
+          <p style="margin:0;color:#475569;">Open <strong>Users</strong> in the portal to approve or reject this registration. The student cannot sign in until approved.</p>
+        `,
+      ),
+    }));
+  }
+
+  await Promise.allSettled(tasks);
+}
+
+// Admin approved a self-registered account: the student can now sign in.
+async function sendAccountApproved({ user, centerId, centerName }) {
+  if (!user.email) return;
+  if (!(await ensureEmailReady(`Account approved ${user.username}`))) return;
+
+  const config = getSmtpConfig();
+  const transporter = createTransporter();
+
+  return sendMessage(transporter, {
+    from: `"${getSenderName()}" <${config.user}>`,
+    to: user.email,
+    replyTo: buildReplyTo(getAdminRecipient(centerId), config.user),
+    subject: `[${getOrgShortName()}] Your account is approved`,
+    html: wrapEmail(
+      'Your account is active',
+      `Your ${getOrgName()} registration has been approved.`,
+      `
+        ${accountFacts(user, centerName)}
+        <p style="margin:0 0 12px;color:#475569;">Sign in with the username above and the password you chose at registration. You can browse components, place requests for your projects, and track returns from the portal.</p>
+        <p style="margin:0;color:#475569;">Forgot your password? Use <strong>Forgot password</strong> on the sign-in page to receive a reset code by email.</p>
+      `,
+    ),
+  });
+}
+
+// An admin created this account directly. Deliberately says nothing about
+// the password beyond how to change or reset it.
+async function sendAccountCreated({ user, centerId, centerName, createdBy }) {
+  if (!user.email) return;
+  if (!(await ensureEmailReady(`Account created ${user.username}`))) return;
+
+  const config = getSmtpConfig();
+  const transporter = createTransporter();
+  const isStaff = user.role === 'admin' || user.role === 'super_admin';
+
+  return sendMessage(transporter, {
+    from: `"${getSenderName()}" <${config.user}>`,
+    to: user.email,
+    replyTo: buildReplyTo(getAdminRecipient(centerId), config.user),
+    subject: `[${getOrgShortName()}] Your ${isStaff ? 'admin' : 'student'} account has been created`,
+    html: wrapEmail(
+      `Welcome to ${getOrgShortName()}`,
+      `An account has been created for you on the ${getOrgName()} inventory portal.`,
+      `
+        ${accountFacts(user, centerName)}
+        ${createdBy ? `<p style="margin:0 0 12px;color:#475569;">Created by: ${escapeHtml(createdBy)}</p>` : ''}
+        <p style="margin:0 0 12px;color:#475569;">Your initial password will be shared with you separately by the admin who created the account. For your security it is never sent by email.</p>
+        <p style="margin:0 0 12px;color:#475569;"><strong>After your first sign-in, change your password</strong> using the <strong>Password</strong> button in the top bar.</p>
+        <p style="margin:0;color:#475569;">If you never received a password, use <strong>Forgot password</strong> on the sign-in page to set one with a code sent to this email address.</p>
+      `,
+    ),
+  });
+}
+
+// Security notice after any password change or reset. Sent to the address on
+// file so the real owner learns about a change they did not make.
+async function sendPasswordChanged({ user, centerId, method = 'changed' }) {
+  if (!user.email) return;
+  if (!(await ensureEmailReady(`Password changed ${user.username}`))) return;
+
+  const config = getSmtpConfig();
+  const transporter = createTransporter();
+  const when = new Date().toLocaleString('en-IN');
+  const how = method === 'reset' ? 'reset using an emailed code' : 'changed from the portal';
+
+  return sendMessage(transporter, {
+    from: `"${getSenderName()}" <${config.user}>`,
+    to: user.email,
+    replyTo: buildReplyTo(getAdminRecipient(centerId), config.user),
+    subject: `[${getOrgShortName()}] Your password was ${method === 'reset' ? 'reset' : 'changed'}`,
+    html: wrapEmail(
+      'Password updated',
+      `The password for ${user.username} was ${how}.`,
+      `
+        <div style="padding:14px 16px;background:#fff7ed;border-left:4px solid #ea580c;border-radius:8px;margin-bottom:20px;">
+          <strong>Account:</strong> ${escapeHtml(user.username)}<br>
+          <strong>When:</strong> ${escapeHtml(when)}
+        </div>
+        <p style="margin:0 0 12px;color:#475569;">If you made this change, no action is needed.</p>
+        <p style="margin:0;color:#475569;"><strong>If you did not</strong>, reset your password immediately using <strong>Forgot password</strong> on the sign-in page, and tell your center admin.</p>
+      `,
+    ),
+  });
+}
+
 module.exports = {
+  sendRegistrationSubmitted,
+  sendAccountApproved,
+  sendAccountCreated,
+  sendPasswordChanged,
   buildReplyTo,
   ensureEmailReady,
   getAdminRecipient,

@@ -271,12 +271,27 @@ Rules:
 - Center IDs are permanent.
 
 ### 9.4 Email and notification behavior
-Order and transfer lifecycle events send email to:
-- the center's own notification email, if set in `Settings`, otherwise
-- the org-wide order notification email.
+Every email is sent as **"Kalam Pragati - KIMS"** with the KIMS logo. Who
+receives what:
 
-Student-facing emails (approval, rejection, return reminders, OTP codes) go
-to the student's registered address.
+| Event | Student | Center admin / super admin |
+|---|---|---|
+| Student registers | Registration received | New registration to approve |
+| Admin approves registration | Account is approved | - |
+| Admin creates an account | Welcome (no password inside) | - |
+| Order confirmation code (OTP) | Code | - |
+| Order placed | Order received | New order (full details) |
+| Order approved / rejected | Status update | Status update |
+| Return requested / partial / returned | Status + return summary | Status + return summary |
+| Day before expected return | Return reminder | - |
+| Password reset code | Code | - |
+| Password changed or reset | Security notice | - |
+| Transfer request / approval / return | - | Super admin + centers involved |
+| Procurement request / status | - | Super admin, then the requesting center |
+
+Admin emails go to the center's own notification email if set in
+`Settings`, otherwise the org-wide order notification email. No email ever
+contains a password.
 
 ## 10) Report downloads and audit
 
