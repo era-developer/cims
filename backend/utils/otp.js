@@ -15,11 +15,21 @@ function generateCode() {
   return String(crypto.randomInt(0, 1_000_000)).padStart(OTP_LENGTH, '0');
 }
 
+// For codes carried in a link rather than typed: a 6-digit code is fine for a
+// 10-minute window, but a set-password link in a welcome email may sit unread
+// for days, so it gets a 160-bit token instead.
+function generateLinkToken() {
+  return crypto.randomBytes(20).toString('base64url');
+}
+
 // Creates and stores a new code, unless a still-valid one was issued too
 // recently (RESEND_COOLDOWN_SECONDS) -- in that case no new code is created
 // or emailed, and the caller gets told how much longer to wait rather than
 // silently spamming the recipient's inbox on rapid repeat requests.
-async function createOtp(db, { userId, purpose, targetEmail }) {
+//
+// Options: expiresInMinutes overrides the default window; link: true issues a
+// long random token (for URLs) instead of a 6-digit code.
+async function createOtp(db, { userId, purpose, targetEmail, expiresInMinutes = EXPIRY_MINUTES, link = false }) {
   const now = new Date();
   const recent = db.prepare(`
     SELECT created_at FROM otp_codes
@@ -38,15 +48,15 @@ async function createOtp(db, { userId, purpose, targetEmail }) {
   db.prepare(`UPDATE otp_codes SET consumed_at = ? WHERE user_id = ? AND purpose = ? AND consumed_at IS NULL`)
     .run(now.toISOString(), userId, purpose);
 
-  const code = generateCode();
+  const code = link ? generateLinkToken() : generateCode();
   const codeHash = await bcrypt.hash(code, 8);
-  const expiresAt = new Date(now.getTime() + EXPIRY_MINUTES * 60000).toISOString();
+  const expiresAt = new Date(now.getTime() + expiresInMinutes * 60000).toISOString();
   db.prepare(`
     INSERT INTO otp_codes (id, user_id, purpose, code_hash, target_email, expires_at, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(crypto.randomUUID(), userId, purpose, codeHash, targetEmail, expiresAt, now.toISOString());
 
-  return { code, cooldownRemaining: 0, expiresInMinutes: EXPIRY_MINUTES };
+  return { code, cooldownRemaining: 0, expiresInMinutes };
 }
 
 // Returns { ok: true } or { ok: false, reason: 'not_found' | 'expired' | 'too_many_attempts' | 'incorrect', attemptsRemaining? }

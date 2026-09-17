@@ -3,8 +3,9 @@ const { createInventoryExportWorkbook } = require('../utils/excel');
 const { logActivity, getLogs } = require('../utils/logsDb');
 const { getWhatsappMessages } = require('../utils/whatsappDb');
 const { listUsers, createUser, updateUser, deleteUser, serializeUser, findUserById } = require('../utils/usersDb');
-const { verifyWhatsAppConnection } = require('../utils/whatsapp');
-const { sendAccountCreated, sendAccountApproved } = require('../utils/email');
+const { verifyWhatsAppConnection, sendTestWhatsAppMessage } = require('../utils/whatsapp');
+const { sendAccountCreated, sendAccountApproved, sendTestEmail } = require('../utils/email');
+const { createOtp } = require('../utils/otp');
 const {
   listCenters,
   getCenterById,
@@ -390,6 +391,46 @@ function isValidEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
 }
 
+// "Send test" buttons on the Settings screen. Each sends to the value the
+// super admin has typed (not necessarily saved yet), so a number or address
+// can be verified before it is committed. Rate limiting is left to the
+// super-admin-only gate; these are one-click, human-driven actions.
+
+router.post('/settings/test-email', authMiddleware, superAdminOnly, async (req, res) => {
+  try {
+    const to = String(req.body.to || '').trim() || settings.getOrderEmail(null);
+    if (!isValidEmail(to)) return res.status(400).json({ message: `"${to}" is not a valid email address` });
+    const result = await sendTestEmail({ to, requestedBy: req.user.fullName || req.user.username });
+    if (!result.ok) return res.status(502).json({ message: result.message || result.error || 'Email send failed' });
+    await logActivity('TEST_EMAIL_SENT', req.user.username, { role: req.user.role, info: `Test email sent to ${to}` });
+    res.json({ ok: true, to, message: `Test email sent to ${to}. Check the inbox (and spam folder).` });
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Failed to send test email' });
+  }
+});
+
+router.post('/settings/test-whatsapp', authMiddleware, superAdminOnly, async (req, res) => {
+  try {
+    const to = settings.normalizePhone(req.body.to || '') || settings.getWhatsAppAdmin(null);
+    if (!to) return res.status(400).json({ message: 'Enter a WhatsApp number first.' });
+    const result = await sendTestWhatsAppMessage({
+      to,
+      centerId: String(req.body.centerId || ''),
+      requestedBy: req.user.fullName || req.user.username,
+    });
+    if (!result.ok) {
+      // Not configured is the common case until n8n is wired up; say so
+      // plainly rather than returning a generic failure.
+      const status = result.configured === false ? 400 : 502;
+      return res.status(status).json({ message: result.message || result.error || 'WhatsApp send failed' });
+    }
+    await logActivity('TEST_WHATSAPP_SENT', req.user.username, { role: req.user.role, info: `Test WhatsApp sent to ${result.to || to}` });
+    res.json({ ok: true, to: result.to || to, message: `Test message queued to ${result.to || to} via n8n.` });
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Failed to send test WhatsApp message' });
+  }
+});
+
 router.put('/settings', authMiddleware, superAdminOnly, async (req, res) => {
   try {
     const patch = {};
@@ -553,13 +594,37 @@ router.post('/users', authMiddleware, adminOnly, async (req, res) => {
     }
     const created = await createUser(payload);
     await logActivity('CREATE_USER', req.user.username, { role: req.user.role, centerId: payload.centerId || req.user.centerId, info: `Created user: ${req.body.username}` });
-    // Welcome mail never carries the password; the admin hands that over.
-    if (created) {
+    // Welcome mail carries a single-use set-password link rather than the
+    // password itself. Issued as a long token with a multi-day window,
+    // because a welcome email is not read within ten minutes the way a typed
+    // code is. Uses the same purpose as forgot-password so the existing
+    // /api/auth/reset-password endpoint consumes it.
+    if (created && created.email) {
+      const SET_PASSWORD_HOURS = 72;
+      let setPasswordUrl = '';
+      try {
+        const { code } = await createOtp(getDb(), {
+          userId: created.id,
+          purpose: 'password_reset',
+          targetEmail: created.email,
+          expiresInMinutes: SET_PASSWORD_HOURS * 60,
+          link: true,
+        });
+        const base = settings.getSiteUrl() || `${req.protocol}://${req.get('host')}`;
+        if (code) {
+          const params = new URLSearchParams({ reset: '1', loginId: created.username, code });
+          setPasswordUrl = `${base.replace(/\/$/, '')}?${params.toString()}`;
+        }
+      } catch (err) {
+        console.error('[email] could not issue set-password link:', err.message);
+      }
       sendAccountCreated({
         user: created,
         centerId: created.centerId,
         centerName: created.centerId ? getCenterById(created.centerId)?.name || '' : '',
         createdBy: req.user.fullName || req.user.username,
+        setPasswordUrl,
+        linkValidHours: SET_PASSWORD_HOURS,
       }).catch(err => console.error('[email] account-created notice failed:', err.message));
     }
     res.status(201).json({ message: 'User created' });

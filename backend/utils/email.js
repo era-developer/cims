@@ -1026,9 +1026,10 @@ async function sendAccountApproved({ user, centerId, centerName }) {
   });
 }
 
-// An admin created this account directly. Deliberately says nothing about
-// the password beyond how to change or reset it.
-async function sendAccountCreated({ user, centerId, centerName, createdBy }) {
+// An admin created this account directly. Carries a single-use set-password
+// link (a long token, valid for days) so the person sets their own password
+// rather than receiving one second-hand. The password itself is never mailed.
+async function sendAccountCreated({ user, centerId, centerName, createdBy, setPasswordUrl, linkValidHours }) {
   if (!user.email) return;
   if (!(await ensureEmailReady(`Account created ${user.username}`))) return;
 
@@ -1036,19 +1037,32 @@ async function sendAccountCreated({ user, centerId, centerName, createdBy }) {
   const transporter = createTransporter();
   const isStaff = user.role === 'admin' || user.role === 'super_admin';
 
+  const linkBlock = setPasswordUrl
+    ? `
+        <p style="margin:0 0 14px;color:#475569;">Set your password to activate your sign-in:</p>
+        <p style="margin:0 0 18px;text-align:center;">
+          <a href="${escapeHtml(setPasswordUrl)}" style="display:inline-block;background:#2d2a6e;color:#ffffff;font-weight:700;padding:12px 22px;border-radius:10px;text-decoration:none;">Set my password</a>
+        </p>
+        <p style="margin:0 0 12px;color:#94a3b8;font-size:12px;">This link works once and expires in ${escapeHtml(String(linkValidHours || 72))} hours. If it has expired, use <strong>Forgot password</strong> on the sign-in page to get a new code.</p>
+        <p style="margin:0 0 12px;color:#94a3b8;font-size:12px;word-break:break-all;">If the button does not work, copy this address into your browser:<br>${escapeHtml(setPasswordUrl)}</p>
+      `
+    : `
+        <p style="margin:0 0 12px;color:#475569;">Use <strong>Forgot password</strong> on the sign-in page to set your password with a code sent to this email address.</p>
+      `;
+
   return sendMessage(transporter, {
     from: `"${getSenderName()}" <${config.user}>`,
     to: user.email,
     replyTo: buildReplyTo(getAdminRecipient(centerId), config.user),
-    subject: `[${getOrgShortName()}] Your ${isStaff ? 'admin' : 'student'} account has been created`,
+    subject: `[${getOrgShortName()}] Your ${isStaff ? 'admin' : 'student'} account has been created - set your password`,
     html: wrapEmail(
       `Welcome to ${getOrgShortName()}`,
       `An account has been created for you on the ${getOrgName()} inventory portal.`,
       `
         ${accountFacts(user, centerName)}
-        ${createdBy ? `<p style="margin:0 0 12px;color:#475569;">Created by: ${escapeHtml(createdBy)}</p>` : ''}
-        <p style="margin:0 0 12px;color:#475569;">Your initial password will be shared with you separately by the admin who created the account. For your security it is never sent by email.</p>
-        <p style="margin:0 0 12px;color:#475569;"><strong>After your first sign-in, change your password</strong>: use <strong>Forgot password</strong> on the sign-in page to set one of your own with a code sent to this email.</p>
+        ${createdBy ? `<p style="margin:0 0 14px;color:#475569;">Created by: ${escapeHtml(createdBy)}</p>` : ''}
+        ${linkBlock}
+        <p style="margin:0;color:#475569;">For your security, passwords are never sent by email. Do not share this link.</p>
       `,
     ),
   });
@@ -1085,7 +1099,35 @@ async function sendPasswordChanged({ user, centerId, method = 'changed' }) {
   });
 }
 
+// "Send test" from Settings: confirms a newly entered order-notification
+// address actually receives mail before a real order depends on it.
+async function sendTestEmail({ to, requestedBy = '' }) {
+  if (!to) return { ok: false, message: 'No email address to send to.' };
+  if (!(await ensureEmailReady(`Test email to ${to}`))) {
+    return { ok: false, message: 'SMTP is not configured. Set SMTP_USER and SMTP_PASS in backend/.env.' };
+  }
+  const config = getSmtpConfig();
+  const transporter = createTransporter();
+  const org = getOrgShortName();
+  const result = await sendMessage(transporter, {
+    from: `"${getSenderName()}" <${config.user}>`,
+    to,
+    replyTo: buildReplyTo(config.user, ''),
+    subject: `[${org}] Test notification`,
+    html: wrapEmail(
+      'Test notification',
+      `This address is set to receive ${org} order notifications.`,
+      `
+        <p style="margin:0 0 12px;color:#475569;">If you are reading this, order alerts sent to <strong>${escapeHtml(to)}</strong> are working.</p>
+        <p style="margin:0;color:#94a3b8;font-size:12px;">Sent by ${escapeHtml(requestedBy || 'an administrator')} from Settings at ${escapeHtml(new Date().toLocaleString('en-IN'))}. No action is needed.</p>
+      `,
+    ),
+  });
+  return { ...(result || {}), to };
+}
+
 module.exports = {
+  sendTestEmail,
   sendRegistrationSubmitted,
   sendAccountApproved,
   sendAccountCreated,

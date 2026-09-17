@@ -17,7 +17,7 @@ fully isolated from each other.
 | PM2 name | `cims-backend` | `kims-backend` |
 | Install script | (in `D:\cims`) | `install-kims-service.ps1` |
 | JWT secret | its own | **different** — see below |
-| SMTP sender | `comedkares.cims@gmail.com` | `gopalancims@gmail.com` |
+| SMTP sender | `comedkares.cims@gmail.com` | `kalampragati.kims@gmail.com` |
 
 **Nothing in `D:\KIMS` may point at CIMS's port, database, service name or
 mailbox.** The JWT secrets in particular must stay different: a shared secret
@@ -81,8 +81,8 @@ Health check: <http://localhost:5001/api/health>
 
 ### 1. Email (SMTP) — configured
 
-KIMS sends from **`gopalancims@gmail.com`** (Gmail App Password in
-`backend\.env`, set 2026-09-17). This is separate from CIMS's
+KIMS sends from **`kalampragati.kims@gmail.com`** (Gmail App Password in
+`backend\.env`, set 2026-09-17; replaced the interim `gopalancims@gmail.com`). This is separate from CIMS's
 `comedkares.cims@gmail.com`, so revoking one credential never affects the other
 portal. `/api/health` shows `"email": {"ok": true}` when the login is verified.
 

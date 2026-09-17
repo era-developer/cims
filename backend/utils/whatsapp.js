@@ -236,6 +236,34 @@ async function sendStatusWhatsAppNotifications(order, status, remarks) {
   return result;
 }
 
+// "Send test" from Settings. Posts a recognisable test event to n8n for the
+// given number (defaults to the configured admin number) so a super admin can
+// confirm a newly entered number actually receives messages, before a real
+// order depends on it. Returns the config-status object when WhatsApp is not
+// set up, so the UI can say exactly what is missing.
+async function sendTestWhatsAppMessage({ to, centerId = '', requestedBy = '' } = {}) {
+  const configStatus = await verifyWhatsAppConnection();
+  if (!configStatus.ok) return configStatus;
+
+  const recipient = normalizePhone(to || getAdminWhatsAppRecipient(centerId || null));
+  if (!recipient) return { ok: false, message: 'No WhatsApp number to send to.' };
+
+  const org = require('./settings').getOrgShortName();
+  const payload = {
+    eventType: 'test_message',
+    orderId: '',
+    centerId,
+    centerName: '',
+    status: 'test',
+    message: `${org} test message. If you received this, WhatsApp notifications for ${org} are working. Sent by ${requestedBy || 'an administrator'} at ${new Date().toLocaleString('en-IN')}.`,
+    recipients: { admin: recipient, student: '' },
+    source: org.toLowerCase(),
+  };
+  const result = await postToN8n(payload);
+  await logOutboundWhatsapp(payload, result);
+  return { ...result, to: recipient };
+}
+
 function isAuthorizedInboundRequest(req) {
   const config = getWhatsAppConfig();
   if (!config.sharedSecret) return true;
@@ -284,5 +312,6 @@ module.exports = {
   recordIncomingWhatsAppMessage,
   sendOrderWhatsAppNotifications,
   sendStatusWhatsAppNotifications,
+  sendTestWhatsAppMessage,
   verifyWhatsAppConnection,
 };

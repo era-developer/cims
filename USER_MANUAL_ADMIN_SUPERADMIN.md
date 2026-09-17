@@ -104,6 +104,13 @@ You can:
 - Activate/disable accounts
 - Delete users
 
+Creating an account manually:
+1. `Users` -> `Create`, fill the details and a temporary password.
+2. The person receives a welcome email with a **Set my password** link
+   (single use, valid 72 hours). They choose their own password there.
+3. If the link expires, they use `Forgot password` on the sign-in page.
+The password you typed is never emailed.
+
 Registration flow:
 1. Student submits self-registration.
 2. User appears with source `Self Register` and `Pending Approval`.
@@ -233,6 +240,10 @@ Open `Settings`. Changes take effect immediately - no restart, no developer.
 - `Admin WhatsApp number`: the number students are handed to after placing an
   order, when the center has none of its own. Entering 10 digits assumes `+91`.
 
+Each field has a **Send test** button. It sends to whatever is typed in the
+box (saved or not), so you can confirm a new address or number works before
+saving it. The WhatsApp test reports clearly if WhatsApp is not yet configured.
+
 Use this whenever the responsible admin changes.
 
 ### 9.2 Business heads
@@ -280,7 +291,7 @@ receives what:
 |---|---|---|
 | Student registers | Registration received | New registration to approve |
 | Admin approves registration | Account is approved | - |
-| Admin creates an account | Welcome (no password inside) | - |
+| Admin creates an account | Welcome with set-password link (72 h, single use) | - |
 | Order confirmation code (OTP) | Code | - |
 | Order placed | Order received | New order (full details) |
 | Order approved / rejected | Status update | Status update |

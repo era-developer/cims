@@ -135,6 +135,11 @@ async function updateUser(userId, userData) {
 
 function deleteUser(userId) {
   const db = getDb();
+  // otp_codes.user_id references users(id) without ON DELETE CASCADE, so any
+  // user who ever requested a password reset or confirmed an order by OTP
+  // could not be deleted -- the Users page returned "FOREIGN KEY constraint
+  // failed". Codes are worthless once the account is gone.
+  db.prepare('DELETE FROM otp_codes WHERE user_id = ?').run(userId);
   const result = db.prepare('DELETE FROM users WHERE id = ?').run(userId);
   return result.changes > 0;
 }

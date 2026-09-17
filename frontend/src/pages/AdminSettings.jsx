@@ -36,6 +36,8 @@ export default function AdminSettings() {
 
   const [notifyForm, setNotifyForm] = useState({ orderEmail: '', whatsappAdmin: '' });
   const [savingNotify, setSavingNotify] = useState(false);
+  const [testing, setTesting] = useState(''); // 'email' | 'whatsapp' | ''
+  const [testResult, setTestResult] = useState(null); // { ok, text }
 
   const [centerForm, setCenterForm] = useState(EMPTY_CENTER_FORM);
   const [editingId, setEditingId] = useState('');
@@ -96,6 +98,23 @@ export default function AdminSettings() {
       setError(err?.response?.data?.message || 'Unable to save settings');
     } finally {
       setSavingNotify(false);
+    }
+  }
+
+  // Sends a test to whatever is currently typed in the field -- not the saved
+  // value -- so a new address or number can be checked before committing it.
+  async function sendTest(kind) {
+    setTesting(kind);
+    setTestResult(null);
+    try {
+      const { data } = kind === 'email'
+        ? await axios.post('/api/admin/settings/test-email', { to: notifyForm.orderEmail })
+        : await axios.post('/api/admin/settings/test-whatsapp', { to: notifyForm.whatsappAdmin });
+      setTestResult({ ok: true, text: data.message });
+    } catch (err) {
+      setTestResult({ ok: false, text: err?.response?.data?.message || `Unable to send test ${kind}` });
+    } finally {
+      setTesting('');
     }
   }
 
@@ -312,6 +331,11 @@ Continue?`;
               onChange={value => setNotifyForm(current => ({ ...current, orderEmail: value }))}
               placeholder="orders@example.org"
               type="email"
+              action={{
+                label: testing === 'email' ? 'Sending...' : 'Send test email',
+                onClick: () => sendTest('email'),
+                disabled: !!testing || !notifyForm.orderEmail,
+              }}
             />
             <Field
               label="Admin WhatsApp number"
@@ -319,8 +343,16 @@ Continue?`;
               onChange={value => setNotifyForm(current => ({ ...current, whatsappAdmin: value }))}
               placeholder="9686737460"
               hint="10 digits assumes +91; include a country code for anything else."
+              action={{
+                label: testing === 'whatsapp' ? 'Sending...' : 'Send test message',
+                onClick: () => sendTest('whatsapp'),
+                disabled: !!testing || !notifyForm.whatsappAdmin,
+              }}
             />
           </div>
+          {testResult && (
+            <div style={testResult.ok ? styles.successBanner : styles.errorBanner}>{testResult.text}</div>
+          )}
           <button type="submit" style={{ ...styles.primaryBtn, opacity: savingNotify ? 0.7 : 1 }} disabled={savingNotify}>
             {savingNotify ? 'Saving...' : 'Save notification settings'}
           </button>
@@ -521,21 +553,35 @@ Continue?`;
   );
 }
 
-function Field({ label, value, onChange, onBlur, placeholder, type = 'text', hint, required }) {
+// `action` renders a small button beside the input (used for "Send test").
+function Field({ label, value, onChange, onBlur, placeholder, type = 'text', hint, required, action }) {
   return (
     <div style={styles.field}>
       <label style={styles.label}>
         {label}{required && <span style={styles.required}> *</span>}
       </label>
-      <input
-        style={styles.input}
-        type={type}
-        value={value}
-        onChange={event => onChange(event.target.value)}
-        onBlur={onBlur}
-        placeholder={placeholder}
-        required={required}
-      />
+      <div style={styles.inputRow}>
+        <input
+          style={{ ...styles.input, flex: 1 }}
+          type={type}
+          value={value}
+          onChange={event => onChange(event.target.value)}
+          onBlur={onBlur}
+          placeholder={placeholder}
+          required={required}
+          autoComplete="off"
+        />
+        {action && (
+          <button
+            type="button"
+            style={{ ...styles.testBtn, opacity: action.disabled ? 0.5 : 1, cursor: action.disabled ? 'default' : 'pointer' }}
+            onClick={action.onClick}
+            disabled={action.disabled}
+          >
+            {action.label}
+          </button>
+        )}
+      </div>
       {hint && <div style={styles.hint}>{hint}</div>}
     </div>
   );
@@ -557,6 +603,8 @@ const styles = {
   label: { fontSize: '12px', fontWeight: 700, color: '#374151', marginBottom: '6px' },
   required: { color: '#dc2626' },
   input: { padding: '10px 12px', borderRadius: '10px', border: '1px solid #d7dde9', fontSize: '14px', fontFamily: "'DM Sans', sans-serif", outline: 'none' },
+  inputRow: { display: 'flex', gap: '8px', alignItems: 'stretch' },
+  testBtn: { background: '#eef2ff', color: '#2d2a6e', border: '1px solid #c7d2fe', borderRadius: '10px', padding: '0 12px', fontSize: '12px', fontWeight: 700, whiteSpace: 'nowrap', fontFamily: "'DM Sans', sans-serif" },
   hint: { fontSize: '11px', color: '#9097a6', marginTop: '5px', lineHeight: 1.4 },
   primaryBtn: { background: '#2d2a6e', color: '#fff', border: 'none', padding: '11px 20px', borderRadius: '10px', cursor: 'pointer', fontWeight: 700, fontSize: '13px', fontFamily: "'DM Sans', sans-serif" },
   secondaryBtn: { background: '#f1f3f9', color: '#374151', border: '1px solid #d7dde9', padding: '11px 20px', borderRadius: '10px', cursor: 'pointer', fontWeight: 600, fontSize: '13px', fontFamily: "'DM Sans', sans-serif" },

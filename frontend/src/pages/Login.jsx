@@ -78,6 +78,17 @@ export default function Login() {
   }, [forgotCooldown > 0]);
 
   useEffect(() => {
+    // ?reset=1&loginId=..&code=.. is the set-password link from the welcome
+    // email: open the reset form with both fields filled so the person only
+    // has to choose a password.
+    if (searchParams.get('reset') === '1') {
+      setMode('forgot');
+      setForgotStep('reset');
+      setForgotLoginId(searchParams.get('loginId') || '');
+      setForgotCode(searchParams.get('code') || '');
+      setMessage('');
+      return;
+    }
     setMode(searchParams.get('register') === '1' ? 'register' : 'login');
     const centerId = searchParams.get('centerId');
     if (centerId) {
@@ -219,7 +230,9 @@ export default function Login() {
       setLoginForm({ username: forgotLoginId.trim(), password: '' });
       setMessageType('success');
       setMessage(data.message || 'Password reset. You can now sign in.');
-      setMode('login');
+      // Clears any ?reset=1&code=... from the address bar so the consumed
+      // token does not linger in history or get re-submitted on refresh.
+      switchMode('login', { preserveMessage: true });
     } catch (err) {
       setMessageType('error');
       setMessage(err.response?.data?.message || 'Unable to reset password right now.');
@@ -322,19 +335,23 @@ export default function Login() {
               </form>
             ) : (
               <form onSubmit={handleForgotReset}>
-                <Field
-                  label="Verification Code"
-                  value={forgotCode}
-                  onChange={setForgotCode}
-                  autoFocus
-                  placeholder="6-digit code from your email"
-                />
+                {searchParams.get('reset') === '1' ? (
+                  <p style={styles.subheading}>Setting a password for <strong>{forgotLoginId}</strong>.</p>
+                ) : (
+                  <Field
+                    label="Verification Code"
+                    value={forgotCode}
+                    onChange={setForgotCode}
+                    autoFocus
+                    placeholder="6-digit code from your email"
+                  />
+                )}
                 <PasswordField
                   label="New Password"
                   value={forgotNewPassword}
                   onChange={setForgotNewPassword}
                   autoComplete="new-password"
-                  placeholder="At least 6 characters"
+                  placeholder="At least 8 characters"
                 />
                 <PasswordField
                   label="Confirm New Password"
