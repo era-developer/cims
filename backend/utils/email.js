@@ -400,7 +400,7 @@ function wrapEmail(title, subtitle, bodyHtml) {
   // A plain text link (not a filled button) reads less like a marketing
   // email to spam heuristics, while still being a real, working link.
   const footerLink = siteUrl
-    ? `<p style="margin:16px 0 0;"><a href="${escapeHtml(siteUrl)}" style="color:#1a237e;font-weight:700;text-decoration:underline;">Open CIMS Portal &rarr;</a></p>`
+    ? `<p style="margin:16px 0 0;"><a href="${escapeHtml(siteUrl)}" style="color:#1a237e;font-weight:700;text-decoration:underline;">Open ${escapeHtml(getOrgShortName())} Portal &rarr;</a></p>`
     : '';
 
   // White letterhead, not a filled navy band -- the real logo is dark
@@ -546,7 +546,7 @@ async function sendOrderNotification(order, centerId) {
 
   const adminHtml = wrapEmail(
     'New component order',
-    'A student has placed a new CIMS request.',
+    `A student has placed a new ${getOrgShortName()} request.`,
     `
       <div style="padding:14px 16px;background:#eef2ff;border-left:4px solid #1a237e;border-radius:8px;margin-bottom:20px;">
         <strong>Order ID:</strong> ${escapeHtml(order.orderId)}<br>
@@ -577,7 +577,7 @@ async function sendOrderNotification(order, centerId) {
 
   const studentHtml = wrapEmail(
     'Order received',
-    'Your request has been recorded in CIMS and is waiting for admin review.',
+    `Your request has been recorded in ${getOrgShortName()} and is waiting for admin review.`,
     `
       <div style="padding:14px 16px;background:#eef2ff;border-left:4px solid #1a237e;border-radius:8px;margin-bottom:20px;">
         <strong>Order ID:</strong> ${escapeHtml(order.orderId)}<br>
@@ -603,7 +603,7 @@ async function sendOrderNotification(order, centerId) {
       from: `"${getSenderName()}" <${config.user}>`,
       to: adminRecipient,
       replyTo: buildReplyTo(studentRecipient, config.user),
-      subject: `[CIMS] New order ${order.orderId} from ${details.studentName || order.username}`,
+      subject: `[${getOrgShortName()}] New order ${order.orderId} from ${details.studentName || order.username}`,
       html: adminHtml,
     }));
   }
@@ -612,7 +612,7 @@ async function sendOrderNotification(order, centerId) {
       from: `"${getSenderName()}" <${config.user}>`,
       to: studentRecipient,
       replyTo: buildReplyTo(adminRecipient, config.user),
-      subject: `[CIMS] Order received ${order.orderId}`,
+      subject: `[${getOrgShortName()}] Order received ${order.orderId}`,
       html: studentHtml,
     }));
   }
@@ -634,8 +634,8 @@ async function sendProcurementNotification({ request, type, recipients = [] }) {
     'status-update': `Request ${request.status}`,
   };
   const subject = type === 'request'
-    ? `[CIMS] New component request from ${escapeHtml(request.centerName)}`
-    : `[CIMS] Your component request is now: ${escapeHtml(request.status)}`;
+    ? `[${getOrgShortName()}] New component request from ${escapeHtml(request.centerName)}`
+    : `[${getOrgShortName()}] Your component request is now: ${escapeHtml(request.status)}`;
 
   const summary = `
     <p style="margin:0 0 8px;"><strong>Center:</strong> ${escapeHtml(request.centerName)}</p>
@@ -688,8 +688,8 @@ async function sendTransferNotification({ transfer, type, recipients = [] }) {
     returned: 'Transfer returned',
   };
   const subject = typeLabels[type]
-    ? `[CIMS] ${typeLabels[type]}: ${transfer.id}`
-    : `[CIMS] Transfer update: ${transfer.id}`;
+    ? `[${getOrgShortName()}] ${typeLabels[type]}: ${transfer.id}`
+    : `[${getOrgShortName()}] Transfer update: ${transfer.id}`;
 
   const summary = `
     <p style="margin:0 0 8px;"><strong>Requesting center:</strong> ${escapeHtml(transfer.requestingCenterName)}</p>
@@ -792,7 +792,7 @@ async function sendStatusUpdate(order, status, remarks, centerId) {
 
   const adminHtml = wrapEmail(
     `Order status changed: ${status}`,
-    'CIMS has recorded a new order lifecycle update.',
+    `${getOrgShortName()} has recorded a new order lifecycle update.`,
     `
       ${sharedBlock(adminNotes)}
       <p style="margin:16px 0 4px;"><strong>Student:</strong> ${escapeHtml(details.studentName || order.username)}</p>
@@ -805,7 +805,7 @@ async function sendStatusUpdate(order, status, remarks, centerId) {
 
   const studentHtml = wrapEmail(
     `Order update: ${status}`,
-    'Your CIMS order status has changed.',
+    `Your ${getOrgShortName()} order status has changed.`,
     `
       ${sharedBlock(studentNotes)}
       <p style="margin:16px 0 0;color:#475569;">If you have completed your work, use the portal return option so the admin can receive the components back and inventory can be updated.</p>
@@ -818,7 +818,7 @@ async function sendStatusUpdate(order, status, remarks, centerId) {
       from: `"${getSenderName()}" <${config.user}>`,
       to: adminRecipient,
       replyTo: buildReplyTo(studentRecipient, config.user),
-      subject: `[CIMS] ${status}: ${order.orderId}`,
+      subject: `[${getOrgShortName()}] ${status}: ${order.orderId}`,
       html: adminHtml,
     }));
   }
@@ -827,7 +827,7 @@ async function sendStatusUpdate(order, status, remarks, centerId) {
       from: `"${getSenderName()}" <${config.user}>`,
       to: studentRecipient,
       replyTo: buildReplyTo(adminRecipient, config.user),
-      subject: `[CIMS] ${status}: ${order.orderId}`,
+      subject: `[${getOrgShortName()}] ${status}: ${order.orderId}`,
       html: studentHtml,
     }));
   }
@@ -878,7 +878,7 @@ async function sendReturnReminder(order, centerId) {
     from: `"${getSenderName()}" <${config.user}>`,
     to: studentRecipient,
     replyTo: buildReplyTo(adminRecipient, config.user),
-    subject: `[CIMS] Return reminder for ${order.orderId}`,
+    subject: `[${getOrgShortName()}] Return reminder for ${order.orderId}`,
     html,
   });
 }
@@ -899,8 +899,8 @@ async function sendOtpEmail({ targetEmail, centerId, code, purpose, expiresInMin
   const config = getSmtpConfig();
   const transporter = createTransporter();
   const copy = purpose === 'password_reset'
-    ? { title: 'Reset your CIMS password', subtitle: 'Use this code to reset your password.', subject: '[CIMS] Password reset code' }
-    : { title: 'Confirm your order', subtitle: 'Use this code to confirm and submit your component request.', subject: '[CIMS] Order confirmation code' };
+    ? { title: `Reset your ${getOrgShortName()} password`, subtitle: 'Use this code to reset your password.', subject: `[${getOrgShortName()}] Password reset code` }
+    : { title: 'Confirm your order', subtitle: 'Use this code to confirm and submit your component request.', subject: `[${getOrgShortName()}] Order confirmation code` };
 
   const html = wrapEmail(
     copy.title,

@@ -190,4 +190,41 @@ router.put('/profile', authMiddleware, async (req, res) => {
   }
 });
 
+// Lets any signed-in user change their own password. Admins had no way to do
+// this before -- My Profile is student-only, and the Users page reset is a
+// super-admin tool -- which is how a seed-time password ends up living for
+// months. Requires the current password so a walked-away session cannot be
+// used to lock the real owner out.
+router.post('/change-password', authMiddleware, async (req, res) => {
+  try {
+    const currentPassword = String(req.body.currentPassword || '');
+    const newPassword = String(req.body.newPassword || '');
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ message: 'Current and new password are required.' });
+    }
+    if (newPassword.length < 8) {
+      return res.status(400).json({ message: 'New password must be at least 8 characters.' });
+    }
+    if (newPassword === currentPassword) {
+      return res.status(400).json({ message: 'New password must be different from the current one.' });
+    }
+
+    const user = findUserById(req.user.id);
+    if (!user || !user.active) return res.status(401).json({ message: 'Invalid session' });
+
+    const match = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!match) return res.status(401).json({ message: 'Current password is incorrect.' });
+
+    await updateUser(user.id, { password: newPassword });
+    await logActivity('PASSWORD_CHANGED', user.username, {
+      role: user.role, centerId: user.centerId, info: 'Password changed by the user',
+    });
+    res.json({ message: 'Password changed. Use the new password next time you sign in.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Unable to change password right now.' });
+  }
+});
+
 module.exports = router;

@@ -406,6 +406,9 @@ function StatCard({ label, value, highlight = false }) {
   );
 }
 
+// autoComplete="off" by default, and "new-password" on password inputs: this
+// form creates OTHER people's accounts, so the browser must never fill it
+// with the signed-in admin's own saved login.
 function FormField({ label, value, onChange, placeholder, type = 'text', fullWidth }) {
   return (
     <div style={{ gridColumn: fullWidth ? '1 / -1' : undefined }}>
@@ -413,6 +416,8 @@ function FormField({ label, value, onChange, placeholder, type = 'text', fullWid
       <input
         style={styles.formInput}
         type={type}
+        name={type === 'password' ? 'newUserPassword' : undefined}
+        autoComplete={type === 'password' ? 'new-password' : 'off'}
         value={value}
         onChange={event => onChange(event.target.value)}
         placeholder={placeholder}

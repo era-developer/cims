@@ -360,25 +360,32 @@ export default function Login() {
               </form>
             )
           ) : (
-            <form onSubmit={handleRegister}>
+            // autoComplete is set explicitly on every field, and the password
+            // fields use "new-password". Without this the browser's password
+            // manager treats the form as a login form and fills in whatever
+            // credentials were last saved on this machine -- on a shared lab
+            // PC that can be an admin's -- putting the username into the text
+            // field before the password and the password into the password
+            // field, where the Show toggle reveals it.
+            <form onSubmit={handleRegister} autoComplete="off">
               <div style={{ ...styles.formGrid, ...(isMobile ? styles.formGridSingle : {}) }}>
-                <Field label="Full Name" value={registerForm.fullName} onChange={value => setRegisterForm(current => ({ ...current, fullName: value }))} placeholder="Your full name" />
-                <Field label="Username" value={registerForm.username} onChange={value => setRegisterForm(current => ({ ...current, username: value }))} placeholder="Choose a username" />
-                <Field label="Email" type="email" value={registerForm.email} onChange={value => setRegisterForm(current => ({ ...current, email: value }))} placeholder="name@college.edu" fullWidth />
-                <Field label="Mobile (WhatsApp)" value={registerForm.mobile} onChange={value => setRegisterForm(current => ({ ...current, mobile: value }))} placeholder="10-digit mobile" />
-                <Field label="Alternative Mobile" value={registerForm.altMobile} onChange={value => setRegisterForm(current => ({ ...current, altMobile: value }))} placeholder="Alt mobile (optional)" />
-                <Field label="College" value={registerForm.college} onChange={value => setRegisterForm(current => ({ ...current, college: value }))} placeholder="College/institution name" />
+                <Field label="Full Name" name="fullName" autoComplete="name" value={registerForm.fullName} onChange={value => setRegisterForm(current => ({ ...current, fullName: value }))} placeholder="Your full name" />
+                <Field label="Username" name="newUsername" autoComplete="off" value={registerForm.username} onChange={value => setRegisterForm(current => ({ ...current, username: value }))} placeholder="Choose a username" />
+                <Field label="Email" name="email" type="email" autoComplete="email" value={registerForm.email} onChange={value => setRegisterForm(current => ({ ...current, email: value }))} placeholder="name@college.edu" fullWidth />
+                <Field label="Mobile (WhatsApp)" name="mobile" autoComplete="tel" value={registerForm.mobile} onChange={value => setRegisterForm(current => ({ ...current, mobile: value }))} placeholder="10-digit mobile" />
+                <Field label="Alternative Mobile" name="altMobile" autoComplete="off" value={registerForm.altMobile} onChange={value => setRegisterForm(current => ({ ...current, altMobile: value }))} placeholder="Alt mobile (optional)" />
+                <Field label="College" name="college" autoComplete="organization" value={registerForm.college} onChange={value => setRegisterForm(current => ({ ...current, college: value }))} placeholder="College/institution name" />
                 <SelectField
                   label="Center"
                   value={registerForm.centerId}
                   onChange={value => setRegisterForm(current => ({ ...current, centerId: value }))}
                   options={centers}
                 />
-                <Field label="Year of Graduation" value={registerForm.graduationYear} onChange={value => setRegisterForm(current => ({ ...current, graduationYear: value }))} placeholder="2024" />
-                <Field label="Degree" value={registerForm.degree} onChange={value => setRegisterForm(current => ({ ...current, degree: value }))} placeholder="B.Tech / B.Sc / MBA" />
-                <Field label="Department" value={registerForm.department} onChange={value => setRegisterForm(current => ({ ...current, department: value }))} placeholder="ECE / CSE / Mechanical" />
-                <PasswordField label="Password" value={registerForm.password} onChange={value => setRegisterForm(current => ({ ...current, password: value }))} placeholder="Create a password" />
-                <PasswordField label="Confirm Password" value={registerForm.confirmPassword} onChange={value => setRegisterForm(current => ({ ...current, confirmPassword: value }))} placeholder="Repeat password" />
+                <Field label="Year of Graduation" name="graduationYear" autoComplete="off" value={registerForm.graduationYear} onChange={value => setRegisterForm(current => ({ ...current, graduationYear: value }))} placeholder="2024" />
+                <Field label="Degree" name="degree" autoComplete="off" value={registerForm.degree} onChange={value => setRegisterForm(current => ({ ...current, degree: value }))} placeholder="B.Tech / B.Sc / MBA" />
+                <Field label="Department" name="department" autoComplete="off" value={registerForm.department} onChange={value => setRegisterForm(current => ({ ...current, department: value }))} placeholder="ECE / CSE / Mechanical" />
+                <PasswordField label="Password" name="newPassword" autoComplete="new-password" value={registerForm.password} onChange={value => setRegisterForm(current => ({ ...current, password: value }))} placeholder="Create a password" />
+                <PasswordField label="Confirm Password" name="confirmNewPassword" autoComplete="new-password" value={registerForm.confirmPassword} onChange={value => setRegisterForm(current => ({ ...current, confirmPassword: value }))} placeholder="Repeat password" />
               </div>
               <button type="submit" style={{ ...styles.primaryBtn, opacity: loading ? 0.7 : 1 }} disabled={loading}>
                 {loading ? 'Submitting...' : 'Submit Registration'}
@@ -420,13 +427,14 @@ export default function Login() {
   );
 }
 
-function Field({ label, value, onChange, placeholder, type = 'text', autoComplete, autoFocus, fullWidth }) {
+function Field({ label, name, value, onChange, placeholder, type = 'text', autoComplete, autoFocus, fullWidth }) {
   return (
     <div style={{ ...styles.field, gridColumn: fullWidth ? '1 / -1' : undefined }}>
       <label style={styles.label}>{label}</label>
       <input
         style={styles.input}
         type={type}
+        name={name}
         value={value}
         onChange={event => onChange(event.target.value)}
         placeholder={placeholder}
@@ -437,7 +445,7 @@ function Field({ label, value, onChange, placeholder, type = 'text', autoComplet
   );
 }
 
-function PasswordField({ label, value, onChange, placeholder, autoComplete, fullWidth }) {
+function PasswordField({ label, name, value, onChange, placeholder, autoComplete, fullWidth }) {
   const [showPassword, setShowPassword] = useState(false);
 
   return (
@@ -447,6 +455,7 @@ function PasswordField({ label, value, onChange, placeholder, autoComplete, full
         <input
           style={{ ...styles.input, paddingRight: '50px' }}
           type={showPassword ? 'text' : 'password'}
+          name={name}
           value={value}
           onChange={event => onChange(event.target.value)}
           placeholder={placeholder}

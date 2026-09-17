@@ -97,11 +97,15 @@ Important:
 4. Admin records received and damaged quantities.
 5. Order closes as `Returned` (or `Partially Returned` until complete).
 
-## 6) My Profile
+## 6) Change your password
+Click `Password` next to `Sign Out` in the top bar. Do this if you ever used
+the portal on a shared computer and saved your password there.
+
+## 7) My Profile
 
 Use `My Profile` to keep your details updated. Updated data helps future checkout auto-fill and cleaner order records.
 
-## 7) Student best practices
+## 8) Student best practices
 
 - Request only what is required for your project.
 - Keep expected return date realistic.
@@ -109,7 +113,7 @@ Use `My Profile` to keep your details updated. Updated data helps future checkou
 - Return all components on time.
 - Inform admin immediately about damaged/missing parts.
 
-## 8) Common student issues
+## 9) Common student issues
 
 ### "Your registration is awaiting admin approval."
 Your account exists but is not yet activated by admin.
