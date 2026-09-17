@@ -20,6 +20,10 @@ export default function QrScanner({
   hint = 'Point the camera at the QR label on the unit.',
   paused = false,
   children,
+  // Optional "I'm finished" button under the panel, for multi-scan flows
+  // where closing with the X feels like cancelling.
+  doneLabel = '',
+  onDone,
 }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -184,6 +188,11 @@ export default function QrScanner({
           />
           <button type="submit" style={styles.manualBtn} disabled={!manual.trim()}>Go</button>
         </form>
+        {doneLabel && (
+          <div style={styles.doneRow}>
+            <button type="button" style={styles.doneBtn} onClick={onDone || onClose}>{doneLabel}</button>
+          </div>
+        )}
         {engine && <div style={styles.engine}>{engine === 'native' ? 'Using device scanner' : 'Using in-page decoder'}</div>}
       </div>
     </div>
@@ -207,5 +216,7 @@ const styles = {
   manualRow: { display: 'flex', gap: '8px', padding: '12px 16px 6px' },
   manualInput: { flex: 1, padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.08)', color: '#fff', fontSize: '14px', fontFamily: "'DM Mono', Consolas, monospace", outline: 'none' },
   manualBtn: { background: '#f9a825', color: '#102548', border: 'none', borderRadius: '10px', padding: '0 16px', fontWeight: 800, cursor: 'pointer' },
+  doneRow: { padding: '4px 16px 12px' },
+  doneBtn: { width: '100%', background: '#2e7d32', color: '#fff', border: 'none', borderRadius: '10px', padding: '12px', fontWeight: 800, fontSize: '14px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" },
   engine: { fontSize: '10px', color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: '0 0 10px' },
 };

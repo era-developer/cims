@@ -18,7 +18,6 @@ export default function IssueUnitsDialog({ order, onConfirm, onClose, remarks, s
   const [error, setError] = useState('');
   const [scanning, setScanning] = useState(false);
   const [scanNote, setScanNote] = useState('');
-  const [openList, setOpenList] = useState(() => new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -34,8 +33,6 @@ export default function IssueUnitsDialog({ order, onConfirm, onClose, remarks, s
           units: item.units,
           selected: new Set(),
         })));
-        // Components with only a handful of units start expanded.
-        setOpenList(new Set(data.items.filter(i => i.units.length <= 12).map(i => String(i.catalogId))));
       } catch (err) {
         if (!cancelled) setError(err?.response?.data?.message || 'Unable to load units for this order');
       } finally {
@@ -150,18 +147,31 @@ export default function IssueUnitsDialog({ order, onConfirm, onClose, remarks, s
             {scanning && (
               <QrScanner
                 title="Scan units to issue"
-                hint="Scan each unit as you hand it over. It ticks itself under its component."
+                hint="Scan each unit as you hand it over."
                 onScan={handleScan}
                 onClose={() => setScanning(false)}
+                doneLabel={allDone ? 'Done — all units selected' : 'Done for now'}
+                onDone={() => setScanning(false)}
               >
-                <div style={styles.scanStatus}>
-                  <div>{scanNote || 'Waiting for a label…'}</div>
-                  <div style={styles.scanProgressRow}>
-                    {progress.map(p => (
-                      <span key={p.name} style={{ ...styles.scanProgressPill, ...(p.have === p.need ? styles.scanProgressDone : {}) }}>{p.name} {p.have}/{p.need}</span>
-                    ))}
-                  </div>
-                  {allDone && <div style={styles.scanAllDone}>All units selected — close the scanner and confirm.</div>}
+                <div style={styles.scanNote}>{scanNote || 'Waiting for a label…'}</div>
+                <div style={styles.scanList}>
+                  {lines.filter(l => l.qty > 0).map((l, i) => {
+                    const done = l.selected.size === l.qty;
+                    const chosen = l.units.filter(u => l.selected.has(u.id));
+                    return (
+                      <div key={l.catalogId} style={{ ...styles.scanRow, ...(done ? styles.scanRowDone : {}) }}>
+                        <div style={styles.scanRowHead}>
+                          <span style={styles.scanRowIndex}>{i + 1}</span>
+                          <span style={styles.scanRowName}>{l.name}</span>
+                          <span style={{ ...styles.scanRowCount, color: done ? '#86efac' : '#fde68a' }}>{l.selected.size}/{l.qty}</span>
+                        </div>
+                        <div style={styles.scanRowTags}>
+                          {chosen.map(u => <span key={u.id} style={styles.scanTag}>{u.assetTag}</span>)}
+                          {Array.from({ length: l.qty - chosen.length }).map((_, k) => <span key={'slot' + k} style={styles.scanSlot}>— scan —</span>)}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </QrScanner>
             )}
@@ -169,7 +179,6 @@ export default function IssueUnitsDialog({ order, onConfirm, onClose, remarks, s
             <div style={styles.lines}>
               {lines.map(line => {
                 const done = line.selected.size === line.qty;
-                const open = openList.has(line.catalogId);
                 const selectedUnits = line.units.filter(u => line.selected.has(u.id));
                 return (
                   <div key={line.catalogId} style={{ ...styles.card, ...(done ? styles.cardDone : {}) }}>
@@ -201,32 +210,24 @@ export default function IssueUnitsDialog({ order, onConfirm, onClose, remarks, s
                           ))}
                         </div>
                         <div style={styles.lineActions}>
-                          <button type="button" style={styles.linkBtn} onClick={() => setOpenList(c => { const n = new Set(c); n.has(line.catalogId) ? n.delete(line.catalogId) : n.add(line.catalogId); return n; })}>
-                            {open ? 'Hide unit list' : 'Pick from list'}
-                          </button>
+                          {!done && (
+                            <select
+                              style={styles.unitSelect}
+                              value=""
+                              onChange={e => { if (e.target.value) toggleUnit(line.catalogId, e.target.value); }}
+                            >
+                              <option value="">Add a unit… ({line.units.length - line.selected.size} available)</option>
+                              {line.units.filter(u => !line.selected.has(u.id)).map(u => (
+                                <option key={u.id} value={u.id}>
+                                  {u.assetTag}{u.reservedForThisOrder ? '  (reserved for this order)' : ''}{u.serialNumber ? `  SN ${u.serialNumber}` : ''}{u.location ? `  · ${u.location}` : ''}
+                                </option>
+                              ))}
+                            </select>
+                          )}
                           {!done && <button type="button" style={styles.linkBtn} onClick={() => autoPick(line.catalogId)}>Auto-pick remaining {line.qty - line.selected.size}</button>}
                           {line.selected.size > 0 && <button type="button" style={styles.linkBtnMuted} onClick={() => clearLine(line.catalogId)}>Clear</button>}
                           {line.units.length < line.qty && <span style={styles.warn}>Only {line.units.length} available — lower the quantity.</span>}
                         </div>
-                        {open && (
-                          <div style={styles.unitList}>
-                            {line.units.map(u => {
-                              const checked = line.selected.has(u.id);
-                              const full = !checked && line.selected.size >= line.qty;
-                              return (
-                                <label key={u.id} style={{ ...styles.unitRow, opacity: full ? 0.45 : 1 }}>
-                                  <input type="checkbox" checked={checked} disabled={full} onChange={() => toggleUnit(line.catalogId, u.id)} />
-                                  <span style={styles.unitTag}>{u.assetTag}</span>
-                                  <span style={styles.unitMeta}>
-                                    {u.reservedForThisOrder ? <span style={styles.reservedBadge}>reserved for this order</span> : null}
-                                    {u.serialNumber ? ` SN ${u.serialNumber}` : ''}{u.location ? ` · ${u.location}` : ''}
-                                  </span>
-                                </label>
-                              );
-                            })}
-                            {!line.units.length && <div style={styles.muted}>No available units.</div>}
-                          </div>
-                        )}
                       </>
                     )}
                   </div>
@@ -274,6 +275,18 @@ const styles = {
   progressPill: { fontSize: '11px', fontWeight: 700, padding: '4px 9px', borderRadius: '999px', background: '#fffbeb', color: '#b45309', border: '1px solid #fde68a' },
   progressDone: { background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0' },
   scanBtn: { marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: '7px', background: '#2d2a6e', color: '#fff', border: 'none', borderRadius: '10px', padding: '9px 14px', fontWeight: 800, fontSize: '13px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" },
+  scanNote: { fontSize: '13px', color: 'rgba(255,255,255,0.85)', textAlign: 'center', marginBottom: '8px' },
+  scanList: { display: 'flex', flexDirection: 'column', gap: '6px' },
+  scanRow: { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', padding: '8px 10px' },
+  scanRowDone: { borderColor: 'rgba(134,239,172,0.6)', background: 'rgba(46,125,50,0.18)' },
+  scanRowHead: { display: 'flex', alignItems: 'center', gap: '8px' },
+  scanRowIndex: { width: '20px', height: '20px', borderRadius: '50%', background: '#f9a825', color: '#102548', fontSize: '11px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  scanRowName: { fontWeight: 700, fontSize: '14px', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  scanRowCount: { fontWeight: 800, fontSize: '14px', fontFamily: "'DM Mono', Consolas, monospace" },
+  scanRowTags: { display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px', paddingLeft: '28px' },
+  scanTag: { background: 'rgba(134,239,172,0.18)', color: '#bbf7d0', border: '1px solid rgba(134,239,172,0.5)', borderRadius: '999px', padding: '2px 9px', fontSize: '12px', fontWeight: 700, fontFamily: "'DM Mono', Consolas, monospace" },
+  scanSlot: { border: '1px dashed rgba(255,255,255,0.3)', color: 'rgba(255,255,255,0.4)', borderRadius: '999px', padding: '2px 9px', fontSize: '11px' },
+  unitSelect: { padding: '8px 10px', borderRadius: '8px', border: '1.5px solid #d7dde9', fontSize: '13px', fontFamily: "'DM Sans', sans-serif", maxWidth: '100%', background: '#fff' },
   scanStatus: { fontSize: '13px', color: 'rgba(255,255,255,0.85)', textAlign: 'center' },
   scanProgressRow: { display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'center', marginTop: '8px' },
   scanProgressPill: { fontSize: '11px', fontWeight: 700, padding: '3px 8px', borderRadius: '999px', background: 'rgba(255,255,255,0.1)', color: '#fde68a' },
