@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import BrandLogo from './BrandLogo';
-import ScanLookup from './ScanLookup';
+import QrScanner from './QrScanner';
+import { extractTagFromScan } from '../utils/scan';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import useViewport from '../hooks/useViewport';
@@ -124,9 +125,7 @@ export default function Navbar() {
         </form>
 
         <div style={{ ...styles.right, ...(isCompact ? styles.rightCompact : {}), ...(isMobile ? styles.rightMobile : {}) }}>
-          {isAdmin && (
-            <button style={styles.scanBtn} onClick={() => setScanOpen(true)} title="Scan a unit's QR label">Scan</button>
-          )}
+          <button style={styles.scanBtn} onClick={() => setScanOpen(true)} title="Scan a unit's QR label">Scan</button>
           {!isAdmin && (
             <button style={styles.cartBtn} onClick={() => navigate('/cart')}>
               Cart
@@ -143,7 +142,12 @@ export default function Navbar() {
           <button style={styles.logoutBtn} onClick={handleLogout}>Sign Out</button>
         </div>
       </div>
-      {scanOpen && <ScanLookup onClose={() => setScanOpen(false)} />}
+      {scanOpen && (
+        <QrScanner
+          onScan={text => { const tag = extractTagFromScan(text); setScanOpen(false); if (tag) navigate(`/unit/${encodeURIComponent(tag)}`); }}
+          onClose={() => setScanOpen(false)}
+        />
+      )}
     </nav>
   );
 }

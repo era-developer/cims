@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import QRCode from 'react-qr-code';
 import { useAuth } from '../context/AuthContext';
 import { APP_SHORT_NAME } from '../brand';
+import { unitLabelUrl } from '../utils/scan';
 
 // Printable sheet of QR labels for physical units.
 //
@@ -13,10 +14,13 @@ import { APP_SHORT_NAME } from '../brand';
 // expects), the tag in text, and the component name. Sized for 38 x 21 mm
 // labels; the browser's print dialog handles paper and scaling.
 
+// The QR encodes a link (~60 chars), so it needs a little more area than a
+// bare tag would; the tag text is the one thing that must never be cut off,
+// so it gets its own, smaller monospace size and is allowed to wrap.
 const SIZES = {
-  small: { w: 38, h: 21, qr: 15, font: 6.5, cols: 5, label: '38 × 21 mm (5 per row)' },
-  medium: { w: 50, h: 30, qr: 22, font: 8, cols: 4, label: '50 × 30 mm (4 per row)' },
-  large: { w: 70, h: 40, qr: 30, font: 10, cols: 3, label: '70 × 40 mm (3 per row)' },
+  small: { w: 38, h: 21, qr: 16, font: 6, tagFont: 5.2, cols: 5, label: '38 × 21 mm (5 per row)' },
+  medium: { w: 50, h: 30, qr: 22, font: 7.5, tagFont: 6.8, cols: 4, label: '50 × 30 mm (4 per row)' },
+  large: { w: 70, h: 40, qr: 30, font: 10, tagFont: 9, cols: 3, label: '70 × 40 mm (3 per row)' },
 };
 
 export default function AdminLabels() {
@@ -89,7 +93,7 @@ export default function AdminLabels() {
       <div className="no-print" style={styles.toolbar}>
         <div>
           <h1 style={styles.title}>QR labels{componentName ? ` — ${componentName}` : ''}</h1>
-          <p style={styles.sub}>{toPrint.length} of {assets.length} units selected. Each QR encodes the asset tag; scan it with the {APP_SHORT_NAME} Scan button.</p>
+          <p style={styles.sub}>{toPrint.length} of {assets.length} units selected. Each QR is a link to the unit's page in {APP_SHORT_NAME} — any phone camera opens it; staff and students see what their role allows.</p>
         </div>
         <div style={styles.controls}>
           <label style={styles.control}>
@@ -130,10 +134,10 @@ export default function AdminLabels() {
         {toPrint.map(a => (
           <div key={a.id} className="label" style={{ ...styles.label, width: `${s.w}mm`, height: `${s.h}mm` }}>
             <div style={{ width: `${s.qr}mm`, height: `${s.qr}mm`, flexShrink: 0 }}>
-              <QRCode value={a.asset_tag} size={256} style={{ width: '100%', height: '100%' }} level="M" />
+              <QRCode value={unitLabelUrl(a.asset_tag)} size={256} style={{ width: '100%', height: '100%' }} level="M" />
             </div>
             <div style={{ ...styles.labelText, fontSize: `${s.font}pt` }}>
-              <div style={styles.labelTag}>{a.asset_tag}</div>
+              <div style={{ ...styles.labelTag, fontSize: `${s.tagFont}pt` }}>{a.asset_tag}</div>
               <div style={styles.labelName}>{a.name}</div>
               <div style={styles.labelOrg}>{APP_SHORT_NAME}{a.serial_number ? ` · SN ${a.serial_number}` : ''}</div>
             </div>
@@ -161,7 +165,7 @@ const styles = {
   sheet: { display: 'grid', gap: '3mm', padding: '6mm', background: '#fff', border: '1px solid #e3e8f2', borderRadius: '12px', justifyContent: 'start' },
   label: { display: 'flex', alignItems: 'center', gap: '2mm', padding: '1.5mm', border: '1px dashed #cbd5e1', borderRadius: '1.5mm', boxSizing: 'border-box', overflow: 'hidden', background: '#fff' },
   labelText: { display: 'flex', flexDirection: 'column', minWidth: 0, lineHeight: 1.25, color: '#111' },
-  labelTag: { fontFamily: "'DM Mono', Consolas, monospace", fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+  labelTag: { fontFamily: "'DM Mono', Consolas, monospace", fontWeight: 800, wordBreak: 'break-all', lineHeight: 1.15, letterSpacing: '-0.01em' },
   labelName: { fontWeight: 600, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' },
   labelOrg: { color: '#555', fontSize: '0.85em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
   error: { background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca', padding: '11px 14px', borderRadius: '10px' },

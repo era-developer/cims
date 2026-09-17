@@ -96,20 +96,27 @@ Rules:
 ## 4.3 QR labels and scanning
 
 **Print labels:** `Inventory` -> `QR labels` on a component row. Tick the units,
-pick a label size (38x21, 50x30 or 70x40 mm), and `Print`. Each label carries
-the QR code, the asset tag and the component name. Stick it on the unit.
+pick a label size (38x21, 50x30 or 70x40 mm), and `Print`. Each label carries a
+QR code, the asset tag and the component name.
 
-**Scan:** the `Scan` button in the top bar (phone or laptop camera) reads a
-label and shows the unit: name, tag, status, location, and who currently
-has it, with buttons to open that order or the inventory row. If the camera
-is unavailable, type the tag instead.
+**The QR is a link.** Any phone camera -- no app needed -- opens the unit's
+page in KIMS. Whoever scans it signs in (if not already) and sees what their
+role allows:
+- **Student:** the component (photo, description, how many are free), this
+  unit's status, whether it is issued to *them* (with a link to their order),
+  and their own history with it. Never other students' names.
+- **Admin:** all of that plus who currently has it, every order it has been on,
+  the full lifecycle, and status actions (mark damaged, send for repair, mark
+  repaired, dispose, restore) -- each asks for a reason.
 
-Scanning is also built into two flows:
-- **Recording a return** (`Orders`): `Scan returned unit` marks each scanned
-  label as returned in good condition; tap `Damaged` on the row for any that
-  are not.
-- **Swapping a unit** (`Swap` next to an assigned tag): `Scan` the label of
-  the unit you actually have in hand to select it.
+**Scan button** (top bar, all roles): opens the camera inside the portal and
+goes to the same unit page. Type the tag if the camera is unavailable.
+
+Inside workflows:
+- **Recording a return** (`Orders`): `Scan a returned unit` finds and
+  highlights that unit's row; **you** then tap Good or Damaged. Scanning never
+  decides the condition.
+- **Swapping a unit**: `Scan` the label of the unit in hand to select it.
 
 ## 5) Student registration approval and user management
 

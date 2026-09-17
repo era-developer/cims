@@ -48,6 +48,8 @@ app.use('/api/transfers', require('./routes/transfers'));
 app.use('/api/webhooks', require('./routes/webhooks'));
 app.use('/api/invoices', require('./routes/invoices'));
 app.use('/api/assets', require('./routes/assets'));
+// What a scanned QR label resolves to, for any signed-in role.
+app.use('/api/units', require('./routes/units'));
 app.use('/api/programs', require('./routes/programs'));
 app.use('/api/internal-issues', require('./routes/internal-issues'));
 app.use('/api/procurement', require('./routes/procurement'));

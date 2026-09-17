@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import QrScanner from './QrScanner';
+import { extractTagFromScan } from '../utils/scan';
 
 // Small "Swap" action shown next to a system-assigned asset tag, used by
 // Orders, Internal Use, and Transfers wherever a specific unit is displayed.
@@ -21,8 +22,9 @@ export default function AssetSwapPicker({ asset, catalogId, swapUrl, onSwapped }
 
   // Scanning the label of the unit actually in hand selects it -- no need to
   // read a tag off a shelf and find it in the dropdown.
-  function handleScan(tag) {
-    const hit = candidates.find(c => String(c.assetTag).toUpperCase() === String(tag).toUpperCase());
+  function handleScan(text) {
+    const tag = extractTagFromScan(text);
+    const hit = candidates.find(c => String(c.assetTag).toUpperCase() === tag);
     if (!hit) {
       setError(`"${tag}" is not an available unit of this component.`);
       return;

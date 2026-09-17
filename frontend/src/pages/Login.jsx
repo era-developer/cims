@@ -38,7 +38,7 @@ const INITIAL_REGISTER_FORM = {
 export default function Login() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { login, register } = useAuth();
+  const { login, register, user: signedIn } = useAuth();
   const { centers } = useCenters();
   const { isMobile, isTablet } = useViewport();
 
@@ -102,6 +102,18 @@ export default function Login() {
     return () => clearInterval(timer);
   }, [forgotCooldown > 0]);
 
+  // A QR label opens the short link with ?unit=<tag>; a signed-out visit to
+  // /unit/<tag> comes back as ?next=/unit/<tag>. Either way, once signed in
+  // (now or already), go straight to that unit's page.
+  const unitParam = searchParams.get('unit');
+  const nextParam = searchParams.get('next');
+  const afterLogin = unitParam
+    ? `/unit/${encodeURIComponent(String(unitParam).trim().toUpperCase())}`
+    : (nextParam && nextParam.startsWith('/unit/') ? nextParam : '');
+  useEffect(() => {
+    if (signedIn && afterLogin) navigate(afterLogin, { replace: true });
+  }, [signedIn, afterLogin, navigate]);
+
   useEffect(() => {
     // ?reset=1&loginId=..&code=.. is the set-password link from the welcome
     // email: open the reset form with both fields filled so the person only
@@ -155,7 +167,7 @@ export default function Login() {
     setLoading(true);
     try {
       const user = await login(loginForm.username.trim(), loginForm.password);
-      navigate(['admin', 'super_admin'].includes(user.role) ? '/admin' : '/dashboard');
+      navigate(afterLogin || (['admin', 'super_admin'].includes(user.role) ? '/admin' : '/dashboard'));
     } catch (err) {
       setMessageType('error');
       setMessage(err.response?.data?.message || 'Login failed. Check your credentials.');

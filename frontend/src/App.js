@@ -24,11 +24,17 @@ import ProgramDetail from './pages/ProgramDetail';
 import RegisterLanding from './pages/RegisterLanding';
 import AdminSettings from './pages/AdminSettings';
 import AdminLabels from './pages/AdminLabels';
+import UnitPage from './pages/UnitPage';
 
 function PrivateRoute({ children, role }) {
   const { user, loading } = useAuth();
   if (loading) return <div style={{ padding: '80px', textAlign: 'center', color: '#6b7280', fontFamily: "'DM Sans', sans-serif" }}>Loading {APP_SHORT_NAME}...</div>;
-  if (!user) return <Navigate to="/" replace />;
+  if (!user) {
+    // A QR label opened while signed out: come back here after login.
+    const wanted = window.location.pathname + window.location.search;
+    const next = wanted.startsWith('/unit/') ? `?next=${encodeURIComponent(wanted)}` : '';
+    return <Navigate to={`/${next}`} replace />;
+  }
   const allowedRoles = Array.isArray(role) ? role : role ? [role] : [];
   if (allowedRoles.length && !allowedRoles.includes(user.role)) {
     return <Navigate to={['admin', 'super_admin'].includes(user.role) ? '/admin' : '/dashboard'} replace />;
@@ -138,6 +144,12 @@ export default function App() {
             <Route path="/admin/programs/:id" element={
               <PrivateRoute role={['admin', 'super_admin']}>
                 <AppLayout><ProgramDetail /></AppLayout>
+              </PrivateRoute>
+            } />
+            {/* Destination of every QR label; any signed-in role. */}
+            <Route path="/unit/:tag" element={
+              <PrivateRoute>
+                <AppLayout><UnitPage /></AppLayout>
               </PrivateRoute>
             } />
             <Route path="/register/:centerId" element={<RegisterLanding />} />

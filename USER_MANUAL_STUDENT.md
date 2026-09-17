@@ -105,6 +105,12 @@ Important:
 4. Admin records received and damaged quantities.
 5. Order closes as `Returned` (or `Partially Returned` until complete).
 
+## 5a) Scan a component's QR label
+Every unit carries a QR label. Scan it with your phone camera (or the `Scan`
+button in the portal) to see the component, whether it is available, and --
+if it is issued to you -- your order and return date, with buttons to open
+your order or read more about the component.
+
 ## 6) Change your password
 Use `Forgot password` on the sign-in page: a code is emailed to you and you
 set a new password. Do this if you ever used the portal on a shared computer
