@@ -4,7 +4,7 @@
 
 ## 1) First time setup
 
-1. Open the KIMS URL given by your center.
+1. Open **<https://kalampragati.s.gy/kims>**.
 2. Click `Student Register`.
 3. Fill required fields and submit.
 4. Wait for admin approval.

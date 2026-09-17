@@ -111,7 +111,8 @@ Until then the WhatsApp handoff button is simply hidden from students.
 
 ### 3. Public URL — configured (Tailscale Funnel)
 
-KIMS is reachable worldwide at **<https://kims.tailf03e8e.ts.net>** via
+KIMS is reachable worldwide at **<https://kalampragati.s.gy/kims>** (a short.io
+redirect, forwards query strings) → **<https://kims.tailf03e8e.ts.net>** via
 [Tailscale Funnel](https://tailscale.com/kb/1223/funnel): free, HTTPS with an
 auto-renewing Let's Encrypt certificate, no router port-forwarding and no open
 ports on this PC. Tailscale is signed in as `gopalancims@` and installed as a
@@ -125,7 +126,7 @@ Internet ──HTTPS──> Tailscale relay ──> tailscale.exe (this PC) ─�
 ```
 
 `SITE_URL` in `backend\.env` and `REACT_APP_SITE_URL` / `REACT_APP_ADMIN_LOGIN_URL`
-in `frontend\.env` are set to this address (email footers, registration QR,
+in `frontend\.env` are set to the short link (email footers, registration QR,
 WhatsApp handoff). Rebuild the frontend after changing them.
 
 Useful commands (any PowerShell):
@@ -142,8 +143,9 @@ One-time admin-console settings worth keeping: **Machines → kims → Disable k
 expiry** (otherwise the machine must re-login every 180 days), and **DNS →
 HTTPS Certificates** enabled.
 
-For a memorable address, put a free short link (the `s.gy` service Comedkare
-uses) in front of it. Moving to a real subdomain such as
+The short link is managed at short.io under the `kalampragati.s.gy` domain. If
+the Tailscale hostname ever changes, update the redirect target there and
+nothing in the app needs to change. Moving to a real subdomain such as
 `kims.erafoundationindia.org` later means switching to a Cloudflare Tunnel;
 nothing in the app needs to change beyond the two `.env` URLs.
 

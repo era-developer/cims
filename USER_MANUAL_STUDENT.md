@@ -7,7 +7,7 @@ This guide explains how students register, place component requests, and complet
 ## 1) Login and registration
 
 ### 1.1 First-time registration
-1. Open the KIMS URL given by your center (for example `http://localhost:5001` on the lab network).
+1. Open **<https://kalampragati.s.gy/kims>**.
 2. On the login page, click `Student Register`.
 3. Fill all required fields:
    - Full name

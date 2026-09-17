@@ -234,8 +234,8 @@ The seed refuses to run against a database that already has data.
 
 ## Access
 
-- **Public (anywhere):** <https://kims.tailf03e8e.ts.net> — served through Tailscale
-  Funnel from this PC. See `KIMS_DEPLOYMENT.md` for how it works and how to manage it.
+- **Public (anywhere):** <https://kalampragati.s.gy/kims> (short link →
+  <https://kims.tailf03e8e.ts.net>, served through Tailscale Funnel from this PC). See `KIMS_DEPLOYMENT.md` for how it works and how to manage it.
 - **Same network:** find this machine's IP (`ipconfig`) and open `http://YOUR_IP:5001`.
 
 ---
