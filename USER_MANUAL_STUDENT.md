@@ -26,8 +26,8 @@ Notes:
 
 ### 1.1a Install KIMS as an app (optional)
 KIMS can be added to your phone's home screen and opens like an app:
-- **Android (Chrome):** open the KIMS link, then tap **Install KIMS app on this
-  phone** on the sign-in page (or the browser menu -> *Install app*).
+- **Android (Chrome):** open the KIMS link. On your first visit a small **Get KIMS as an app** window offers the install; otherwise tap **Install KIMS app on this
+  phone** just below *Forgot password?* on the sign-in page (or the browser menu -> *Install app*).
 - **iPhone (Safari):** open the KIMS link, tap **Share**, then **Add to Home
   Screen**.
 The app updates itself; there is nothing to reinstall.

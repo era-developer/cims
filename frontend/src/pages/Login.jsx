@@ -3,7 +3,7 @@ import axios from 'axios';
 import QRCode from 'react-qr-code';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import BrandLogo from '../components/BrandLogo';
-import { APP_EXPANDED_NAME, APP_SUBTITLE, APP_SHORT_NAME, PRIMARY_COLOR, REGISTRATION_QUERY } from '../brand';
+import { APP_EXPANDED_NAME, APP_SUBTITLE, APP_SHORT_NAME, PRIMARY_COLOR, REGISTRATION_QUERY, LOGO_URL } from '../brand';
 import { useCenters } from '../context/CentersContext';
 import { useAuth } from '../context/AuthContext';
 import useViewport from '../hooks/useViewport';
@@ -55,24 +55,52 @@ export default function Login() {
   // Safari on iPhone never fires it, so there we show the manual steps.
   const [installPrompt, setInstallPrompt] = useState(null);
   const [showIosHint, setShowIosHint] = useState(false);
+  // First visit on a device: offer the app once in a small dialog. "Not now"
+  // hides it for a month; installing (or already running installed) hides it
+  // for good. The sign-in button stays for whenever they change their mind.
+  const [installDialog, setInstallDialog] = useState(false);
   const isStandalone = typeof window !== 'undefined'
     && (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true);
   const isIos = typeof navigator !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const canOfferInstall = !isStandalone && (!!installPrompt || isIos);
 
   useEffect(() => {
     const onPrompt = event => { event.preventDefault(); setInstallPrompt(event); };
+    const onInstalled = () => { setInstallPrompt(null); setInstallDialog(false); rememberInstallChoice('installed'); };
     window.addEventListener('beforeinstallprompt', onPrompt);
-    return () => window.removeEventListener('beforeinstallprompt', onPrompt);
+    window.addEventListener('appinstalled', onInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onPrompt);
+      window.removeEventListener('appinstalled', onInstalled);
+    };
   }, []);
+
+  useEffect(() => {
+    // Only on the plain sign-in view, only once the browser says install is
+    // possible (Android/desktop) or we know it is iPhone Safari.
+    if (!canOfferInstall || mode !== 'login' || !shouldOfferInstall()) return undefined;
+    const timer = setTimeout(() => setInstallDialog(true), 1200);
+    return () => clearTimeout(timer);
+  }, [canOfferInstall, mode]);
 
   async function installApp() {
     if (installPrompt) {
       installPrompt.prompt();
-      await installPrompt.userChoice.catch(() => {});
+      const choice = await installPrompt.userChoice.catch(() => null);
       setInstallPrompt(null);
+      setInstallDialog(false);
+      rememberInstallChoice(choice?.outcome === 'accepted' ? 'installed' : 'later');
       return;
     }
-    setShowIosHint(current => !current);
+    // iPhone: no programmatic install; show the Share -> Add to Home Screen steps.
+    setInstallDialog(false);
+    setShowIosHint(true);
+    rememberInstallChoice('later');
+  }
+
+  function dismissInstallDialog() {
+    setInstallDialog(false);
+    rememberInstallChoice('later');
   }
 
   // Preselect the first center once the list arrives, so a registering
@@ -306,6 +334,22 @@ export default function Login() {
 
   return (
     <div style={{ ...styles.page, ...(isMobile ? styles.pageMobile : {}) }}>
+      {installDialog && (
+        <div style={styles.overlay} role="dialog" aria-modal="true" aria-labelledby="install-title">
+          <div style={styles.dialog}>
+            <img src={LOGO_URL} alt="" style={styles.dialogLogo} />
+            <h2 id="install-title" style={styles.dialogTitle}>Get {APP_SHORT_NAME} as an app</h2>
+            <p style={styles.dialogText}>
+              Add {APP_SHORT_NAME} to your home screen: opens in one tap, works like an app and lets you
+              scan QR labels and receive order notifications. Nothing to download from a store.
+            </p>
+            <button type="button" style={styles.primaryBtn} onClick={installApp}>
+              {isIos && !installPrompt ? 'Show me how' : 'Install app'}
+            </button>
+            <button type="button" style={styles.forgotLink} onClick={dismissInstallDialog}>Not now</button>
+          </div>
+        </div>
+      )}
       <div style={styles.bg}>
         {[...Array(8)].map((_, index) => (
           <div key={index} style={{ ...styles.orb, ...orbPos[index] }} />
@@ -367,6 +411,16 @@ export default function Login() {
                 {loading ? 'Signing in...' : 'Sign In'}
               </button>
               <button type="button" style={styles.forgotLink} onClick={openForgotPassword}>Forgot password?</button>
+              {canOfferInstall && (
+                <button type="button" style={styles.installBtn} onClick={installApp}>
+                  <span aria-hidden="true" style={styles.installIcon}>&#x2913;</span> Install {APP_SHORT_NAME} app on this phone
+                </button>
+              )}
+              {showIosHint && (
+                <div style={styles.iosHintLight}>
+                  On iPhone: tap the <strong>Share</strong> button in Safari, then <strong>Add to Home Screen</strong>.
+                </div>
+              )}
             </form>
           ) : mode === 'forgot' ? (
             forgotStep === 'request' ? (
@@ -476,16 +530,6 @@ export default function Login() {
             </div>
             <div style={styles.linkBox}>{registrationLink || 'Open this page in the browser to generate the registration link.'}</div>
             <button style={styles.secondaryBtn} onClick={copyRegistrationLink}>Copy Registration Link</button>
-            {!isStandalone && (installPrompt || isIos) && (
-              <button type="button" style={styles.secondaryLinkBtn} onClick={installApp}>
-                Install {APP_SHORT_NAME} app on this phone
-              </button>
-            )}
-            {showIosHint && (
-              <div style={styles.iosHint}>
-                On iPhone: tap the <strong>Share</strong> button in Safari, then <strong>Add to Home Screen</strong>.
-              </div>
-            )}
             {/* Hidden unless a guide URL is configured for this deployment --
                 the previous hardcoded link pointed at Comedkare's document. */}
             {STUDENT_USER_GUIDE_URL && (
@@ -576,6 +620,24 @@ const orbPos = [
   { top: '74%', right: '24%', width: '78px', height: '78px', background: 'rgba(249,168,37,0.10)' },
 ];
 
+// Per-device memory of the install offer. Never again after installing;
+// a month after "Not now".
+const INSTALL_KEY = 'kims.installOffer';
+function shouldOfferInstall() {
+  try {
+    const raw = localStorage.getItem(INSTALL_KEY);
+    if (!raw) return true;
+    const { choice, at } = JSON.parse(raw);
+    if (choice === 'installed') return false;
+    return Date.now() - Number(at || 0) > 30 * 24 * 60 * 60 * 1000;
+  } catch {
+    return true;
+  }
+}
+function rememberInstallChoice(choice) {
+  try { localStorage.setItem(INSTALL_KEY, JSON.stringify({ choice, at: Date.now() })); } catch { /* private mode */ }
+}
+
 const styles = {
   page: { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #102548 0%, #17355f 52%, #21436f 100%)', padding: '24px', position: 'relative', overflow: 'hidden' },
   pageMobile: { alignItems: 'flex-start', padding: '18px 14px 24px' },
@@ -604,6 +666,14 @@ const styles = {
   togglePasswordBtn: { position: 'absolute', right: '10px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', padding: '4px 8px', color: '#1a237e', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px', transition: 'all 0.2s ease' },
   primaryBtn: { width: '100%', padding: '14px', background: 'linear-gradient(135deg, #1a237e, #234d81)', border: 'none', borderRadius: '12px', color: '#fff', fontFamily: "'DM Sans', sans-serif", fontSize: '15px', fontWeight: 800, cursor: 'pointer', marginTop: '8px' },
   forgotLink: { display: 'block', width: '100%', textAlign: 'center', background: 'none', border: 'none', color: '#1a237e', fontSize: '13px', fontWeight: 700, cursor: 'pointer', marginTop: '14px', padding: '4px', fontFamily: "'DM Sans', sans-serif" },
+  installBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', width: '100%', padding: '12px 14px', marginTop: '12px', borderRadius: '12px', border: '1.5px solid #dbe3f0', background: '#f6f8fc', color: '#1a237e', fontFamily: "'DM Sans', sans-serif", fontSize: '14px', fontWeight: 700, cursor: 'pointer', boxSizing: 'border-box' },
+  installIcon: { fontSize: '16px', lineHeight: 1 },
+  iosHintLight: { marginTop: '10px', padding: '10px 12px', borderRadius: '10px', background: '#fff8e1', border: '1px solid #ffe082', color: '#5d4037', fontSize: '12.5px', lineHeight: 1.5 },
+  overlay: { position: 'fixed', inset: 0, background: 'rgba(16,37,72,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', zIndex: 1000 },
+  dialog: { background: '#fff', borderRadius: '18px', padding: '26px 24px 18px', width: '100%', maxWidth: '380px', textAlign: 'center', boxShadow: '0 30px 80px rgba(0,0,0,0.35)', fontFamily: "'DM Sans', sans-serif" },
+  dialogLogo: { height: '52px', width: 'auto', objectFit: 'contain', marginBottom: '10px' },
+  dialogTitle: { fontSize: '19px', fontWeight: 800, color: '#1a1a2e', margin: '0 0 8px' },
+  dialogText: { color: '#4b5563', fontSize: '13.5px', lineHeight: 1.55, margin: '0 0 16px' },
   forgotRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' },
   hint: { marginTop: '22px', padding: '14px 16px', background: '#f8fafc', borderRadius: '12px', fontSize: '12px', color: '#64748b', lineHeight: 1.8 },
   sidePanel: { display: 'flex' },
