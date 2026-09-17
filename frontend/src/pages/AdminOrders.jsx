@@ -7,6 +7,7 @@ import useViewport from '../hooks/useViewport';
 import AssetSwapPicker from '../components/AssetSwapPicker';
 import AssetConditionFix from '../components/AssetConditionFix';
 import AssetConditionPicker from '../components/AssetConditionPicker';
+import IssueUnitsDialog from '../components/IssueUnitsDialog';
 
 const STATUS_STYLES = {
   Pending: { bg: '#fff9c4', color: '#f57f17', label: 'Pending' },
@@ -36,7 +37,6 @@ export default function AdminOrders() {
   const [returnDraft, setReturnDraft] = useState([]);
   const [returnDamageReason, setReturnDamageReason] = useState('');
   const [approvalModal, setApprovalModal] = useState(null); // State for the new approval modal
-  const [approvalItems, setApprovalItems] = useState([]); // State for items in the approval modal
   const [processing, setProcessing] = useState(false);
   const [pageMsg, setPageMsg] = useState('');
   const [centerId, setCenterId] = useState('');
@@ -100,7 +100,6 @@ export default function AdminOrders() {
     setRemarks('');
     setReturnDraft([]);
     setApprovalModal(null);
-    setApprovalItems([]);
   }
 
   function openReview(order) {
@@ -112,7 +111,6 @@ export default function AdminOrders() {
 
   function openApprovalModal(order) {
     closeEditor();
-    setApprovalItems(order.items.map(item => ({ ...item }))); // Create a mutable copy
     setApprovalModal(order);
   }
 
@@ -164,25 +162,6 @@ export default function AdminOrders() {
     }
 
     await handleStatus(order.orderId, 'Returned', { returnItems, damageReason: returnDamageReason.trim() });
-  }
-
-  async function handleConfirmApproval() {
-    if (!approvalModal) return;
-    const payload = {
-      approvedItems: approvalItems.map(item => ({ id: item.id, qty: Number(item.qty) || 0 })),
-    };
-    await handleStatus(approvalModal.orderId, 'Approved', payload);
-  }
-
-  function handleApprovalQtyChange(itemId, rawValue) {
-    const value = Math.max(0, Number(rawValue) || 0);
-    const originalItem = approvalModal.items.find(i => i.id === itemId);
-    const maxQty = originalItem ? originalItem.qty : value;
-    setApprovalItems(current => current.map(item => (item.id === itemId ? { ...item, qty: Math.min(value, maxQty) } : item)));
-  }
-
-  function removeApprovalItem(itemId) {
-    handleApprovalQtyChange(itemId, 0);
   }
 
   function setAssetCondition(itemId, assetId, condition) {
@@ -431,75 +410,15 @@ export default function AdminOrders() {
         </div>
 
         {approvalModal && (
-          <div style={styles.overlay} onClick={() => setApprovalModal(null)}>
-            <div style={{ ...styles.modal, ...(isMobile ? styles.modalMobile : {}) }} onClick={e => e.stopPropagation()}>
-              <div style={styles.modalHeader}>
-                <h3 style={styles.modalTitle}>Approve & Issue Components</h3>
-                <button style={styles.closeBtn} onClick={() => setApprovalModal(null)}>×</button>
-              </div>
-              <p style={styles.modalSub}>Adjust quantities if some items are out of stock. Setting a quantity to 0 will remove it from the final issued list.</p>
-
-              <div style={styles.tableScroll}>
-                <table style={styles.returnEditTable}>
-                  <thead>
-                    <tr>
-                      <th style={styles.returnEditTh}>Component</th>
-                      <th style={styles.returnEditTh}>Requested</th>
-                      <th style={styles.returnEditTh}>Assigned Unit(s)</th>
-                      <th style={styles.returnEditTh}>Issuing Now</th>
-                    </tr>
-                  </thead>
-                      <tbody>
-                        {approvalItems.map(item => {
-                          const originalItem = approvalModal.items.find(i => i.id === item.id);
-                          return (
-                            <tr key={item.id}>
-                              <td style={styles.returnEditTd}>{item.name}</td>
-                              <td style={styles.returnEditTd}>{originalItem?.qty || item.qty}</td>
-                              <td style={{ ...styles.returnEditTd, fontSize: '12px', color: '#475569' }}>
-                                {Array.isArray(originalItem?.assets) && originalItem.assets.length
-                                  ? originalItem.assets.map(a => (
-                                      <span key={a.id} style={{ display: 'inline-flex', alignItems: 'center', marginRight: '10px' }}>
-                                        {a.assetTag}{a.serialNumber ? ` (SN: ${a.serialNumber})` : ''}
-                                        <AssetSwapPicker
-                                          asset={a}
-                                          catalogId={item.id}
-                                          swapUrl={`/api/orders/${approvalModal.orderId}/items/${item.id}/swap-asset`}
-                                          onSwapped={fetchOrders}
-                                        />
-                                      </span>
-                                    ))
-                                  : '-'}
-                              </td>
-                              <td style={styles.returnEditTd}>
-                                <div style={styles.approvalInputRow}>
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    max={originalItem?.qty || item.qty}
-                                    value={item.qty}
-                                    onChange={e => handleApprovalQtyChange(item.id, e.target.value)}
-                                    style={styles.qtyInput}
-                                  />
-                                  <button type="button" style={styles.removeQtyBtn} onClick={() => removeApprovalItem(item.id)}>
-                                    Remove
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                  </tbody>
-                </table>
-              </div>
-
-              <input style={{ ...styles.remarksInput, marginTop: '12px' }} value={remarks} onChange={e => setRemarks(e.target.value)} placeholder="Approval remarks (optional)" />
-              <div style={styles.actionBtns}>
-                <button style={styles.cancelBtn} onClick={() => setApprovalModal(null)}>Cancel</button>
-                <button style={{ ...styles.approveBtn, opacity: processing ? 0.7 : 1 }} onClick={handleConfirmApproval} disabled={processing}>Confirm Approval</button>
-              </div>
-            </div>
-          </div>
+          <IssueUnitsDialog
+            order={approvalModal}
+            remarks={remarks}
+            setRemarks={setRemarks}
+            processing={processing}
+            isMobile={isMobile}
+            onClose={() => setApprovalModal(null)}
+            onConfirm={payload => handleStatus(approvalModal.orderId, 'Approved', payload)}
+          />
         )}
       </div>
     </div>

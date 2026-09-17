@@ -616,6 +616,31 @@ router.put('/:orderId/return-request', authMiddleware, (req, res) => {
 });
 
 // PUT approve/reject/process returns (admin only)
+// The units an admin may hand over for each line of a pending order: every
+// available unit of that component in the order's center, plus the ones
+// reserved for this order (listed first, since they are the natural pick).
+router.get('/:orderId/issuable-units', authMiddleware, adminOnly, (req, res) => {
+  const db = getDb();
+  const row = db.prepare('SELECT id, order_id, center_id, status FROM issue_records WHERE order_id = ?').get(req.params.orderId);
+  if (!row) return res.status(404).json({ message: 'Order not found' });
+  if (req.user.role !== 'super_admin' && row.center_id !== req.user.centerId) {
+    return res.status(403).json({ message: 'You do not have access to this order' });
+  }
+  const items = loadItemsForRecord(db, row.id).map(item => {
+    const units = db.prepare(`
+      SELECT a.id, a.asset_tag AS assetTag, a.serial_number AS serialNumber, a.location, a.status,
+             CASE WHEN ira.asset_id IS NULL THEN 0 ELSE 1 END AS reservedForThisOrder
+      FROM assets a
+      LEFT JOIN issue_record_assets ira ON ira.asset_id = a.id AND ira.issue_record_item_id = ?
+      WHERE a.catalog_id = ? AND a.center_id = ?
+        AND (a.status = 'available' OR (a.status = 'reserved' AND ira.asset_id IS NOT NULL))
+      ORDER BY reservedForThisOrder DESC, a.asset_tag
+    `).all(item.id, item.catalogId, row.center_id);
+    return { catalogId: item.catalogId, name: item.name, qtyRequested: item.qtyRequested, units };
+  });
+  res.json({ orderId: row.order_id, status: row.status, items });
+});
+
 router.put('/:orderId/status', authMiddleware, adminOnly, (req, res) => {
   const db = getDb();
   try {
@@ -643,6 +668,15 @@ router.put('/:orderId/status', authMiddleware, adminOnly, (req, res) => {
         const approvedMap = new Map((req.body.approvedItems || []).map(i => [String(i.id), Number(i.qty)]));
         let anyApproved = false;
 
+        // Which physical units go out is decided HERE, by the admin who is
+        // holding them -- either ticked from the list or scanned. The units
+        // reserved when the order was placed only ever protected the stock
+        // count; any of them not chosen now go back to available, and a
+        // chosen unit that was merely available gets linked to the order.
+        // Requests without assetIds (older clients) keep the old behaviour of
+        // issuing the reserved units in order.
+        const selectedMap = new Map((req.body.approvedItems || []).map(i => [String(i.id), Array.isArray(i.assetIds) ? i.assetIds.map(v => String(v || '').trim()).filter(Boolean) : null]));
+
         for (const item of items) {
           const requestedQty = item.qtyRequested;
           const approvedQty = approvedMap.has(String(item.catalogId)) ? approvedMap.get(String(item.catalogId)) : requestedQty;
@@ -656,19 +690,46 @@ router.put('/:orderId/status', authMiddleware, adminOnly, (req, res) => {
             WHERE ira.issue_record_item_id = ? AND a.status = 'reserved'
           `).all(item.id).map(r => r.asset_id);
 
-          const toIssue = reservedAssets.slice(0, approvedQty);
-          const toRelease = reservedAssets.slice(approvedQty);
+          const selected = selectedMap.get(String(item.catalogId));
+          let toIssue;
+          let toRelease;
+          if (selected) {
+            const unique = [...new Set(selected)];
+            if (unique.length !== approvedQty) {
+              throw Object.assign(new Error(`${item.name}: ${unique.length} unit(s) selected but issuing quantity is ${approvedQty}.`), { code: 'VALIDATION' });
+            }
+            for (const assetId of unique) {
+              const unit = db.prepare('SELECT id, asset_tag, status, catalog_id, center_id FROM assets WHERE id = ?').get(assetId);
+              if (!unit || unit.catalog_id !== item.catalogId || unit.center_id !== row.center_id) {
+                throw Object.assign(new Error(`Selected unit is not a ${item.name} of this center.`), { code: 'VALIDATION' });
+              }
+              const reservedHere = reservedAssets.includes(unit.id);
+              if (unit.status !== 'available' && !(unit.status === 'reserved' && reservedHere)) {
+                throw Object.assign(new Error(`${unit.asset_tag} is ${unit.status.replace('_', ' ')} and cannot be issued.`), { code: 'VALIDATION' });
+              }
+              if (!reservedHere) {
+                db.prepare('INSERT INTO issue_record_assets (issue_record_item_id, asset_id) VALUES (?, ?)').run(item.id, unit.id);
+              }
+            }
+            toIssue = unique;
+            toRelease = reservedAssets.filter(id => !unique.includes(id));
+          } else {
+            toIssue = reservedAssets.slice(0, approvedQty);
+            toRelease = reservedAssets.slice(approvedQty);
+          }
 
           for (const assetId of toIssue) {
+            const from = db.prepare('SELECT status FROM assets WHERE id = ?').get(assetId)?.status || 'reserved';
             db.prepare("UPDATE assets SET status = 'issued' WHERE id = ?").run(assetId);
             db.prepare(`
               INSERT INTO asset_lifecycle_events (asset_id, event_type, from_status, to_status, center_id,
                 issue_record_id, notes, performed_by, occurred_at)
-              VALUES (?, 'issued', 'reserved', 'issued', ?, ?, ?, ?, ?)
-            `).run(assetId, row.center_id, row.id, `Issued for order ${row.order_id}`, req.user.username, now);
+              VALUES (?, 'issued', ?, 'issued', ?, ?, ?, ?, ?)
+            `).run(assetId, from, row.center_id, row.id, `Issued for order ${row.order_id}`, req.user.username, now);
           }
           for (const assetId of toRelease) {
             db.prepare("UPDATE assets SET status = 'available' WHERE id = ?").run(assetId);
+            db.prepare('DELETE FROM issue_record_assets WHERE issue_record_item_id = ? AND asset_id = ?').run(item.id, assetId);
             db.prepare(`
               INSERT INTO asset_lifecycle_events (asset_id, event_type, from_status, to_status, center_id,
                 issue_record_id, notes, performed_by, occurred_at)

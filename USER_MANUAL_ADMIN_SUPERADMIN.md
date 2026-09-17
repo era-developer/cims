@@ -162,16 +162,26 @@ Open `Orders`.
 - `Partially Returned`
 - `Returned`
 
-### 6.2 Approve with quantity edits (important)
-When reviewing a pending order, admin can:
-- reduce quantity for any component
-- remove a component (set issue qty to 0)
-- approve remaining items
+### 6.2 Approve & issue (the checkout)
+Click `Approve` on a pending order. For each component:
+1. Set **Issuing** -- how many you are handing over (0 removes it; less than
+   requested is allowed).
+2. Pick **exactly those units**, either:
+   - **Scan QR code** (top right): keep the scanner open and scan each unit as
+     you hand it over -- it ticks itself under its component and the progress
+     pills update (`Arduino UNO R3: 2/2`, `Buzzer: 1/2`); or
+   - **Pick from list**: tick units from the component's available units
+     (the ones reserved when the order was placed are listed first); or
+   - **Auto-pick remaining** for bulk consumables where the specific unit
+     does not matter.
+3. `Confirm & issue` becomes available only when every component has exactly
+   its quantity selected.
 
 System behavior:
-- Reduced/removed quantity is released back to live stock.
-- Approved quantity is treated as issued.
-- If all quantities become 0, order becomes rejected.
+- The units you chose are the ones recorded as issued -- the stock record
+  matches what physically left the room.
+- Units reserved at order time that you did not choose go back to available.
+- If every quantity is 0, the order is rejected.
 
 ### 6.3 Reject order
 Use rejection when request cannot be fulfilled.

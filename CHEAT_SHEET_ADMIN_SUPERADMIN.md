@@ -28,9 +28,9 @@ From `Orders`:
 - `Pending` -> `Approved` / `Rejected`
 - `Approved` -> `Return Requested` -> `Partially Returned` / `Returned`
 
-Important:
-- During approval, you can reduce/remove quantities.
-- Reduced quantity returns back to live stock automatically.
+Approve = checkout: set the issuing quantity per component, then **scan** or
+**tick** exactly those units. Confirm is enabled only when every component
+has its full count selected. Reduced quantity returns to stock automatically.
 
 ## 4) Return processing
 
