@@ -106,6 +106,17 @@ export default function Login() {
       setMessageType('error');
     }
     setLoading(false);
+    // Set the mode directly as well as via the URL. The URL effect only
+    // fires when the params actually change, and the forgot-password flow
+    // never puts anything in the URL -- so "Back to Sign In" from there, and
+    // the redirect after a successful reset, silently did nothing.
+    setMode(nextMode === 'register' ? 'register' : 'login');
+    if (nextMode !== 'forgot') {
+      setForgotStep('request');
+      setForgotCode('');
+      setForgotNewPassword('');
+      setForgotConfirmPassword('');
+    }
     if (nextMode === 'register') {
       setSearchParams({ register: '1' });
     } else {
