@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import BrandLogo from './BrandLogo';
 import QrScanner from './QrScanner';
+import QrIcon from './QrIcon';
 import { extractTagFromScan } from '../utils/scan';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
@@ -125,7 +126,9 @@ export default function Navbar() {
         </form>
 
         <div style={{ ...styles.right, ...(isCompact ? styles.rightCompact : {}), ...(isMobile ? styles.rightMobile : {}) }}>
-          <button style={styles.scanBtn} onClick={() => setScanOpen(true)} title="Scan a unit's QR label">Scan</button>
+          <button style={styles.scanBtn} onClick={() => setScanOpen(true)} title="Scan a unit's QR label">
+            <QrIcon size={15} />{!isMobile && <span>Scan QR code</span>}
+          </button>
           {!isAdmin && (
             <button style={styles.cartBtn} onClick={() => navigate('/cart')}>
               Cart
@@ -171,7 +174,7 @@ const styles = {
   right: { display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 },
   rightCompact: { order: 4, width: '100%', justifyContent: 'space-between', flexWrap: 'wrap' },
   rightMobile: { gap: '10px' },
-  scanBtn: { background: 'rgba(249,168,37,0.95)', color: '#102548', border: 'none', padding: '9px 14px', borderRadius: '10px', cursor: 'pointer', fontWeight: 800, fontSize: '13px', fontFamily: "'DM Sans', sans-serif" },
+  scanBtn: { display: 'inline-flex', alignItems: 'center', gap: '7px', background: 'rgba(249,168,37,0.95)', color: '#102548', border: 'none', padding: '9px 13px', borderRadius: '10px', cursor: 'pointer', fontWeight: 800, fontSize: '13px', fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap' },
   cartBtn: { background: 'rgba(249,168,37,0.95)', color: '#102548', border: 'none', padding: '9px 16px', borderRadius: '10px', cursor: 'pointer', fontWeight: 700, fontSize: '13px', position: 'relative', display: 'flex', alignItems: 'center', gap: '6px' },
   badge: { background: '#fff', color: '#17355f', borderRadius: '999px', minWidth: '18px', height: '18px', fontSize: '11px', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px' },
   userInfo: { display: 'flex', alignItems: 'center', gap: '8px' },

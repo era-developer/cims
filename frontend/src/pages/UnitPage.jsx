@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import useViewport from '../hooks/useViewport';
 import QrScanner from '../components/QrScanner';
+import QrIcon from '../components/QrIcon';
 import { extractTagFromScan } from '../utils/scan';
 
 // The page a QR label leads to. Students see the component and their own
@@ -93,7 +94,7 @@ export default function UnitPage() {
         <div style={styles.card}>
           <div style={styles.errorBox}>{error}</div>
           <div style={styles.actions}>
-            <button type="button" style={styles.primaryBtn} onClick={() => setScanning(true)}>Scan another</button>
+            <button type="button" style={{ ...styles.primaryBtn, ...styles.iconBtn }} onClick={() => setScanning(true)}><QrIcon size={16} /> Scan QR code</button>
             <button type="button" style={styles.secondaryBtn} onClick={backHome}>Back</button>
           </div>
           {scanning && <QrScanner onScan={onScanned} onClose={() => setScanning(false)} />}
@@ -233,7 +234,7 @@ export default function UnitPage() {
         )}
 
         <div style={styles.footerRow}>
-          <button type="button" style={styles.secondaryBtn} onClick={() => setScanning(true)}>Scan another</button>
+          <button type="button" style={{ ...styles.secondaryBtn, ...styles.iconBtn }} onClick={() => setScanning(true)}><QrIcon size={16} /> Scan QR code</button>
           <button type="button" style={styles.linkBtn} onClick={backHome}>Back</button>
         </div>
         {scanning && <QrScanner onScan={onScanned} onClose={() => setScanning(false)} />}
@@ -292,6 +293,7 @@ const styles = {
   primaryBtn: { background: '#2d2a6e', color: '#fff', border: 'none', padding: '12px 14px', borderRadius: '10px', fontWeight: 700, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", fontSize: '14px' },
   secondaryBtn: { background: '#f1f3f9', color: '#1a1a2e', border: '1px solid #d7dde9', padding: '12px 14px', borderRadius: '10px', fontWeight: 700, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", fontSize: '14px' },
   statusBtn: { background: '#fff', color: '#2d2a6e', border: '1.5px solid #c7d2fe', padding: '9px 12px', borderRadius: '10px', fontWeight: 700, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", fontSize: '12px' },
+  iconBtn: { display: 'inline-flex', alignItems: 'center', gap: '8px', justifyContent: 'center' },
   linkBtn: { background: 'none', border: 'none', color: '#6b7280', padding: '10px', cursor: 'pointer', fontWeight: 600, fontFamily: "'DM Sans', sans-serif" },
   section: { borderTop: '1px solid #eef1f7', paddingTop: '12px', marginTop: '4px', marginBottom: '12px' },
   sectionTitle: { fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', color: '#6b7280', fontWeight: 800, marginBottom: '8px' },

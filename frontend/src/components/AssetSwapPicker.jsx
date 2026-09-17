@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import QrScanner from './QrScanner';
+import QrIcon from './QrIcon';
 import { extractTagFromScan } from '../utils/scan';
 
 // Small "Swap" action shown next to a system-assigned asset tag, used by
@@ -103,7 +104,7 @@ export default function AssetSwapPicker({ asset, catalogId, swapUrl, onSwapped }
                     </option>
                   ))}
                 </select>
-                <button type="button" style={styles.scanBtn} onClick={() => setScanning(true)}>Scan</button>
+                <button type="button" style={styles.scanBtn} onClick={() => setScanning(true)}><QrIcon size={14} /> Scan QR code</button>
               </div>
             )}
             <input
@@ -147,7 +148,7 @@ const styles = {
   title: { fontFamily: "'DM Sans', sans-serif", fontSize: '15px', fontWeight: 800, color: '#1a1a2e', marginBottom: '6px' },
   hint: { fontSize: '12px', color: '#64748b', marginBottom: '12px', lineHeight: 1.5 },
   pickRow: { display: 'flex', gap: '8px', alignItems: 'flex-start' },
-  scanBtn: { background: '#eef2ff', color: '#2d2a6e', border: '1px solid #c7d2fe', borderRadius: '8px', padding: '9px 12px', fontSize: '12px', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' },
+  scanBtn: { display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#eef2ff', color: '#2d2a6e', border: '1px solid #c7d2fe', borderRadius: '8px', padding: '9px 12px', fontSize: '12px', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' },
   select: { width: '100%', padding: '9px 10px', border: '1.5px solid #dbe3f0', borderRadius: '8px', fontSize: '13px', marginBottom: '10px', fontFamily: "'DM Sans', sans-serif", boxSizing: 'border-box' },
   input: { width: '100%', padding: '9px 10px', border: '1.5px solid #dbe3f0', borderRadius: '8px', fontSize: '13px', marginBottom: '10px', fontFamily: "'DM Sans', sans-serif", outline: 'none', boxSizing: 'border-box' },
   error: { color: '#c62828', fontSize: '12px', marginBottom: '10px', fontWeight: 600 },
