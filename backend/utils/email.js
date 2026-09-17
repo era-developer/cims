@@ -1048,8 +1048,7 @@ async function sendAccountCreated({ user, centerId, centerName, createdBy }) {
         ${accountFacts(user, centerName)}
         ${createdBy ? `<p style="margin:0 0 12px;color:#475569;">Created by: ${escapeHtml(createdBy)}</p>` : ''}
         <p style="margin:0 0 12px;color:#475569;">Your initial password will be shared with you separately by the admin who created the account. For your security it is never sent by email.</p>
-        <p style="margin:0 0 12px;color:#475569;"><strong>After your first sign-in, change your password</strong> using the <strong>Password</strong> button in the top bar.</p>
-        <p style="margin:0;color:#475569;">If you never received a password, use <strong>Forgot password</strong> on the sign-in page to set one with a code sent to this email address.</p>
+        <p style="margin:0 0 12px;color:#475569;"><strong>After your first sign-in, change your password</strong>: use <strong>Forgot password</strong> on the sign-in page to set one of your own with a code sent to this email.</p>
       `,
     ),
   });

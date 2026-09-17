@@ -25,11 +25,13 @@ This guide covers daily operations for center admins and super admins:
 - Can add and manage centers, and change the order-notification email and
   WhatsApp number, in `Settings` (see section 9).
 
-## 1.3 Change your own password
-Click `Password` next to `Sign Out` in the top bar (all roles). Enter the
-current password and a new one of at least 8 characters. Do this immediately
-after receiving an account from someone else, and never let a shared lab
-browser save an admin password.
+## 1.3 Changing passwords
+- Any user: `Forgot password` on the sign-in page sends a reset code by email.
+- Admin / super admin: `Users` -> `Edit` -> set a new password for any account
+  in scope, including your own (super admin).
+
+Change a password immediately after receiving an account from someone else,
+and never let a shared lab browser save an admin password.
 
 ## 2) Daily menu map
 

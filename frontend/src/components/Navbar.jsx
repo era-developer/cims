@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import BrandLogo from './BrandLogo';
-import ChangePasswordDialog from './ChangePasswordDialog';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import useViewport from '../hooks/useViewport';
@@ -13,7 +12,6 @@ export default function Navbar() {
   const location = useLocation();
   const { width } = useViewport();
   const [searchValue, setSearchValue] = useState('');
-  const [showChangePassword, setShowChangePassword] = useState(false);
   const isCompact = width <= 1180;
   const isMobile = width <= 720;
   const isAdmin = ['admin', 'super_admin'].includes(user?.role);
@@ -137,11 +135,9 @@ export default function Navbar() {
               <div style={styles.userRole}>{user.role}{user.centerName ? ` - ${user.centerName}` : ''}</div>
             </div>
           </div>
-          <button style={styles.logoutBtn} onClick={() => setShowChangePassword(true)} title="Change your password">Password</button>
           <button style={styles.logoutBtn} onClick={handleLogout}>Sign Out</button>
         </div>
       </div>
-      {showChangePassword && <ChangePasswordDialog onClose={() => setShowChangePassword(false)} />}
     </nav>
   );
 }

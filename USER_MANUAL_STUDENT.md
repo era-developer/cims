@@ -98,8 +98,9 @@ Important:
 5. Order closes as `Returned` (or `Partially Returned` until complete).
 
 ## 6) Change your password
-Click `Password` next to `Sign Out` in the top bar. Do this if you ever used
-the portal on a shared computer and saved your password there.
+Use `Forgot password` on the sign-in page: a code is emailed to you and you
+set a new password. Do this if you ever used the portal on a shared computer
+and saved your password there.
 
 ## 7) My Profile
 
