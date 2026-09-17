@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
+import QrIcon from '../components/QrIcon';
 import { useCenters } from '../context/CentersContext';
 import { useAuth } from '../context/AuthContext';
 import useViewport from '../hooks/useViewport';
@@ -37,6 +39,10 @@ function calcLineItem(li) {
 export default function AdminInvoiceEntry() {
   const { centers } = useCenters();
   const { isMobile } = useViewport();
+  const navigate = useNavigate();
+  // Units created by the invoice just saved -- offered for label printing
+  // right away, so new stock gets tagged before it goes on the shelf.
+  const [justCreated, setJustCreated] = useState(null); // { invoiceId, invoiceNumber, count }
   const { user } = useAuth();
   const isSuperAdmin = user?.role === 'super_admin';
 
@@ -176,9 +182,11 @@ export default function AdminInvoiceEntry() {
 
     setSaving(true);
     try {
-      await axios.post('/api/invoices', payload);
+      const { data: saved } = await axios.post('/api/invoices', payload);
+      const unitCount = (saved.lineItems || []).reduce((n, li) => n + (li.assets || []).length, 0);
+      setJustCreated({ invoiceId: saved.id, invoiceNumber: saved.invoiceNumber, count: unitCount });
       setMsgType('success');
-      setMsg('Invoice recorded and assets generated successfully.');
+      setMsg(`Invoice ${saved.invoiceNumber} recorded: ${unitCount} unit${unitCount === 1 ? '' : 's'} added with asset tags.`);
       setHeader({ vendorName: '', invoiceNumber: '', invoiceDate: '', projectName: '', businessHeadName: '', installationCharges: '', freightCharges: '' });
       setOtherProjectName('');
       setLineItems([{ ...EMPTY_LINE_ITEM }]);
@@ -405,7 +413,16 @@ export default function AdminInvoiceEntry() {
 
         {msg && (
           <div style={{ ...styles.pageMsg, ...(msgType === 'error' ? styles.pageMsgError : styles.pageMsgSuccess) }}>
-            {msg}
+            <span>{msg}</span>
+            {msgType === 'success' && justCreated && justCreated.count > 0 && (
+              <button
+                type="button"
+                style={styles.printNowBtn}
+                onClick={() => navigate(`/admin/labels?invoiceId=${justCreated.invoiceId}&centerId=${encodeURIComponent(centerId)}`)}
+              >
+                <QrIcon size={15} /> Print {justCreated.count} QR label{justCreated.count === 1 ? '' : 's'} now
+              </button>
+            )}
           </div>
         )}
 
@@ -867,6 +884,10 @@ export default function AdminInvoiceEntry() {
                     onClick={() => downloadInvoicePdf(selectedInvoice.id, selectedInvoice.invoice_number)}>
                     {downloadingPdf ? 'Preparing PDF...' : 'Download Invoice (PDF)'}
                   </button>
+                  <button type="button" style={styles.labelsBtn}
+                    onClick={() => navigate(`/admin/labels?invoiceId=${selectedInvoice.id}&centerId=${encodeURIComponent(centerId)}`)}>
+                    <QrIcon size={15} /> QR labels for this invoice
+                  </button>
                   {isSuperAdmin && (
                     <>
                       <button type="button" style={styles.editInvoiceBtn} onClick={startEdit}>Edit Invoice</button>
@@ -904,7 +925,9 @@ const styles = {
   sub: { color: '#6b7280', fontSize: '13px', marginTop: '4px', maxWidth: '620px' },
   centerRow: { marginBottom: '16px' },
   centerSelect: { minWidth: '280px', padding: '10px 12px', borderRadius: '10px', border: '1.5px solid #dbe3f0', fontSize: '14px', background: '#fff' },
-  pageMsg: { padding: '12px 14px', borderRadius: '10px', fontSize: '13px', fontWeight: 600, marginBottom: '18px' },
+  printNowBtn: { display: 'inline-flex', alignItems: 'center', gap: '7px', marginLeft: 'auto', background: '#2d2a6e', color: '#fff', border: 'none', borderRadius: '10px', padding: '9px 14px', fontWeight: 800, fontSize: '13px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap' },
+  labelsBtn: { display: 'inline-flex', alignItems: 'center', gap: '7px', background: '#eef2ff', color: '#2d2a6e', border: '1px solid #c7d2fe', borderRadius: '10px', padding: '10px 14px', fontWeight: 800, fontSize: '13px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" },
+  pageMsg: { padding: '12px 14px', borderRadius: '10px', fontSize: '13px', fontWeight: 600, marginBottom: '18px' , display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' },
   pageMsgSuccess: { background: '#e8f5e9', color: '#2e7d32', border: '1px solid #a5d6a7' },
   pageMsgError: { background: '#fce4ec', color: '#c62828', border: '1px solid #f48fb1' },
   card: { background: '#fff', borderRadius: '14px', padding: '24px', boxShadow: '0 2px 12px rgba(26,35,126,0.07)', marginBottom: '24px' },

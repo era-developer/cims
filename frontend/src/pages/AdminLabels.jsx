@@ -37,11 +37,16 @@ export default function AdminLabels() {
     async function load() {
       try {
         const catalogId = params.get('catalogId');
+        const invoiceId = params.get('invoiceId');
         const assetIds = params.get('assetIds');
         const centerId = params.get('centerId') || user?.centerId || '';
         let rows = [];
         if (catalogId) {
           const { data } = await axios.get('/api/assets', { params: { catalogId, centerId } });
+          rows = data;
+        } else if (invoiceId) {
+          // Every unit created by one invoice -- the "new stock just arrived" case.
+          const { data } = await axios.get('/api/assets', { params: { invoiceId, centerId } });
           rows = data;
         } else if (assetIds) {
           const ids = assetIds.split(',').map(s => s.trim()).filter(Boolean);
@@ -65,7 +70,11 @@ export default function AdminLabels() {
   );
   const toPrint = visible.filter(a => selected.has(a.id));
   const s = SIZES[size];
-  const componentName = assets[0]?.name || '';
+  const invoiceNumber = assets[0]?.invoice_number || '';
+  const distinctNames = [...new Set(assets.map(a => a.name))];
+  const componentName = params.get('invoiceId')
+    ? `invoice ${invoiceNumber || params.get('invoiceId')} (${distinctNames.length} component${distinctNames.length === 1 ? '' : 's'})`
+    : (assets[0]?.name || '');
 
   function toggle(id) {
     setSelected(current => {
@@ -124,6 +133,7 @@ export default function AdminLabels() {
           <label key={a.id} style={{ ...styles.pick, opacity: selected.has(a.id) ? 1 : 0.5 }}>
             <input type="checkbox" checked={selected.has(a.id)} onChange={() => toggle(a.id)} />
             <span style={styles.pickTag}>{a.asset_tag}</span>
+            {params.get('invoiceId') && <span style={styles.pickStatus}>{a.name}</span>}
             <span style={styles.pickStatus}>{a.status.replace('_', ' ')}</span>
           </label>
         ))}

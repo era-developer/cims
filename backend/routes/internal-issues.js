@@ -100,11 +100,23 @@ router.post('/', authMiddleware, adminOnly, (req, res) => {
       resolvedProjectId = program.id;
     }
 
+    // An item may pin specific units (assetIds) -- the ones the admin
+    // scanned at the shelf. Those must be available units of that component;
+    // any remaining quantity is filled from whatever else is available.
     for (const item of requestedItems) {
       const catalog = db.prepare('SELECT id, name FROM product_catalog WHERE id = ? AND center_id = ?').get(item.catalogId, centerId);
       if (!catalog) throw new Error(`Component not found: ${item.name || item.catalogId}`);
+      // Asset ids are UUID strings -- never coerce them to numbers.
+      const pinned = Array.isArray(item.assetIds) ? [...new Set(item.assetIds.map(v => String(v || '').trim()).filter(Boolean))] : [];
+      if (pinned.length > item.qty) throw new Error(`${catalog.name}: ${pinned.length} units scanned but quantity is ${item.qty}`);
+      for (const assetId of pinned) {
+        const unit = db.prepare('SELECT id, asset_tag, status, catalog_id FROM assets WHERE id = ?').get(assetId);
+        if (!unit || unit.catalog_id !== catalog.id) throw new Error(`Scanned unit ${assetId} is not a ${catalog.name}`);
+        if (unit.status !== 'available') throw new Error(`${unit.asset_tag} is ${unit.status.replace('_', ' ')}, not available`);
+      }
       const available = db.prepare("SELECT COUNT(*) c FROM assets WHERE catalog_id = ? AND status = 'available'").get(catalog.id);
       if (available.c < item.qty) throw new Error(`Insufficient stock for ${catalog.name} (Available: ${available.c})`);
+      item.pinnedAssetIds = pinned;
     }
 
     const issueCode = `INT-${Date.now().toString(36).toUpperCase()}`;
@@ -121,7 +133,12 @@ router.post('/', authMiddleware, adminOnly, (req, res) => {
         INSERT INTO internal_issue_items (internal_issue_id, catalog_id, name, qty, unit) VALUES (?, ?, ?, ?, ?)
       `).run(issueId, catalog.id, catalog.name, item.qty, item.unit || 'pcs').lastInsertRowid;
 
-      const toIssue = db.prepare("SELECT id FROM assets WHERE catalog_id = ? AND status = 'available' LIMIT ?").all(catalog.id, item.qty);
+      const pinned = item.pinnedAssetIds || [];
+      const remaining = item.qty - pinned.length;
+      const filler = remaining > 0
+        ? db.prepare(`SELECT id FROM assets WHERE catalog_id = ? AND status = 'available'${pinned.length ? ` AND id NOT IN (${pinned.map(() => '?').join(',')})` : ''} LIMIT ?`).all(catalog.id, ...pinned, remaining)
+        : [];
+      const toIssue = [...pinned.map(id => ({ id })), ...filler];
       for (const asset of toIssue) {
         db.prepare("UPDATE assets SET status = 'issued' WHERE id = ?").run(asset.id);
         db.prepare(`

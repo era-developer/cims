@@ -91,6 +91,8 @@ router.get('/', authMiddleware, adminOnly, (req, res) => {
   if (req.query.status) { clauses.push('a.status = ?'); params.push(req.query.status); }
   if (req.query.classificationId) { clauses.push('a.classification_id = ?'); params.push(req.query.classificationId); }
   if (req.query.catalogId) { clauses.push('a.catalog_id = ?'); params.push(req.query.catalogId); }
+  // Units created by one invoice, for printing their labels as a batch.
+  if (req.query.invoiceId) { clauses.push('i.id = ?'); params.push(req.query.invoiceId); }
 
   const assets = db.prepare(`
     SELECT a.*, c.name AS classification_name,

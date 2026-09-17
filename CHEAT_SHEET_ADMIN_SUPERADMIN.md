@@ -56,6 +56,9 @@ When adding/updating component, keep:
 ## 5b) QR labels and scanning
 
 - Print: `Inventory` -> `QR labels` on the component -> tick units -> Print.
+- New stock: save the invoice -> `Print N QR labels now` (or `QR labels for
+  this invoice` on the invoice later).
+- Internal use: `Scan QR code` to pick exact units off the shelf.
 - Look up any unit: `Scan` in the top bar.
 - Returns: `Scan returned unit` marks it Good; tap `Damaged` for the rest.
 - Swap: `Scan` inside the Swap dialog picks the unit in hand.

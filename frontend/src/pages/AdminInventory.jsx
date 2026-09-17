@@ -6,6 +6,9 @@ import PhotoInput from '../components/PhotoInput';
 import ProgramSelect, { OTHER_PROGRAM, resolveProgramName } from '../components/ProgramSelect';
 import AssetSwapPicker from '../components/AssetSwapPicker';
 import AssetConditionPicker from '../components/AssetConditionPicker';
+import QrScanner from '../components/QrScanner';
+import QrIcon from '../components/QrIcon';
+import { extractTagFromScan } from '../utils/scan';
 import { useCenters } from '../context/CentersContext';
 import { useAuth } from '../context/AuthContext';
 import useViewport from '../hooks/useViewport';
@@ -140,6 +143,8 @@ export default function AdminInventory() {
   const [internalUsePrograms, setInternalUsePrograms] = useState([]);
   const [internalUseForm, setInternalUseForm] = useState({ takenBy: '', projectId: '', otherProgramName: '', reason: '', studentCount: '', teamCount: '', instituteName: '' });
   const [internalUseRows, setInternalUseRows] = useState([{ name: '', qty: '' }]);
+  const [internalScanOpen, setInternalScanOpen] = useState(false);
+  const [internalScanNote, setInternalScanNote] = useState('');
   const [internalUseSaving, setInternalUseSaving] = useState(false);
   const [internalUseMsg, setInternalUseMsg] = useState('');
   const [returnListOpen, setReturnListOpen] = useState(false);
@@ -546,6 +551,55 @@ export default function AdminInventory() {
     setInternalUseRows(prev => [...prev, { name: '', qty: '' }]);
   }
 
+  // Scanning a label at the shelf adds that exact unit to the internal-use
+  // list: the component row is created or found, its quantity grows by one,
+  // and the unit is pinned so the backend issues *this* unit, not any one.
+  async function handleInternalScan(text) {
+    const tag = extractTagFromScan(text);
+    try {
+      const { data } = await axios.get(`/api/units/${encodeURIComponent(tag)}`);
+      if (data.unit.status !== 'available') {
+        setInternalScanNote(`${data.unit.assetTag} is ${data.unit.status.replace('_', ' ')} -- not available to issue.`);
+        return;
+      }
+      if (data.unit.centerId !== centerId) {
+        setInternalScanNote(`${data.unit.assetTag} belongs to ${data.unit.centerName}.`);
+        return;
+      }
+      setInternalUseRows(prev => {
+        if (prev.some(r => (r.assetIds || []).includes(data.unit.id))) return prev;
+        const rows = prev.map(r => ({ ...r }));
+        const idx = rows.findIndex(r => r.name.trim().toLowerCase() === data.component.name.toLowerCase());
+        if (idx >= 0) {
+          const row = rows[idx];
+          row.assetIds = [...(row.assetIds || []), data.unit.id];
+          row.tags = [...(row.tags || []), data.unit.assetTag];
+          row.qty = String(Math.max(Number(row.qty) || 0, row.assetIds.length));
+          return rows;
+        }
+        const fresh = { name: data.component.name, qty: '1', assetIds: [data.unit.id], tags: [data.unit.assetTag] };
+        const blank = rows.findIndex(r => !r.name.trim() && !r.qty);
+        if (blank >= 0) rows[blank] = fresh; else rows.push(fresh);
+        return rows;
+      });
+      setInternalScanNote(`Added ${data.unit.assetTag} (${data.component.name}). Scan the next unit or close.`);
+    } catch (err) {
+      setInternalScanNote(err?.response?.data?.message || `Could not find "${tag}".`);
+    }
+  }
+
+  function unpinInternalUnit(index, assetId) {
+    setInternalUseRows(prev => prev.map((row, i) => {
+      if (i !== index) return row;
+      const pos = (row.assetIds || []).indexOf(assetId);
+      if (pos < 0) return row;
+      const assetIds = row.assetIds.filter(id => id !== assetId);
+      const tags = row.tags.filter((_, k) => k !== pos);
+      const qty = Math.max(Number(row.qty) - 1, assetIds.length, 0);
+      return { ...row, assetIds, tags, qty: qty ? String(qty) : '' };
+    }));
+  }
+
   function removeInternalUseRow(index) {
     setInternalUseRows(prev => prev.filter((_, i) => i !== index));
   }
@@ -573,7 +627,7 @@ export default function AdminInventory() {
         setInternalUseMsg(`Enter a quantity for ${match.name}.`);
         return;
       }
-      resolvedItems.push({ catalogId: match.catalog_id, name: match.name, qty });
+      resolvedItems.push({ catalogId: match.catalog_id, name: match.name, qty, assetIds: row.assetIds || [] });
     }
     if (!resolvedItems.length) {
       setInternalUseMsg('Add at least one component.');
@@ -1406,6 +1460,26 @@ export default function AdminInventory() {
                 </AField>
               </div>
               <AField label="Components">
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
+                  <button type="button" style={styles.scanBtn} onClick={() => { setInternalScanNote(''); setInternalScanOpen(true); }}>
+                    <QrIcon size={15} /> Scan QR code
+                  </button>
+                </div>
+                {internalScanOpen && (
+                  <QrScanner
+                    title="Scan units to issue"
+                    hint="Scan each unit's label as you pick it from the shelf. Exactly those units will be issued."
+                    onScan={handleInternalScan}
+                    onClose={() => setInternalScanOpen(false)}
+                  >
+                    <div style={styles.scanStatus}>
+                      {internalScanNote || 'Waiting for a label…'}
+                      <div style={styles.scanStatusSub}>
+                        {internalUseRows.reduce((n, r) => n + (r.assetIds || []).length, 0)} unit(s) scanned so far
+                      </div>
+                    </div>
+                  </QrScanner>
+                )}
                 <datalist id="internal-use-catalog-options">
                   {items.map(item => <option key={item.catalog_id} value={item.name} />)}
                 </datalist>
@@ -1421,6 +1495,17 @@ export default function AdminInventory() {
                     )}
                   </div>
                 ))}
+                {internalUseRows.some(r => (r.tags || []).length > 0) && (
+                  <div style={styles.pinnedWrap}>
+                    {internalUseRows.map((row, index) => (row.tags || []).map((tag, k) => (
+                      <span key={`${index}-${tag}`} style={styles.pinnedChip}>
+                        <QrIcon size={11} /> {tag}
+                        <button type="button" style={styles.pinnedRemove} onClick={() => unpinInternalUnit(index, row.assetIds[k])} aria-label={`Remove ${tag}`}>✕</button>
+                      </span>
+                    )))}
+                    <span style={styles.pinnedHint}>Scanned units are issued exactly; any extra quantity is filled from available stock.</span>
+                  </div>
+                )}
                 <button type="button" style={styles.addBtnSecondary} onClick={addInternalUseRow}>+ Add another component</button>
               </AField>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
@@ -1595,6 +1680,13 @@ const styles = {
   badge: { padding: '3px 10px', borderRadius: '10px', fontSize: '11px', fontWeight: 600, background: '#f1f5f9', color: '#374151' },
   damageProgramTag: { padding: '3px 10px', borderRadius: '10px', fontSize: '11px', fontWeight: 700, background: '#fce4ec', color: '#c62828' },
   actions: { display: 'flex', gap: '6px', flexWrap: 'wrap' },
+  scanBtn: { display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#2d2a6e', color: '#fff', border: 'none', borderRadius: '8px', padding: '7px 12px', fontSize: '12px', fontWeight: 800, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" },
+  scanStatus: { fontSize: '13px', color: 'rgba(255,255,255,0.8)', textAlign: 'center', padding: '4px 0' },
+  scanStatusSub: { fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginTop: '3px' },
+  pinnedWrap: { display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center', margin: '2px 0 8px' },
+  pinnedChip: { display: 'inline-flex', alignItems: 'center', gap: '5px', background: '#eef2ff', color: '#2d2a6e', border: '1px solid #c7d2fe', borderRadius: '999px', padding: '3px 8px', fontSize: '11px', fontWeight: 700, fontFamily: "'DM Mono', Consolas, monospace" },
+  pinnedRemove: { background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: '11px', padding: 0, lineHeight: 1 },
+  pinnedHint: { fontSize: '11px', color: '#6b7280', width: '100%' },
   viewBtn: { background: '#e8eaf6', color: '#1a237e', border: 'none', borderRadius: '7px', padding: '6px 12px', cursor: 'pointer', fontSize: '12px', fontWeight: 700 },
   editBtn: { background: '#e8eaf6', color: '#1a237e', border: 'none', borderRadius: '7px', padding: '6px 10px', cursor: 'pointer', fontSize: '11px', fontWeight: 700 },
   overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 200, padding: '20px', overflowY: 'auto' },

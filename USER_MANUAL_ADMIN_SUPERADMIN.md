@@ -113,10 +113,18 @@ role allows:
 goes to the same unit page. Type the tag if the camera is unavailable.
 
 Inside workflows:
-- **Recording a return** (`Orders`): `Scan a returned unit` finds and
-  highlights that unit's row; **you** then tap Good or Damaged. Scanning never
+- **Recording a return** (`Orders`, `Internal Use` return): `Scan QR code`
+  keeps the scanner open; each scanned unit appears in the scanner window with
+  **Good / Damaged** buttons -- you choose, then scan the next. Scanning never
   decides the condition.
-- **Swapping a unit**: `Scan` the label of the unit in hand to select it.
+- **Internal Use** (`Inventory` -> `Internal Use`): `Scan QR code` on the right
+  adds each unit you pick off the shelf; exactly those units are issued.
+- **Swapping a unit**: `Scan QR code` on the label of the unit in hand.
+
+**New stock:** after saving an invoice, the success message offers
+**Print N QR labels now** for exactly the units just created. The same is
+available later from the invoice's detail view (`QR labels for this invoice`).
+Stick the labels on before shelving.
 
 ## 5) Student registration approval and user management
 
