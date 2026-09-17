@@ -9,47 +9,6 @@ import { formatInr } from '../utils/currency';
 
 // Append one line here as each V2.1 phase ships, so the notice on the
 // dashboard always reflects what's actually live, not what's planned.
-const V2_1_UPDATES = [
-  '"Admin Dashboard" is now "Center Dashboard".',
-  'Creating a new Program is now Super Admin only (view/edit unchanged for Admins).',
-  'Adding a new Component and entering Invoices is now Super Admin only.',
-  'Fixed low-contrast text in the downloaded Assets report for "Under Repair" and "Return Requested" rows.',
-  'Marking a unit Damaged/Consumed now asks for a reason, recorded against the component and in the Assets report.',
-  'You can now attach the original invoice photocopy/PDF to any invoice, viewable from Invoices.',
-  'Components can now be marked as having a warranty, with an end date shown right in Inventory.',
-  'Students can now list their team members (name + contact) when placing an order.',
-  'New "Internal Use" and "Return" buttons in Inventory for staff pulling components for sessions/projects, tracked under the program.',
-  'Centers can now request new components from the super admin (My Center), tracked from Requested through to Received.',
-];
-const V2_1_DISMISS_KEY = 'cims_v21_notice_dismissed_count';
-
-function WhatsNewV21() {
-  const [open, setOpen] = useState(() => {
-    try {
-      return Number(localStorage.getItem(V2_1_DISMISS_KEY) || 0) < V2_1_UPDATES.length;
-    } catch {
-      return true;
-    }
-  });
-  if (!open) return null;
-  function dismiss() {
-    try { localStorage.setItem(V2_1_DISMISS_KEY, String(V2_1_UPDATES.length)); } catch {}
-    setOpen(false);
-  }
-  return (
-    <div style={styles.whatsNew}>
-      <div style={styles.whatsNewHeader}>
-        <span style={styles.whatsNewBadge}>V2.1</span>
-        <span style={styles.whatsNewTitle}>What's new</span>
-        <button style={styles.whatsNewClose} onClick={dismiss} aria-label="Dismiss">X</button>
-      </div>
-      <ul style={styles.whatsNewList}>
-        {V2_1_UPDATES.map((line, i) => <li key={i} style={styles.whatsNewItem}>{line}</li>)}
-      </ul>
-    </div>
-  );
-}
-
 export default function AdminDashboard() {
   const { centers } = useCenters();
   const { isMobile } = useViewport();
@@ -216,8 +175,6 @@ export default function AdminDashboard() {
             <button style={{ ...styles.secondaryAction, ...(isMobile ? styles.fullWidthBtn : {}) }} onClick={() => navigate(inventoryPath)}>Manage Inventory</button>
           </div>
         </div>
-
-        <WhatsNewV21 />
 
         <div style={styles.superBar}>
           <div style={styles.filterBarRow}>
@@ -463,13 +420,6 @@ const styles = {
   pageMobile: { padding: '22px 14px 28px' },
   container: { maxWidth: '1280px', margin: '0 auto' },
   loading: { padding: '80px', textAlign: 'center', color: '#6b7280' },
-  whatsNew: { background: '#fff', border: '1.5px solid #ffe0b2', borderRadius: '16px', padding: '16px 20px', marginBottom: '20px' },
-  whatsNewHeader: { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' },
-  whatsNewBadge: { background: '#ff6d00', color: '#fff', fontSize: '11px', fontWeight: 800, letterSpacing: '0.06em', padding: '3px 9px', borderRadius: '999px' },
-  whatsNewTitle: { fontFamily: "'DM Sans', sans-serif", fontWeight: 800, fontSize: '14px', color: '#1a1a2e', flex: 1 },
-  whatsNewClose: { background: 'transparent', border: 'none', color: '#9aa4b2', cursor: 'pointer', fontSize: '13px', fontWeight: 700, padding: '2px 6px' },
-  whatsNewList: { margin: 0, padding: '0 0 0 18px', display: 'flex', flexDirection: 'column', gap: '4px' },
-  whatsNewItem: { fontSize: '13px', color: '#4b5563', lineHeight: 1.5 },
   hero: { background: 'linear-gradient(135deg, #102548 0%, #17355f 55%, #234d81 100%)', color: '#fff', borderRadius: '24px', padding: '28px 30px', display: 'flex', justifyContent: 'space-between', gap: '20px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '24px' },
   heroMobile: { padding: '24px 18px' },
   kicker: { fontSize: '12px', letterSpacing: '0.16em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.72)', fontWeight: 700, marginBottom: '10px' },

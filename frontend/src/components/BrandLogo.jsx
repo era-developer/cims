@@ -22,22 +22,33 @@ export default function BrandLogo({ compact = false, dark = false, showSystemNam
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: compact ? '12px' : '16px' }}>
-      <img
-        src={LOGO_URL}
-        alt={ORG_NAME}
+      {/* The artwork is navy line art on transparent. On the dark navbar it is
+          placed on a white chip rather than colour-inverted: a brightness/
+          invert filter turns the fine portrait linework into a solid white
+          silhouette, which is exactly what it looked like. */}
+      <div
         style={{
-          height: compact ? '38px' : '64px',
-          width: 'auto',
-          // The artwork is a wide lockup (~3.5:1); capping the width keeps it
-          // from crowding the nav on narrow screens.
-          maxWidth: compact ? '190px' : '320px',
-          objectFit: 'contain',
-          display: 'block',
-          // The logo is dark navy on transparent, so on a dark header it needs
-          // to be lifted out of the background rather than disappearing.
-          filter: dark ? 'brightness(0) invert(1)' : 'none',
+          background: dark ? '#ffffff' : 'transparent',
+          borderRadius: dark ? '10px' : 0,
+          padding: dark ? (compact ? '4px 10px' : '8px 14px') : 0,
+          display: 'inline-flex',
+          alignItems: 'center',
         }}
-      />
+      >
+        <img
+          src={LOGO_URL}
+          alt={ORG_NAME}
+          style={{
+            height: compact ? '34px' : '64px',
+            width: 'auto',
+            // The artwork is a wide lockup (~3.3:1); capping the width keeps
+            // it from crowding the nav on narrow screens.
+            maxWidth: compact ? '180px' : '320px',
+            objectFit: 'contain',
+            display: 'block',
+          }}
+        />
+      </div>
 
       {(!LOGO_HAS_WORDMARK || showSystemName) && (
         <div style={{ lineHeight: 1 }}>
