@@ -676,6 +676,48 @@ router.get('/value-summary', authMiddleware, adminOnly, (req, res) => {
   res.json({ ...combined, byBusinessHead, byClassification });
 });
 
+// What a scanned QR label resolves to. Tags are unique across the org, so
+// the lookup is by tag alone; a center admin only gets units of their own
+// center back. Includes the order currently holding the unit, if issued, so
+// the scan screen can jump straight to it.
+router.get('/by-tag/:tag', authMiddleware, adminOnly, (req, res) => {
+  const db = getDb();
+  const tag = String(req.params.tag || '').trim();
+  if (!tag) return res.status(400).json({ message: 'No tag scanned' });
+
+  const asset = db.prepare(`
+    SELECT a.*, c.name AS classification_name, ctr.name AS center_name, pc.image AS catalog_image
+    FROM assets a
+    JOIN classifications c ON c.id = a.classification_id
+    JOIN centers ctr ON ctr.id = a.center_id
+    LEFT JOIN product_catalog pc ON pc.id = a.catalog_id
+    WHERE UPPER(a.asset_tag) = UPPER(?)
+  `).get(tag);
+  if (!asset) return res.status(404).json({ message: `No unit with tag "${tag}"` });
+  if (req.user.role !== 'super_admin' && asset.center_id !== req.user.centerId) {
+    return res.status(403).json({ message: `Tag "${tag}" belongs to ${asset.center_name}, not your center` });
+  }
+
+  // The open order holding this unit (issued / reserved), if any.
+  const holder = db.prepare(`
+    SELECT ir.order_id, ir.status, ir.expected_return_date, ir.issued_at,
+           COALESCE(s.full_name, u.full_name) AS student_name, u.username AS student_username
+    FROM issue_record_assets ira
+    JOIN issue_record_items iri ON iri.id = ira.issue_record_item_id
+    JOIN issue_records ir ON ir.id = iri.issue_record_id
+    LEFT JOIN students s ON s.id = ir.student_id
+    LEFT JOIN users u ON u.id = s.user_id
+    WHERE ira.asset_id = ? AND ir.status NOT IN ('Returned', 'Rejected')
+    ORDER BY ir.created_at DESC LIMIT 1
+  `).get(asset.id);
+
+  const lastEvent = db.prepare(
+    'SELECT event_type, to_status, occurred_at, performed_by, notes FROM asset_lifecycle_events WHERE asset_id = ? ORDER BY occurred_at DESC LIMIT 1'
+  ).get(asset.id);
+
+  res.json({ ...asset, holder: holder || null, lastEvent: lastEvent || null });
+});
+
 router.get('/:id', authMiddleware, adminOnly, (req, res) => {
   const db = getDb();
   const asset = db.prepare(`

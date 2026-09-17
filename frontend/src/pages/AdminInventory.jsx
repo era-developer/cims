@@ -880,6 +880,15 @@ export default function AdminInventory() {
                         <div style={styles.actions}>
                           {isSuperAdmin && <button style={styles.editBtn} onClick={() => openEditCatalog(item)}>Edit</button>}
                           <button style={styles.viewBtn} onClick={() => openDrawer(item)}>View Units</button>
+                          {Number(item.total) > 0 && (
+                            <button
+                              style={styles.viewBtn}
+                              title="Print QR labels for this component's units"
+                              onClick={() => navigate(`/admin/labels?catalogId=${item.catalog_id}&centerId=${encodeURIComponent(centerId)}`)}
+                            >
+                              QR labels
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

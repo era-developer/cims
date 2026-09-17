@@ -93,6 +93,24 @@ Rules:
 - Keep component names consistent across centers.
 - Add new components before requesting them in transfer flow.
 
+## 4.3 QR labels and scanning
+
+**Print labels:** `Inventory` -> `QR labels` on a component row. Tick the units,
+pick a label size (38x21, 50x30 or 70x40 mm), and `Print`. Each label carries
+the QR code, the asset tag and the component name. Stick it on the unit.
+
+**Scan:** the `Scan` button in the top bar (phone or laptop camera) reads a
+label and shows the unit: name, tag, status, location, and who currently
+has it, with buttons to open that order or the inventory row. If the camera
+is unavailable, type the tag instead.
+
+Scanning is also built into two flows:
+- **Recording a return** (`Orders`): `Scan returned unit` marks each scanned
+  label as returned in good condition; tap `Damaged` on the row for any that
+  are not.
+- **Swapping a unit** (`Swap` next to an assigned tag): `Scan` the label of
+  the unit you actually have in hand to select it.
+
 ## 5) Student registration approval and user management
 
 Open `Users`.

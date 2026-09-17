@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
+import QrScanner from './QrScanner';
 
 // Small "Swap" action shown next to a system-assigned asset tag, used by
 // Orders, Internal Use, and Transfers wherever a specific unit is displayed.
@@ -16,6 +17,20 @@ export default function AssetSwapPicker({ asset, catalogId, swapUrl, onSwapped }
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [scanning, setScanning] = useState(false);
+
+  // Scanning the label of the unit actually in hand selects it -- no need to
+  // read a tag off a shelf and find it in the dropdown.
+  function handleScan(tag) {
+    const hit = candidates.find(c => String(c.assetTag).toUpperCase() === String(tag).toUpperCase());
+    if (!hit) {
+      setError(`"${tag}" is not an available unit of this component.`);
+      return;
+    }
+    setNewAssetId(String(hit.id));
+    setError('');
+    setScanning(false);
+  }
 
   async function openPicker() {
     setOpen(true);
@@ -78,13 +93,16 @@ export default function AssetSwapPicker({ asset, catalogId, swapUrl, onSwapped }
             ) : candidates.length === 0 ? (
               <div style={styles.hint}>No other available units of this component right now.</div>
             ) : (
-              <select style={styles.select} value={newAssetId} onChange={e => setNewAssetId(e.target.value)}>
-                {candidates.map(c => (
-                  <option key={c.id} value={c.id}>
-                    {c.assetTag}{c.serialNumber ? ` (SN: ${c.serialNumber})` : ''}
-                  </option>
-                ))}
-              </select>
+              <div style={styles.pickRow}>
+                <select style={{ ...styles.select, flex: 1 }} value={newAssetId} onChange={e => setNewAssetId(e.target.value)}>
+                  {candidates.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.assetTag}{c.serialNumber ? ` (SN: ${c.serialNumber})` : ''}
+                    </option>
+                  ))}
+                </select>
+                <button type="button" style={styles.scanBtn} onClick={() => setScanning(true)}>Scan</button>
+              </div>
             )}
             <input
               style={styles.input}
@@ -93,6 +111,9 @@ export default function AssetSwapPicker({ asset, catalogId, swapUrl, onSwapped }
               onChange={e => setReason(e.target.value)}
             />
             {error && <div style={styles.error}>{error}</div>}
+            {scanning && (
+              <QrScanner title="Scan replacement unit" hint="Scan the label of the unit you are issuing instead." onScan={handleScan} onClose={() => setScanning(false)} />
+            )}
             <div style={styles.actions}>
               <button type="button" style={styles.cancelBtn} onClick={close}>Cancel</button>
               <button
@@ -123,6 +144,8 @@ const styles = {
   panel: { background: '#fff', borderRadius: '16px', padding: '20px', width: '100%', maxWidth: '380px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' },
   title: { fontFamily: "'DM Sans', sans-serif", fontSize: '15px', fontWeight: 800, color: '#1a1a2e', marginBottom: '6px' },
   hint: { fontSize: '12px', color: '#64748b', marginBottom: '12px', lineHeight: 1.5 },
+  pickRow: { display: 'flex', gap: '8px', alignItems: 'flex-start' },
+  scanBtn: { background: '#eef2ff', color: '#2d2a6e', border: '1px solid #c7d2fe', borderRadius: '8px', padding: '9px 12px', fontSize: '12px', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' },
   select: { width: '100%', padding: '9px 10px', border: '1.5px solid #dbe3f0', borderRadius: '8px', fontSize: '13px', marginBottom: '10px', fontFamily: "'DM Sans', sans-serif", boxSizing: 'border-box' },
   input: { width: '100%', padding: '9px 10px', border: '1.5px solid #dbe3f0', borderRadius: '8px', fontSize: '13px', marginBottom: '10px', fontFamily: "'DM Sans', sans-serif", outline: 'none', boxSizing: 'border-box' },
   error: { color: '#c62828', fontSize: '12px', marginBottom: '10px', fontWeight: 600 },

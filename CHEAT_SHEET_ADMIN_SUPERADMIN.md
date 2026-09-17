@@ -53,6 +53,13 @@ When adding/updating component, keep:
 - project/purpose
 - purchased for (for example `ERA Foundation` or `Kalam Pragati`)
 
+## 5b) QR labels and scanning
+
+- Print: `Inventory` -> `QR labels` on the component -> tick units -> Print.
+- Look up any unit: `Scan` in the top bar.
+- Returns: `Scan returned unit` marks it Good; tap `Damaged` for the rest.
+- Swap: `Scan` inside the Swap dialog picks the unit in hand.
+
 ## 6) Center-to-center flow
 
 Admin (`My Center`):

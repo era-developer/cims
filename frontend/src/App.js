@@ -23,6 +23,7 @@ import MyCenter from './pages/MyCenter';
 import ProgramDetail from './pages/ProgramDetail';
 import RegisterLanding from './pages/RegisterLanding';
 import AdminSettings from './pages/AdminSettings';
+import AdminLabels from './pages/AdminLabels';
 
 function PrivateRoute({ children, role }) {
   const { user, loading } = useAuth();
@@ -112,6 +113,11 @@ export default function App() {
             <Route path="/admin/users" element={
               <PrivateRoute role={['admin', 'super_admin']}>
                 <AppLayout><AdminUsers /></AppLayout>
+              </PrivateRoute>
+            } />
+            <Route path="/admin/labels" element={
+              <PrivateRoute role={['admin', 'super_admin']}>
+                <AppLayout><AdminLabels /></AppLayout>
               </PrivateRoute>
             } />
             <Route path="/admin/settings" element={
