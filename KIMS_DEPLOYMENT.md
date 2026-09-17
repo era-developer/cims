@@ -17,7 +17,7 @@ fully isolated from each other.
 | PM2 name | `cims-backend` | `kims-backend` |
 | Install script | (in `D:\cims`) | `install-kims-service.ps1` |
 | JWT secret | its own | **different** — see below |
-| SMTP sender | `comedkares.cims@gmail.com` | not yet configured |
+| SMTP sender | `comedkares.cims@gmail.com` | `gopalancims@gmail.com` |
 
 **Nothing in `D:\KIMS` may point at CIMS's port, database, service name or
 mailbox.** The JWT secrets in particular must stay different: a shared secret
@@ -75,7 +75,7 @@ cd D:\KIMS && powershell -ExecutionPolicy Bypass -File .\install-kims-service.ps
 
 Health check: <http://localhost:5001/api/health>
 
-## Still to configure
+## External services
 
 ### 1. Email (SMTP) — configured
 
