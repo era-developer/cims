@@ -1,6 +1,8 @@
 module.exports = {
   apps: [{
-    name: 'cims-backend',
+    // Distinct from the Comedkare deployment's 'cims-backend', so both can be
+    // managed by the same PM2 daemon without one replacing the other.
+    name: 'kims-backend',
     script: 'server.js',
     cwd: __dirname,
     // If the process crashes outright, PM2 restarts it immediately.

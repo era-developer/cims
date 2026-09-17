@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import useViewport from '../hooks/useViewport';
 import { useAuth } from '../context/AuthContext';
-import { CENTERS } from '../centers';
+import { useCenters } from '../context/CentersContext';
 import AssetSwapPicker from '../components/AssetSwapPicker';
 
 const STATUS_STYLES = {
@@ -21,14 +21,18 @@ function formatDate(value) {
   return DATE_FORMATTER.format(date);
 }
 
-function centerNameFromId(centerId) {
-  if (!centerId) return '';
-  const center = CENTERS.find(item => item.id === centerId);
-  return center?.name || centerId;
-}
-
 export default function AdminTransfers() {
   const { user } = useAuth();
+  const { centers } = useCenters();
+
+  // Defined inside the component rather than at module scope: the center list
+  // is fetched at runtime now, so a name lookup needs the loaded list.
+  function centerNameFromId(centerId) {
+    if (!centerId) return '';
+    const center = centers.find(item => item.id === centerId);
+    return center?.name || centerId;
+  }
+
   const { isMobile } = useViewport();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -195,7 +199,7 @@ export default function AdminTransfers() {
         <div style={styles.centerRow}>
           <select value={filterCenter} onChange={event => setFilterCenter(event.target.value)} style={styles.centerSelect}>
             <option value="">All Centers</option>
-            {CENTERS.map(center => (
+            {centers.map(center => (
               <option key={center.id} value={center.id}>{center.name}</option>
             ))}
           </select>
@@ -241,7 +245,7 @@ export default function AdminTransfers() {
         ) : (
           filteredRequests.map(request => {
             const draft = drafts[request.id] || {};
-            const supplyOptions = CENTERS.filter(center => center.id !== request.requestingCenterId);
+            const supplyOptions = centers.filter(center => center.id !== request.requestingCenterId);
             const suggestedIds = new Set((request.availableCenters || []).map(center => center.id));
             const statusStyle = STATUS_STYLES[request.status] || { background: '#f3f4f6', color: '#111827' };
             const canApprove = request.status === 'Pending';

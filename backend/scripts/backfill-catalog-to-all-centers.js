@@ -9,7 +9,7 @@
 // Usage: node backfill-catalog-to-all-centers.js <db-path> <source-center-id> [--apply]
 
 const { openDatabase } = require('../utils/db');
-const { CENTERS, requireCenter } = require('../utils/centers');
+const { CENTERS, requireCenter } = require('./legacy-centers');
 
 function run(dbPath, sourceCenterId, { apply = false } = {}) {
   const db = openDatabase(dbPath);

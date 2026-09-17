@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useSearchParams } from 'react-router-dom';
-import { CENTERS } from '../centers';
+import { useCenters } from '../context/CentersContext';
 import { useAuth } from '../context/AuthContext';
 import useViewport from '../hooks/useViewport';
 import AssetSwapPicker from '../components/AssetSwapPicker';
@@ -20,6 +20,7 @@ const STATUS_STYLES = {
 const RETURN_FLOW_STATUSES = new Set(['Return Requested', 'Partially Returned', 'Returned']);
 
 export default function AdminOrders() {
+  const { centers } = useCenters();
   const [searchParams, setSearchParams] = useSearchParams();
   const { isMobile } = useViewport();
   const { user } = useAuth();
@@ -216,7 +217,7 @@ export default function AdminOrders() {
           <div style={styles.centerRow}>
             <select value={centerId} onChange={event => setCenterId(event.target.value)} style={styles.centerSelect}>
               <option value="">All Centers</option>
-              {CENTERS.map(center => <option key={center.id} value={center.id}>{center.name}</option>)}
+              {centers.map(center => <option key={center.id} value={center.id}>{center.name}</option>)}
             </select>
           </div>
         )}

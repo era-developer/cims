@@ -97,19 +97,73 @@ function readCenterSpecificEnv(centerId, keySuffix) {
   return readEnv(key);
 }
 
+// Resolution order: the center's own notification_email (editable by a super
+// admin in Settings -> Centers), then the org-wide order email, then the
+// legacy {CENTER_ID}_EMAIL / CENTER_EMAIL / SMTP_USER env vars. The env tail
+// is what keeps an existing .env-configured deployment working with no
+// database rows at all.
+//
+// Required lazily: utils/settings.js and utils/centers.js both open the
+// database, and email.js is required at server boot before the DB is needed.
 function getAdminRecipient(centerId) {
-  // Try to get center-specific email first
+  try {
+    const { getCenterById } = require('./centers');
+    const settings = require('./settings');
+    const center = centerId ? getCenterById(centerId) : null;
+    const resolved = settings.getOrderEmail(centerId, center);
+    if (resolved) return resolved;
+  } catch (error) {
+    console.warn('[email] settings lookup failed, falling back to env:', error.message);
+  }
+
   const centerEmail = readCenterSpecificEnv(centerId, 'EMAIL');
   if (centerEmail) {
     return centerEmail;
   }
-  
-  // Fallback to general center email or SMTP user
+
   return readEnv('CENTER_EMAIL') || readEnv('SMTP_USER') || '';
 }
 
 function getSiteUrl() {
+  try {
+    const url = require('./settings').getSiteUrl();
+    if (url) return url;
+  } catch {
+    // Fall through to env below.
+  }
   return readEnv('SITE_URL') || '';
+}
+
+// The `from` display name on every outgoing email. Was the hardcoded string
+// "Comedkares Innovation Hub - CIMS" in eight places in this file.
+function getSenderName() {
+  try {
+    const name = require('./settings').getEmailSenderName();
+    if (name) return name;
+  } catch {
+    // Fall through to env below.
+  }
+  return readEnv('EMAIL_SENDER_NAME') || 'Kalam Pragati - KIMS';
+}
+
+function getOrgName() {
+  try {
+    const name = require('./settings').getOrgName();
+    if (name) return name;
+  } catch {
+    // Fall through to env below.
+  }
+  return readEnv('ORG_NAME') || 'Kalam Pragati';
+}
+
+function getOrgShortName() {
+  try {
+    const name = require('./settings').getOrgShortName();
+    if (name) return name;
+  } catch {
+    // Fall through to env below.
+  }
+  return readEnv('ORG_SHORT_NAME') || 'KIMS';
 }
 
 function buildReplyTo(primary, fallback) {
@@ -354,9 +408,11 @@ function wrapEmail(title, subtitle, bodyHtml) {
   // PDFs use), so it needs white behind it or the navy parts of the mark
   // disappear. Matches the PDF letterhead: logo on white, navy accent rule,
   // then content.
+  const orgName = getOrgName();
+  const orgShortName = getOrgShortName();
   const logoHtml = LOGO_EXISTS
-    ? `<img src="cid:${LOGO_CID}" alt="Comedkares Innovation Hub" style="height:34px;display:block;margin-bottom:12px;" />`
-    : `<div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#64748b;font-weight:700;margin-bottom:10px;">Comedkares Innovation Hub &middot; CIMS</div>`;
+    ? `<img src="cid:${LOGO_CID}" alt="${escapeHtml(orgName)}" style="height:34px;display:block;margin-bottom:12px;" />`
+    : `<div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#64748b;font-weight:700;margin-bottom:10px;">${escapeHtml(orgName)} &middot; ${escapeHtml(orgShortName)}</div>`;
 
   return `
 <!DOCTYPE html>
@@ -375,7 +431,7 @@ function wrapEmail(title, subtitle, bodyHtml) {
       ${footerLink}
     </div>
     <div style="padding:14px 28px;background:#f8fafc;color:#64748b;font-size:12px;text-align:center;border-top:1px solid #e2e8f0;">
-      Automated notification from the CIMS Component Inventory Management System, Comedkares Innovation Hub.<br>
+      Automated notification from the ${escapeHtml(orgShortName)} Component Inventory Management System, ${escapeHtml(orgName)}.<br>
       For urgent matters, use the Reply-To contact shown on this email instead of this address.
     </div>
   </div>
@@ -544,7 +600,7 @@ async function sendOrderNotification(order, centerId) {
   const tasks = [];
   if (adminRecipient) {
     tasks.push(sendMessage(transporter, {
-      from: `"Comedkares Innovation Hub - CIMS" <${config.user}>`,
+      from: `"${getSenderName()}" <${config.user}>`,
       to: adminRecipient,
       replyTo: buildReplyTo(studentRecipient, config.user),
       subject: `[CIMS] New order ${order.orderId} from ${details.studentName || order.username}`,
@@ -553,7 +609,7 @@ async function sendOrderNotification(order, centerId) {
   }
   if (studentRecipient) {
     tasks.push(sendMessage(transporter, {
-      from: `"Comedkares Innovation Hub - CIMS" <${config.user}>`,
+      from: `"${getSenderName()}" <${config.user}>`,
       to: studentRecipient,
       replyTo: buildReplyTo(adminRecipient, config.user),
       subject: `[CIMS] Order received ${order.orderId}`,
@@ -608,7 +664,7 @@ async function sendProcurementNotification({ request, type, recipients = [] }) {
   if (!to) return;
 
   await sendMessage(transporter, {
-    from: `"Comedkares Innovation Hub - CIMS" <${config.user}>`,
+    from: `"${getSenderName()}" <${config.user}>`,
     to,
     replyTo: buildReplyTo(config.user, ''),
     subject,
@@ -667,7 +723,7 @@ async function sendTransferNotification({ transfer, type, recipients = [] }) {
   if (!to) return;
 
   await sendMessage(transporter, {
-    from: `"Comedkares Innovation Hub - CIMS" <${config.user}>`,
+    from: `"${getSenderName()}" <${config.user}>`,
     to,
     replyTo: buildReplyTo(config.user, ''),
     subject,
@@ -759,7 +815,7 @@ async function sendStatusUpdate(order, status, remarks, centerId) {
   const tasks = [];
   if (adminRecipient) {
     tasks.push(sendMessage(transporter, {
-      from: `"Comedkares Innovation Hub - CIMS" <${config.user}>`,
+      from: `"${getSenderName()}" <${config.user}>`,
       to: adminRecipient,
       replyTo: buildReplyTo(studentRecipient, config.user),
       subject: `[CIMS] ${status}: ${order.orderId}`,
@@ -768,7 +824,7 @@ async function sendStatusUpdate(order, status, remarks, centerId) {
   }
   if (studentRecipient) {
     tasks.push(sendMessage(transporter, {
-      from: `"Comedkares Innovation Hub - CIMS" <${config.user}>`,
+      from: `"${getSenderName()}" <${config.user}>`,
       to: studentRecipient,
       replyTo: buildReplyTo(adminRecipient, config.user),
       subject: `[CIMS] ${status}: ${order.orderId}`,
@@ -819,7 +875,7 @@ async function sendReturnReminder(order, centerId) {
   );
 
   return sendMessage(transporter, {
-    from: `"Comedkares Innovation Hub - CIMS" <${config.user}>`,
+    from: `"${getSenderName()}" <${config.user}>`,
     to: studentRecipient,
     replyTo: buildReplyTo(adminRecipient, config.user),
     subject: `[CIMS] Return reminder for ${order.orderId}`,
@@ -860,7 +916,7 @@ async function sendOtpEmail({ targetEmail, centerId, code, purpose, expiresInMin
   );
 
   return sendMessage(transporter, {
-    from: `"Comedkares Innovation Hub - CIMS" <${config.user}>`,
+    from: `"${getSenderName()}" <${config.user}>`,
     to: targetEmail,
     replyTo: buildReplyTo(getAdminRecipient(centerId), config.user),
     subject: copy.subject,

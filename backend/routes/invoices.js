@@ -6,7 +6,7 @@ const multer = require('multer');
 const PDFDocument = require('pdfkit');
 const { getDb } = require('../utils/db');
 const { authMiddleware, adminOnly, superAdminOnly } = require('../middleware/auth');
-const { requireCenter, CENTERS } = require('../utils/centers');
+const { requireCenter, listCenters, getCenterById } = require('../utils/centers');
 const { isCriticalAssetName } = require('../utils/classifications');
 const { createAssetTagGenerator } = require('../utils/assetTag');
 
@@ -103,7 +103,7 @@ function getOrCreateCatalog(db, centerId, name, classificationId, unit, image, d
   // catalog at 0 stock, so the component list stays consistent org-wide --
   // other centers just see it exists and can top it up locally via their
   // own invoices later. Not exploded into physical units they don't have.
-  for (const center of CENTERS) {
+  for (const center of listCenters()) {
     if (center.id === centerId) continue;
     const alreadyThere = db.prepare('SELECT id FROM product_catalog WHERE center_id = ? AND name = ?').get(center.id, trimmed);
     if (alreadyThere) continue;
@@ -303,7 +303,9 @@ function pdfFieldGrid(doc, fields) {
 router.get('/:id/pdf', authMiddleware, adminOnly, (req, res) => {
   const invoice = loadInvoiceDetail(getDb(), req.params.id);
   if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
-  const center = CENTERS.find(c => c.id === invoice.center_id);
+  // getCenterById, not listCenters(): an invoice from a since-deactivated
+  // center must still render its center name on the PDF.
+  const center = getCenterById(invoice.center_id);
 
   const doc = new PDFDocument({ margin: 50, size: 'A4' });
   res.setHeader('Content-Type', 'application/pdf');

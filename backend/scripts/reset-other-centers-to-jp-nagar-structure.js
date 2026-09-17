@@ -7,7 +7,7 @@
 // Usage: node reset-other-centers-to-jp-nagar-structure.js <db-path> <source-center-id> [--apply]
 
 const { openDatabase } = require('../utils/db');
-const { CENTERS, requireCenter } = require('../utils/centers');
+const { CENTERS, requireCenter } = require('./legacy-centers');
 
 function wipeCenterInventory(db, centerId) {
   const counts = {};

@@ -16,7 +16,7 @@
 // Usage: node remove-classifications-all-centers.js <db-path> [--apply]
 
 const { openDatabase } = require('../utils/db');
-const { CENTERS } = require('../utils/centers');
+const { CENTERS } = require('./legacy-centers');
 
 const TARGET_CLASSIFICATIONS = ['Interior infrastructure', 'Sinages'];
 

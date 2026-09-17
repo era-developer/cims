@@ -4,8 +4,18 @@ const { logActivity, getLogs } = require('../utils/logsDb');
 const { getWhatsappMessages } = require('../utils/whatsappDb');
 const { listUsers, createUser, updateUser, deleteUser, serializeUser, findUserById } = require('../utils/usersDb');
 const { verifyWhatsAppConnection } = require('../utils/whatsapp');
-const { CENTERS, getCenterById } = require('../utils/centers');
-const { authMiddleware, adminOnly } = require('../middleware/auth');
+const {
+  listCenters,
+  getCenterById,
+  createCenter,
+  updateCenter,
+  deleteCenter,
+  countCenterReferences,
+  suggestCode,
+  slugifyId,
+} = require('../utils/centers');
+const settings = require('../utils/settings');
+const { authMiddleware, adminOnly, superAdminOnly } = require('../middleware/auth');
 const { getDb } = require('../utils/db');
 const { getOrdersForCenter } = require('./orders');
 const { getAllTransfers } = require('./transfers');
@@ -177,8 +187,174 @@ function ensureCenterAccess(req, centerId) {
   return getCenterById(centerId);
 }
 
+// ---------- Centers ----------
+//
+// Centers live in the database (see utils/centers.js). Any admin may read the
+// list because the whole UI is scoped by center; only a super admin may
+// create, edit or retire one.
+
 router.get('/centers', authMiddleware, adminOnly, async (req, res) => {
-  res.json(CENTERS);
+  // Super admins managing centers need to see retired ones to reactivate
+  // them; everyone else only ever works against live centers.
+  const includeInactive = req.user.role === 'super_admin'
+    && ['1', 'true', 'yes'].includes(String(req.query.includeInactive || '').toLowerCase());
+  res.json(listCenters({ includeInactive }));
+});
+
+// Prefills the "add center" form. Kept server-side so the id/code derivation
+// rules that the validator enforces live in exactly one place.
+router.get('/centers/suggest', authMiddleware, superAdminOnly, async (req, res) => {
+  const name = String(req.query.name || '').trim();
+  res.json({ id: slugifyId(name), code: suggestCode(name) });
+});
+
+router.post('/centers', authMiddleware, superAdminOnly, async (req, res) => {
+  try {
+    const center = createCenter({
+      id: req.body.id,
+      code: req.body.code,
+      name: req.body.name,
+      notificationEmail: req.body.notificationEmail,
+      whatsappNumber: req.body.whatsappNumber,
+      active: req.body.active === undefined ? true : Boolean(req.body.active),
+    });
+    await logActivity('CENTER_CREATED', req.user.username, {
+      role: req.user.role,
+      centerId: center.id,
+      info: `Created center ${center.name} (${center.code})`,
+    });
+    res.status(201).json(center);
+  } catch (error) {
+    res.status(error.status || 500).json({
+      message: error.message || 'Failed to create center',
+      errors: error.validationErrors || [],
+    });
+  }
+});
+
+router.put('/centers/:centerId', authMiddleware, superAdminOnly, async (req, res) => {
+  try {
+    const center = updateCenter(req.params.centerId, {
+      code: req.body.code,
+      name: req.body.name,
+      notificationEmail: req.body.notificationEmail,
+      whatsappNumber: req.body.whatsappNumber,
+      active: req.body.active,
+    });
+    await logActivity('CENTER_UPDATED', req.user.username, {
+      role: req.user.role,
+      centerId: center.id,
+      info: `Updated center ${center.name} (${center.code})`,
+    });
+    res.json(center);
+  } catch (error) {
+    const status = error.status || (/Unknown center/.test(error.message) ? 404 : 500);
+    res.status(status).json({
+      message: error.message || 'Failed to update center',
+      errors: error.validationErrors || [],
+    });
+  }
+});
+
+// Reports what a delete would actually do, so the UI can warn "this center has
+// 412 assets and will be deactivated, not deleted" before the user commits.
+router.get('/centers/:centerId/usage', authMiddleware, superAdminOnly, async (req, res) => {
+  const center = getCenterById(req.params.centerId);
+  if (!center) return res.status(404).json({ message: 'Center not found' });
+  const references = countCenterReferences(center.id);
+  res.json({
+    centerId: center.id,
+    references,
+    canHardDelete: Object.keys(references).length === 0,
+  });
+});
+
+router.delete('/centers/:centerId', authMiddleware, superAdminOnly, async (req, res) => {
+  try {
+    const center = getCenterById(req.params.centerId);
+    if (!center) return res.status(404).json({ message: 'Center not found' });
+
+    // Refusing to remove the last live center: the student-facing catalog and
+    // every admin screen resolve a center id, so an empty list bricks the app.
+    const liveCenters = listCenters();
+    if (center.active && liveCenters.length <= 1) {
+      return res.status(400).json({
+        message: 'Cannot remove the only active center. Add another center first.',
+      });
+    }
+
+    const result = deleteCenter(center.id);
+    await logActivity(result.deleted ? 'CENTER_DELETED' : 'CENTER_DEACTIVATED', req.user.username, {
+      role: req.user.role,
+      centerId: center.id,
+      info: result.deleted
+        ? `Deleted unused center ${center.name} (${center.code})`
+        : `Deactivated center ${center.name} (${center.code}) -- retained existing records`,
+    });
+    res.json(result);
+  } catch (error) {
+    res.status(error.status || 500).json({ message: error.message || 'Failed to remove center' });
+  }
+});
+
+// ---------- Org settings ----------
+//
+// Order-notification email and WhatsApp number were env vars requiring a
+// service restart to change. A super admin can now re-point them here when
+// the responsible admin changes.
+
+router.get('/settings', authMiddleware, superAdminOnly, async (req, res) => {
+  try {
+    res.json(settings.getAllResolved());
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Failed to load settings' });
+  }
+});
+
+function isValidEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+}
+
+router.put('/settings', authMiddleware, superAdminOnly, async (req, res) => {
+  try {
+    const patch = {};
+    const body = req.body || {};
+
+    if (body.orderEmail !== undefined) {
+      const email = String(body.orderEmail || '').trim();
+      if (email && !isValidEmail(email)) {
+        return res.status(400).json({ message: `"${email}" is not a valid email address` });
+      }
+      patch[settings.KEYS.ORDER_EMAIL] = email;
+    }
+    if (body.whatsappAdmin !== undefined) {
+      const phone = settings.normalizePhone(body.whatsappAdmin);
+      if (body.whatsappAdmin && !phone) {
+        return res.status(400).json({ message: 'WhatsApp number must contain digits' });
+      }
+      patch[settings.KEYS.WHATSAPP_ADMIN] = phone;
+    }
+    if (body.orgName !== undefined) patch[settings.KEYS.ORG_NAME] = body.orgName;
+    if (body.orgShortName !== undefined) patch[settings.KEYS.ORG_SHORT_NAME] = body.orgShortName;
+    if (body.orgTagline !== undefined) patch[settings.KEYS.ORG_TAGLINE] = body.orgTagline;
+    if (body.siteUrl !== undefined) patch[settings.KEYS.ORG_SITE_URL] = body.siteUrl;
+    if (body.emailSenderName !== undefined) patch[settings.KEYS.EMAIL_SENDER_NAME] = body.emailSenderName;
+
+    const changed = settings.setSettings(patch, req.user.username || String(req.user.id || ''));
+
+    if (changed.length) {
+      // No centerId: this is an org-level change, filed under the
+      // Organization scope rather than any one center.
+      await logActivity('SETTINGS_UPDATED', req.user.username, {
+        role: req.user.role,
+        info: `Updated settings: ${changed.join(', ')}`,
+      });
+    }
+
+    res.json(settings.getAllResolved());
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Failed to save settings' });
+  }
 });
 
 // GET dashboard stats
@@ -194,7 +370,7 @@ router.get('/stats', authMiddleware, adminOnly, async (req, res) => {
     const [inventoryAll, orders, users] = await Promise.all([
       centerId
         ? getInventoryItemsForCenter(centerId)
-        : Promise.all(CENTERS.map(center => getInventoryItemsForCenter(center.id))).then(results => results.flat()),
+        : Promise.all(listCenters().map(center => getInventoryItemsForCenter(center.id))).then(results => results.flat()),
       Promise.resolve(getOrdersForCenter(centerId || undefined)),
       Promise.resolve(listUsers(centerId ? { centerId } : {})),
     ]);
@@ -204,7 +380,7 @@ router.get('/stats', authMiddleware, adminOnly, async (req, res) => {
     const stats = {
       centerId: centerId || '',
       centerName: centerId ? getCenterById(centerId)?.name || '' : 'All Centers',
-      centers: centerId ? 1 : CENTERS.length,
+      centers: centerId ? 1 : listCenters().length,
       totalComponents: inventory.length,
       totalStock: inventory.reduce((s, i) => s + (i.stock || 0), 0),
       lowStock: inventory.filter(i => i.stock < 5).length,
@@ -217,7 +393,7 @@ router.get('/stats', authMiddleware, adminOnly, async (req, res) => {
       categories: [...new Set(inventory.map(i => i.category))].length,
     };
     if (!centerId) {
-      stats.byCenter = await Promise.all(CENTERS.map(async center => {
+      stats.byCenter = await Promise.all(listCenters().map(async center => {
         const [centerInventoryAll, centerOrders, centerUsers] = await Promise.all([
           getInventoryItemsForCenter(center.id),
           Promise.resolve(getOrdersForCenter(center.id)),
@@ -354,7 +530,9 @@ router.get('/analytics', authMiddleware, async (req, res) => {
     if (req.user.role !== 'super_admin') return res.status(403).json({ message: 'Access denied' });
     const db = getDb();
     const stats = { totalUsers: 0, totalOrders: 0, totalInventory: 0, totalDamagedUnits: 0, totalDamagedComponents: 0, centers: {} };
-    for (const center of CENTERS) {
+    // Analytics walks deactivated centers too -- their users, orders and
+    // damaged units are still part of the org-wide totals.
+    for (const center of listCenters({ includeInactive: true })) {
       const users = listUsers({ centerId: center.id }).length;
       const orders = getOrdersForCenter(center.id).length;
       const inventory = db.prepare('SELECT COUNT(*) c FROM product_catalog WHERE center_id = ?').get(center.id).c;

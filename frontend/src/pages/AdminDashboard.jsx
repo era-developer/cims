@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { APP_LONG_NAME, APP_SHORT_NAME, APP_SUBTITLE } from '../brand';
-import { CENTERS } from '../centers';
+import { useCenters } from '../context/CentersContext';
 import { useAuth } from '../context/AuthContext';
 import useViewport from '../hooks/useViewport';
 import { formatInr } from '../utils/currency';
@@ -51,6 +51,7 @@ function WhatsNewV21() {
 }
 
 export default function AdminDashboard() {
+  const { centers } = useCenters();
   const { isMobile } = useViewport();
   const { user } = useAuth();
   const [stats, setStats] = useState(null);
@@ -208,7 +209,7 @@ export default function AdminDashboard() {
             <div>
               <div style={styles.kicker}>{APP_SUBTITLE}</div>
               <h1 style={{ ...styles.title, ...(isMobile ? styles.titleMobile : {}) }}>Center Dashboard</h1>
-              <p style={styles.subtitle}>{isSuperAdmin && centerId ? `${APP_LONG_NAME} - ${CENTERS.find(center => center.id === centerId)?.name || ''}` : APP_LONG_NAME}</p>
+              <p style={styles.subtitle}>{isSuperAdmin && centerId ? `${APP_LONG_NAME} - ${centers.find(center => center.id === centerId)?.name || ''}` : APP_LONG_NAME}</p>
             </div>
           <div style={{ ...styles.heroActions, ...(isMobile ? styles.heroActionsStack : {}) }}>
             <button style={{ ...styles.primaryAction, ...(isMobile ? styles.fullWidthBtn : {}) }} onClick={() => navigate('/admin/users')}>Review Registrations</button>
@@ -225,7 +226,7 @@ export default function AdminDashboard() {
                 View center
                 <select value={centerId} onChange={event => setCenterId(event.target.value)} style={styles.superSelect}>
                   <option value="">All Centers</option>
-                  {CENTERS.map(center => <option key={center.id} value={center.id}>{center.name}</option>)}
+                  {centers.map(center => <option key={center.id} value={center.id}>{center.name}</option>)}
                 </select>
               </label>
             )}

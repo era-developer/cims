@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { CENTERS } from '../centers';
+import { useCenters } from '../context/CentersContext';
 
 const STATUS_FLOW = ['Requested', 'Approved', 'Order Placed', 'In Transit', 'Received'];
 const STATUS_STYLES = {
@@ -30,6 +30,7 @@ function sessionContextLine(record) {
 
 
 export default function AdminProcurement() {
+  const { centers } = useCenters();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterCenter, setFilterCenter] = useState('');
@@ -106,7 +107,7 @@ export default function AdminProcurement() {
       <div style={styles.centerRow}>
         <select value={filterCenter} onChange={event => setFilterCenter(event.target.value)} style={styles.centerSelect}>
           <option value="">All Centers</option>
-          {CENTERS.map(center => <option key={center.id} value={center.id}>{center.name}</option>)}
+          {centers.map(center => <option key={center.id} value={center.id}>{center.name}</option>)}
         </select>
       </div>
 

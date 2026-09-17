@@ -3,18 +3,20 @@ import axios from 'axios';
 import QRCode from 'react-qr-code';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import BrandLogo from '../components/BrandLogo';
-import { APP_EXPANDED_NAME, APP_SUBTITLE, REGISTRATION_QUERY } from '../brand';
-import { CENTERS } from '../centers';
+import { APP_EXPANDED_NAME, APP_SUBTITLE, APP_SHORT_NAME, PRIMARY_COLOR, REGISTRATION_QUERY } from '../brand';
+import { useCenters } from '../context/CentersContext';
 import { useAuth } from '../context/AuthContext';
 import useViewport from '../hooks/useViewport';
-import { getCurrentCenter } from '../centers';
 
-const currentCenter = getCurrentCenter();
-const STUDENT_USER_GUIDE_URL = 'https://docs.google.com/document/d/e/2PACX-1vTmEzNIgJYwf4Uiu2q8Eqnhr_rEWKimLR1i4W4oORtBIzBTmR4Nv6jZmM9Qwl74RvC5Y3qB8FcaRs3X/pub';
+const STUDENT_USER_GUIDE_URL = process.env.REACT_APP_STUDENT_GUIDE_URL || '';
 // Stable public entry point (matches backend SITE_URL) -- not derived from
 // window.location, so the QR/link stays correct regardless of which host
 // (ngrok, a new domain, etc.) is actually serving the app underneath it.
-const STABLE_SITE_URL = 'https://comedkares.s.gy/cims';
+// Set REACT_APP_SITE_URL at build time; falls back to the current origin so a
+// fresh deployment still produces a working QR code instead of a dead link to
+// somebody else's portal.
+const STABLE_SITE_URL = process.env.REACT_APP_SITE_URL
+  || (typeof window !== 'undefined' ? window.location.origin : '');
 
 const INITIAL_REGISTER_FORM = {
   username: '',
@@ -26,7 +28,9 @@ const INITIAL_REGISTER_FORM = {
   graduationYear: '',
   degree: '',
   department: '',
-  centerId: currentCenter?.id || CENTERS[0].id,
+  // Filled in from the fetched center list once it arrives -- there is no
+  // compiled-in center to default to any more.
+  centerId: '',
   password: '',
   confirmPassword: '',
 };
@@ -35,6 +39,7 @@ export default function Login() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { login, register } = useAuth();
+  const { centers } = useCenters();
   const { isMobile, isTablet } = useViewport();
 
   const [mode, setMode] = useState(searchParams.get('register') === '1' ? 'register' : 'login');
@@ -44,6 +49,16 @@ export default function Login() {
   const [messageType, setMessageType] = useState('error');
   const [loading, setLoading] = useState(false);
   const [registrationLink, setRegistrationLink] = useState('');
+
+  // Preselect the first center once the list arrives, so a registering
+  // student is never looking at an empty required dropdown. Only fills a
+  // blank value, so it never overwrites a choice the user already made.
+  useEffect(() => {
+    if (!centers.length) return;
+    setRegisterForm(current => (
+      current.centerId ? current : { ...current, centerId: centers[0].id }
+    ));
+  }, [centers]);
 
   // 'request' = enter username/email and ask for a code; 'reset' = enter
   // the emailed code plus a new password. Kept as local state rather than
@@ -357,7 +372,7 @@ export default function Login() {
                   label="Center"
                   value={registerForm.centerId}
                   onChange={value => setRegisterForm(current => ({ ...current, centerId: value }))}
-                  options={CENTERS}
+                  options={centers}
                 />
                 <Field label="Year of Graduation" value={registerForm.graduationYear} onChange={value => setRegisterForm(current => ({ ...current, graduationYear: value }))} placeholder="2024" />
                 <Field label="Degree" value={registerForm.degree} onChange={value => setRegisterForm(current => ({ ...current, degree: value }))} placeholder="B.Tech / B.Sc / MBA" />
@@ -372,7 +387,7 @@ export default function Login() {
           )}
 
           <div style={styles.hint}>
-            <p style={{ fontWeight: 700, color: '#1a237e', marginBottom: '8px' }}>CIMS</p>
+            <p style={{ fontWeight: 700, color: PRIMARY_COLOR, marginBottom: '8px' }}>{APP_SHORT_NAME}</p>
             <p>{APP_EXPANDED_NAME}</p>
           </div>
         </div>
@@ -386,14 +401,18 @@ export default function Login() {
             </div>
             <div style={styles.linkBox}>{registrationLink || 'Open this page in the browser to generate the registration link.'}</div>
             <button style={styles.secondaryBtn} onClick={copyRegistrationLink}>Copy Registration Link</button>
-            <a
-              href={STUDENT_USER_GUIDE_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={styles.secondaryLinkBtn}
-            >
-              Students User Guide
-            </a>
+            {/* Hidden unless a guide URL is configured for this deployment --
+                the previous hardcoded link pointed at Comedkare's document. */}
+            {STUDENT_USER_GUIDE_URL && (
+              <a
+                href={STUDENT_USER_GUIDE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={styles.secondaryLinkBtn}
+              >
+                Students User Guide
+              </a>
+            )}
           </div>
         </aside>
       </div>

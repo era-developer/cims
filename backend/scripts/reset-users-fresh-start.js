@@ -9,7 +9,7 @@
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { openDatabase } = require('../utils/db');
-const { CENTERS } = require('../utils/centers');
+const { CENTERS } = require('./legacy-centers');
 
 const TEST_PASSWORD = 'Cims@2026';
 

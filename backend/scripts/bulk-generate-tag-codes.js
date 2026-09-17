@@ -7,7 +7,7 @@
 // Usage: node bulk-generate-tag-codes.js <db-path> <center-id> [--apply]
 
 const { openDatabase } = require('../utils/db');
-const { requireCenter } = require('../utils/centers');
+const { requireCenter } = require('./legacy-centers');
 const { classificationAbbr } = require('../utils/assetTag');
 
 const STOPWORDS = new Set(['and', 'or', 'for', 'of', 'the', 'a', 'an', 'to', 'no', 'per', 'with', 'without']);

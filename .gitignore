@@ -67,3 +67,9 @@ coverage/
 # Editor folders
 .vscode/
 .idea/
+
+# Syncthing folder marker (copied over from D:\cims; KIMS is not a synced folder)
+.stfolder/
+
+# Vendored NSSM binaries used by install-kims-service.ps1
+nssm-2.24/

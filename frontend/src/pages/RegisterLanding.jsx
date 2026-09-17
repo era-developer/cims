@@ -1,11 +1,18 @@
 import React from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { getCenterName, CENTERS } from '../centers';
+import { useCenters } from '../context/CentersContext';
 import { APP_LONG_NAME, APP_SUBTITLE, PRIMARY_COLOR, LOGO_URL } from '../brand';
 
 export default function RegisterLanding() {
   const { centerId } = useParams();
-  const center = CENTERS.find(c => c.id === centerId);
+  const { centers, loading } = useCenters();
+  const center = centers.find(c => c.id === centerId);
+
+  // The center list is fetched, so an unknown id is only genuinely unknown
+  // once loading has finished -- otherwise every visit flashes "not found".
+  if (loading) {
+    return <div className="p-6">Loading...</div>;
+  }
 
   if (!center) {
     return <div className="p-6">Center not found</div>;

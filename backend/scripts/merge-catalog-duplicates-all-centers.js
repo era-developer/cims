@@ -9,7 +9,7 @@
 // Usage: node merge-catalog-duplicates-all-centers.js <db-path> [--apply]
 
 const { openDatabase } = require('../utils/db');
-const { CENTERS } = require('../utils/centers');
+const { CENTERS } = require('./legacy-centers');
 
 // Name-based version of merge-catalog-duplicates.js's MERGE_GROUPS (that
 // script hardcodes JP Nagar's specific row ids, which differ per center).

@@ -3,7 +3,7 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import ProgramSelect, { resolveProgramName, OTHER_PROGRAM } from '../components/ProgramSelect';
-import { CENTERS } from '../centers';
+import { useCenters } from '../context/CentersContext';
 
 const PROGRAM_STATUS_META = {
   planning: { label: 'Planning', color: '#1d4ed8', bg: '#dbeafe' },
@@ -52,6 +52,7 @@ function createRow() {
 }
 
 export default function MyCenter() {
+  const { centers } = useCenters();
   const { user } = useAuth();
   const navigate = useNavigate();
   const isSuperAdmin = user?.role === 'super_admin';
@@ -98,9 +99,12 @@ export default function MyCenter() {
   const [procurementSaving, setProcurementSaving] = useState(false);
   const [procurementMsg, setProcurementMsg] = useState('');
 
+  // Depends on `centers` because the list is fetched: on first render it is
+  // still empty, so a super admin would otherwise be left with no center
+  // selected until they picked one by hand.
   useEffect(() => {
-    setCenterId(isSuperAdmin ? (CENTERS[0]?.id || '') : (user?.centerId || ''));
-  }, [isSuperAdmin, user]);
+    setCenterId(isSuperAdmin ? (centers[0]?.id || '') : (user?.centerId || ''));
+  }, [isSuperAdmin, user, centers]);
 
   useEffect(() => {
     let cancel = false;
@@ -445,7 +449,7 @@ export default function MyCenter() {
   }
 
   const centerName = isSuperAdmin
-    ? (CENTERS.find(c => c.id === centerId)?.name || 'Select a center')
+    ? (centers.find(c => c.id === centerId)?.name || 'Select a center')
     : (user?.centerName || 'your center');
 
   return (
@@ -455,7 +459,7 @@ export default function MyCenter() {
           <label style={styles.fieldLabel}>
             <span style={styles.labelText}>Viewing center</span>
             <select value={centerId} onChange={event => setCenterId(event.target.value)} style={styles.input}>
-              {CENTERS.map(center => <option key={center.id} value={center.id}>{center.name}</option>)}
+              {centers.map(center => <option key={center.id} value={center.id}>{center.name}</option>)}
             </select>
           </label>
         </div>

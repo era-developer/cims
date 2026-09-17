@@ -5,24 +5,17 @@ import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import useViewport from '../hooks/useViewport';
 import ProgramSelect, { OTHER_PROGRAM, resolveProgramName } from '../components/ProgramSelect';
+import { ORG_NAME, APP_SHORT_NAME } from '../brand';
 
-// Center-specific admin WhatsApp numbers
-const ADMIN_WHATSAPP_NUMBERS = {
-  jp_nagar: '+918951955093',      // JP Nagar admin
-  yelahanka: '+918951955092',     // Yelahanka admin
-  gopalan_mall: '+919876543212',  // Gopalan Mall admin
-  mysore: '+918951955095',        // Mysore admin
-  tumkur: '+918951955094',        // Tumkur admin
-  mangalore: '+918951955096',     // Mangalore admin
-  hubballi: '+918951717352',      // Hubballi admin
-  belagavi: '+918951955097',      // Belagavi admin
-  kalaburagi: '+918951955098',    // Kalaburagi admin
-};
+// The admin WhatsApp number is fetched per center from
+// GET /api/centers/:centerId/contact, where a super admin can change it
+// without a rebuild. It used to be a hardcoded map of nine numbers here.
 
-// Fallback number if center not found
-const DEFAULT_ADMIN_WHATSAPP_NUMBER = '911234567890';
-
-const ADMIN_LOGIN_URL = 'https://bit.ly/comedkares_ims';
+// Where the WhatsApp handoff message tells an admin to go to action the
+// order. Configured per deployment rather than hardcoded to one org's short
+// link; falls back to this app's own origin.
+const ADMIN_LOGIN_URL = process.env.REACT_APP_ADMIN_LOGIN_URL
+  || (typeof window !== 'undefined' ? window.location.origin : '');
 
 // Shown in full above the mandatory acceptance checkbox -- students must be
 // able to actually read what they're agreeing to, not just tick an unlabeled
@@ -105,6 +98,20 @@ export default function Cart() {
   const [otpSending, setOtpSending] = useState(false);
   const [otpError, setOtpError] = useState('');
   const [otpMessage, setOtpMessage] = useState('');
+
+  // The admin WhatsApp number for this student's center, resolved at runtime
+  // so a staffing change takes effect without a frontend rebuild.
+  const [adminWhatsapp, setAdminWhatsapp] = useState('');
+  useEffect(() => {
+    if (!user?.centerId) return;
+    let cancelled = false;
+    axios.get(`/api/centers/${user.centerId}/contact`)
+      .then(({ data }) => { if (!cancelled) setAdminWhatsapp(data?.whatsappNumber || ''); })
+      // Non-fatal: the order is already placed by the time this matters, so a
+      // failed lookup just means no WhatsApp handoff button.
+      .catch(() => { if (!cancelled) setAdminWhatsapp(''); });
+    return () => { cancelled = true; };
+  }, [user?.centerId]);
   const [otpCooldown, setOtpCooldown] = useState(0);
 
   useEffect(() => {
@@ -170,7 +177,10 @@ export default function Cart() {
     }, 1000);
 
     const timeout = setTimeout(() => {
-      const whatsappLink = buildAdminWhatsAppLink(submittedOrder, user);
+      const whatsappLink = buildAdminWhatsAppLink(submittedOrder, user, adminWhatsapp);
+      // No number configured for this center: skip the handoff rather than
+      // navigating the student to a broken wa.me link.
+      if (!whatsappLink) return;
       autoRedirectedRef.current = true;
 
       const popup = window.open(whatsappLink, '_blank', 'noopener,noreferrer');
@@ -183,7 +193,10 @@ export default function Cart() {
       clearInterval(interval);
       clearTimeout(timeout);
     };
-  }, [step, submittedOrder]);
+    // adminWhatsapp is a dependency because it arrives from a fetch: without
+    // it the 5s timeout would close over an empty number and silently skip
+    // the handoff whenever the lookup resolved after this effect ran.
+  }, [step, submittedOrder, user, adminWhatsapp]);
 
   async function requestOtp() {
     setOtpError('');
@@ -281,24 +294,28 @@ export default function Cart() {
   }
 
   if (step === 4) {
-    const whatsappLink = buildAdminWhatsAppLink(submittedOrder, user);
+    const whatsappLink = buildAdminWhatsAppLink(submittedOrder, user, adminWhatsapp);
     return (
       <div style={{ ...styles.page, ...(isMobile ? styles.pageMobile : {}) }}>
         <div style={{ ...styles.successCard, ...(isMobile ? styles.successCardMobile : {}) }}>
           <div style={styles.successIcon}>Done</div>
           <h2 style={styles.successTitle}>Request Submitted</h2>
-          <p style={styles.successSub}>Your component request has been sent to the Comedkares Innovation Hub team.</p>
+          <p style={styles.successSub}>Your component request has been sent to the {ORG_NAME} team.</p>
           <div style={styles.orderIdBox}>Order ID: <strong>{orderId}</strong></div>
           <p style={styles.successNote}>The lab administrator will review and approve your request shortly.</p>
-          <p style={styles.redirectNote}>Opening WhatsApp for admin notification in {redirectCountdown} second{redirectCountdown === 1 ? '' : 's'}...</p>
+          {whatsappLink && (
+            <p style={styles.redirectNote}>Opening WhatsApp for admin notification in {redirectCountdown} second{redirectCountdown === 1 ? '' : 's'}...</p>
+          )}
           <div style={{ ...styles.successBtns, ...(isMobile ? styles.stackButtons : {}) }}>
-            <a
-              href={whatsappLink}
-              target="_blank"
-              rel="noreferrer"
-              style={{ ...styles.whatsAppBtn, ...(isMobile ? styles.fullWidthBtn : {}) }}>
-              Send WhatsApp to Admin
-            </a>
+            {whatsappLink && (
+              <a
+                href={whatsappLink}
+                target="_blank"
+                rel="noreferrer"
+                style={{ ...styles.whatsAppBtn, ...(isMobile ? styles.fullWidthBtn : {}) }}>
+                Send WhatsApp to Admin
+              </a>
+            )}
             <button style={{ ...styles.primaryBtn, ...(isMobile ? styles.fullWidthBtn : {}) }} onClick={() => navigate('/my-orders')}>View My Orders</button>
             <button style={{ ...styles.secBtn, ...(isMobile ? styles.fullWidthBtn : {}) }} onClick={() => navigate('/dashboard')}>Back to Browse</button>
           </div>
@@ -528,9 +545,14 @@ export default function Cart() {
   );
 }
 
-function buildAdminWhatsAppLink(order, user) {
-  // Get center-specific admin number, fallback to default
-  const adminNumber = ADMIN_WHATSAPP_NUMBERS[user?.centerId] || DEFAULT_ADMIN_WHATSAPP_NUMBER;
+function buildAdminWhatsAppLink(order, user, adminWhatsappNumber) {
+  // Supplied by the caller from the center's configured number. wa.me wants
+  // bare digits, so any +, spaces or dashes an admin typed are stripped here
+  // rather than being imposed on what they can enter in Settings.
+  const adminNumber = String(adminWhatsappNumber || '').replace(/[^\d]/g, '');
+
+  // Without a number there is nobody to message; callers hide the button.
+  if (!adminNumber) return '';
 
   if (!order?.orderId) {
     return `https://wa.me/${adminNumber}`;
@@ -546,7 +568,7 @@ function buildAdminWhatsAppLink(order, user) {
     'Hello Admin,',
     `${details.studentName || 'Student'} this side`,
     '',
-    'I have placed a new CIMS order.',
+    `I have placed a new ${APP_SHORT_NAME} order.`,
     '',
     `Order ID: ${order.orderId}`,
     `Student: ${details.studentName || '-'}`,

@@ -1,7 +1,7 @@
 const express = require('express');
 const { getDb } = require('../utils/db');
 const { authMiddleware, adminOnly } = require('../middleware/auth');
-const { CENTERS, getCenterById, requireCenter } = require('../utils/centers');
+const { listCenters, getCenterById, requireCenter } = require('../utils/centers');
 const { getAdminRecipient, sendTransferNotification } = require('../utils/email');
 const { logActivity } = require('../utils/logsDb');
 const { swapAsset } = require('../utils/assetSwap');
@@ -38,7 +38,7 @@ function loadAssetsForTransferItem(db, itemId) {
 
 function computeAvailableCenters(db, excludeCenterId, items) {
   const available = [];
-  for (const center of CENTERS) {
+  for (const center of listCenters()) {
     if (center.id === excludeCenterId) continue;
     const hasAll = items.every(item => {
       const catalogRow = db.prepare('SELECT id FROM product_catalog WHERE center_id = ? AND name = ?').get(center.id, item.name);

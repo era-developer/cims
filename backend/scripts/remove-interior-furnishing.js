@@ -7,7 +7,7 @@
 // Usage: node remove-interior-furnishing.js <db-path> <center-id> [--apply]
 
 const { openDatabase } = require('../utils/db');
-const { requireCenter } = require('../utils/centers');
+const { requireCenter } = require('./legacy-centers');
 
 function run(dbPath, centerId, { apply = false } = {}) {
   const db = openDatabase(dbPath);

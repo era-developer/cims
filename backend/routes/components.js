@@ -1,7 +1,7 @@
 const express = require('express');
 const { getDb } = require('../utils/db');
 const { authMiddleware } = require('../middleware/auth');
-const { CENTERS } = require('../utils/centers');
+const { listCenters } = require('../utils/centers');
 
 const router = express.Router();
 // Only Electronic components can actually be requested/checked out by
@@ -75,7 +75,7 @@ router.get('/', authMiddleware, async (req, res) => {
   try {
     let centerId = getRequestedCenterId(req);
     if (!centerId) {
-      centerId = req.user.role === 'super_admin' ? (CENTERS[0]?.id || '') : (req.user.centerId || '');
+      centerId = req.user.role === 'super_admin' ? (listCenters()[0]?.id || '') : (req.user.centerId || '');
     }
     if (!centerId) return res.json([]);
 

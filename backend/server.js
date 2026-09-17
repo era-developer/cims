@@ -10,6 +10,10 @@ const fs = require('fs');
 const { mkdirSync } = require('fs');
 if (!fs.existsSync(path.join(__dirname, 'data'))) mkdirSync(path.join(__dirname, 'data'), { recursive: true });
 
+// Read from the environment rather than utils/settings so the banner and the
+// health endpoint never depend on the database being open.
+const APP_SHORT_NAME = process.env.ORG_SHORT_NAME || 'KIMS';
+
 const app = express();
 
 app.use(cors());
@@ -25,6 +29,10 @@ app.use('/api', (req, res, next) => {
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));
+// Public center list + branding, needed by the login and registration screens
+// before a token exists. Authenticated center management lives under
+// /api/admin/centers.
+app.use('/api/centers', require('./routes/centers'));
 app.use('/api/components', require('./routes/components'));
 app.use('/api/orders', require('./routes/orders'));
 app.use('/api/admin', require('./routes/admin'));
@@ -71,7 +79,7 @@ if (fs.existsSync(frontendIndex)) {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>CIMS Setup Required</title>
+  <title>${APP_SHORT_NAME} Setup Required</title>
   <style>
     :root {
       color-scheme: light;
@@ -160,7 +168,7 @@ if (fs.existsSync(frontendIndex)) {
 <body>
   <main class="card">
     <div class="pill">Frontend build missing</div>
-    <h1>CIMS backend is running, but the React app has not been built yet.</h1>
+    <h1>${APP_SHORT_NAME} backend is running, but the React app has not been built yet.</h1>
     <p>The API is available, but <code>frontend/build/index.html</code> is missing, so the browser cannot load the user interface at this address.</p>
     <div class="status">
       <span>API health: <a href="/api/health">/api/health</a></span>
@@ -168,7 +176,7 @@ if (fs.existsSync(frontendIndex)) {
     </div>
     <div class="section">
       <p>Build the frontend, then restart the backend:</p>
-      <div class="code">cd cims/frontend
+      <div class="code">cd KIMS/frontend
 npm install
 npm run build</div>
     </div>
@@ -184,13 +192,13 @@ npm run build</div>
 app.get('/api/health', async (_, res) => {
   const email = await verifyEmailConnection();
   const whatsapp = await verifyWhatsAppConnection();
-  res.json({ status: 'CIMS Running', time: new Date(), email, whatsapp });
+  res.json({ status: `${APP_SHORT_NAME} Running`, time: new Date(), email, whatsapp });
 });
 
 const PORT = process.env.PORT || 5000;
 const REMINDER_INTERVAL_MS = 60 * 60 * 1000;
 app.listen(PORT, async () => {
-  console.log(`\n🚀 CIMS Backend running on http://localhost:${PORT}`);
+  console.log(`\n🚀 ${APP_SHORT_NAME} Backend running on http://localhost:${PORT}`);
   console.log(`📊 API Health: http://localhost:${PORT}/api/health`);
   const emailStatus = await verifyEmailConnection();
   if (emailStatus.ok) {

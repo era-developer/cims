@@ -1,5 +1,5 @@
 {
-  "name": "cims-backend",
+  "name": "kims-backend",
   "version": "1.0.0",
   "description": "CIMS - Component Inventory Management System Backend",
   "main": "server.js",

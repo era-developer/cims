@@ -17,20 +17,31 @@ function normalizePhone(value) {
   return digits.startsWith('+') ? digits : `+${digits}`;
 }
 
+// Resolution order mirrors getAdminRecipient() in email.js: the center's own
+// whatsapp_number (super-admin editable), then the org-wide number, then the
+// legacy {CENTER_ID}_WHATSAPP_ADMIN_TO / N8N_WHATSAPP_ADMIN_TO env vars.
 function getAdminWhatsAppRecipient(centerId) {
-  // Try to get center-specific WhatsApp number first
+  try {
+    const { getCenterById } = require('./centers');
+    const settings = require('./settings');
+    const center = centerId ? getCenterById(centerId) : null;
+    const resolved = settings.getWhatsAppAdmin(centerId, center);
+    if (resolved) return normalizePhone(resolved);
+  } catch (error) {
+    console.warn('[whatsapp] settings lookup failed, falling back to env:', error.message);
+  }
+
   const centerWhatsapp = readCenterSpecificEnv(centerId, 'WHATSAPP_ADMIN_TO');
   if (centerWhatsapp) {
     return normalizePhone(centerWhatsapp);
   }
-  // Fallback to the general admin number if center-specific is not found
   return normalizePhone(readEnv('N8N_WHATSAPP_ADMIN_TO'));
 }
 
 function getWhatsAppConfig() {
   const outboundWebhook = readEnv('N8N_WHATSAPP_OUTBOUND_WEBHOOK');
   const sharedSecret = readEnv('N8N_WHATSAPP_SHARED_SECRET');
-  const adminTo = normalizePhone(readEnv('N8N_WHATSAPP_ADMIN_TO'));
+  const adminTo = getAdminWhatsAppRecipient(null);
   const enabled = ['1', 'true', 'yes', 'on'].includes(readEnv('N8N_WHATSAPP_ENABLED').toLowerCase());
 
   return {

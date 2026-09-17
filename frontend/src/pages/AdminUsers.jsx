@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useSearchParams } from 'react-router-dom';
-import { CENTERS } from '../centers';
+import { useCenters } from '../context/CentersContext';
 import { useAuth } from '../context/AuthContext';
 import useViewport from '../hooks/useViewport';
 
@@ -22,6 +22,7 @@ const EMPTY_FORM = {
 };
 
 export default function AdminUsers() {
+  const { centers } = useCenters();
   const [searchParams, setSearchParams] = useSearchParams();
   const { isMobile, isTablet } = useViewport();
   const { user } = useAuth();
@@ -212,7 +213,7 @@ export default function AdminUsers() {
           <div style={styles.centerRow}>
             <select value={centerId} onChange={event => setCenterId(event.target.value)} style={styles.centerSelect}>
               <option value="">All Centers</option>
-              {CENTERS.map(center => <option key={center.id} value={center.id}>{center.name}</option>)}
+              {centers.map(center => <option key={center.id} value={center.id}>{center.name}</option>)}
             </select>
           </div>
         )}
@@ -371,7 +372,7 @@ export default function AdminUsers() {
                   onChange={event => setForm(current => ({ ...current, centerId: event.target.value }))}
                   disabled={!isSuperAdmin || form.role === 'super_admin'}>
                   <option value="">Select center</option>
-                  {CENTERS.map(center => <option key={center.id} value={center.id}>{center.name}</option>)}
+                  {centers.map(center => <option key={center.id} value={center.id}>{center.name}</option>)}
                 </select>
               </div>
               <label style={styles.checkboxWrap}>

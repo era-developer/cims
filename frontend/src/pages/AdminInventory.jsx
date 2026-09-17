@@ -6,7 +6,7 @@ import PhotoInput from '../components/PhotoInput';
 import ProgramSelect, { OTHER_PROGRAM, resolveProgramName } from '../components/ProgramSelect';
 import AssetSwapPicker from '../components/AssetSwapPicker';
 import AssetConditionPicker from '../components/AssetConditionPicker';
-import { CENTERS } from '../centers';
+import { useCenters } from '../context/CentersContext';
 import { useAuth } from '../context/AuthContext';
 import useViewport from '../hooks/useViewport';
 import { formatInr } from '../utils/currency';
@@ -89,6 +89,7 @@ function SortableTh({ field, label, sortField, sortDirection, onSort }) {
 }
 
 export default function AdminInventory() {
+  const { centers } = useCenters();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { isMobile } = useViewport();
@@ -156,9 +157,12 @@ export default function AdminInventory() {
   const [historyAsset, setHistoryAsset] = useState(null);
   const isSuperAdmin = user?.role === 'super_admin';
 
+  // Depends on `centers` because the list is fetched: on first render it is
+  // still empty, so a super admin would otherwise be left with no center
+  // selected and an empty page until they picked one by hand.
   useEffect(() => {
-    setCenterId(isSuperAdmin ? (CENTERS[0]?.id || '') : (user?.centerId || ''));
-  }, [isSuperAdmin, user]);
+    setCenterId(isSuperAdmin ? (centers[0]?.id || '') : (user?.centerId || ''));
+  }, [isSuperAdmin, user, centers]);
 
   useEffect(() => {
     if (!centerId) return;
@@ -790,7 +794,7 @@ export default function AdminInventory() {
         {isSuperAdmin && (
           <div style={styles.centerRow}>
             <select value={centerId} onChange={event => setCenterId(event.target.value)} style={styles.centerSelect}>
-              {CENTERS.map(center => <option key={center.id} value={center.id}>{center.name}</option>)}
+              {centers.map(center => <option key={center.id} value={center.id}>{center.name}</option>)}
             </select>
           </div>
         )}

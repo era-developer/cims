@@ -2,7 +2,7 @@ const fs = require('fs/promises');
 const fsSync = require('fs');
 const path = require('path');
 const ExcelJS = require('exceljs');
-const { CENTERS } = require('../utils/centers');
+const { CENTERS } = require('./legacy-centers');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 

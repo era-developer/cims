@@ -2,6 +2,8 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
+import { CentersProvider } from './context/CentersContext';
+import { APP_SHORT_NAME } from './brand';
 import Navbar from './components/Navbar';
 import Login from './pages/Login';
 import StudentDashboard from './pages/StudentDashboard';
@@ -20,10 +22,11 @@ import AdminProcurement from './pages/AdminProcurement';
 import MyCenter from './pages/MyCenter';
 import ProgramDetail from './pages/ProgramDetail';
 import RegisterLanding from './pages/RegisterLanding';
+import AdminSettings from './pages/AdminSettings';
 
 function PrivateRoute({ children, role }) {
   const { user, loading } = useAuth();
-  if (loading) return <div style={{ padding: '80px', textAlign: 'center', color: '#6b7280', fontFamily: "'DM Sans', sans-serif" }}>Loading CIMS...</div>;
+  if (loading) return <div style={{ padding: '80px', textAlign: 'center', color: '#6b7280', fontFamily: "'DM Sans', sans-serif" }}>Loading {APP_SHORT_NAME}...</div>;
   if (!user) return <Navigate to="/" replace />;
   const allowedRoles = Array.isArray(role) ? role : role ? [role] : [];
   if (allowedRoles.length && !allowedRoles.includes(user.role)) {
@@ -43,6 +46,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <CentersProvider>
         <CartProvider>
           <Routes>
             <Route path="/" element={<Login />} />
@@ -110,6 +114,11 @@ export default function App() {
                 <AppLayout><AdminUsers /></AppLayout>
               </PrivateRoute>
             } />
+            <Route path="/admin/settings" element={
+              <PrivateRoute role="super_admin">
+                <AppLayout><AdminSettings /></AppLayout>
+              </PrivateRoute>
+            } />
             <Route path="/admin/analytics" element={
               <PrivateRoute role="super_admin">
                 <AppLayout><AdminAnalytics /></AppLayout>
@@ -130,6 +139,7 @@ export default function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </CartProvider>
+        </CentersProvider>
       </AuthProvider>
     </BrowserRouter>
   );

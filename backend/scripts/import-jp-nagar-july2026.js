@@ -22,7 +22,7 @@
 
 const crypto = require('crypto');
 const { openDatabase } = require('../utils/db');
-const { requireCenter } = require('../utils/centers');
+const { requireCenter } = require('./legacy-centers');
 const { createAssetTagGenerator } = require('../utils/assetTag');
 
 const CLASSIFICATION_MAP = {

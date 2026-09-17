@@ -48,7 +48,7 @@
 const crypto = require('crypto');
 const ExcelJS = require('exceljs');
 const { openDatabase } = require('../utils/db');
-const { CENTERS } = require('../utils/centers');
+const { CENTERS } = require('./legacy-centers');
 const { createAssetTagGenerator } = require('../utils/assetTag');
 
 const WORKBOOK_PATH = 'D:/cims/All 9 center inventory (1).xlsx';

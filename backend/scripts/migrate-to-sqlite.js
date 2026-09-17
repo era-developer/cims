@@ -17,7 +17,7 @@ const path = require('path');
 const fs = require('fs');
 const ExcelJS = require('exceljs');
 const { openDatabase } = require('../utils/db');
-const { CENTERS } = require('../utils/centers');
+const { CENTERS } = require('./legacy-centers');
 const { CLASSIFICATIONS, LEGACY_CLASSIFICATION } = require('../utils/classifications');
 
 const args = process.argv.slice(2);

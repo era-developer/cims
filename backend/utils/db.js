@@ -49,7 +49,14 @@ function openDatabase(dbFilePath) {
 
 function getDb() {
   if (!db) {
-    const dbFilePath = process.env.CIMS_DB_PATH || path.join(__dirname, '..', 'data', 'cims.db');
+    // KIMS_DB_PATH is the name a Kalam Pragati deployment uses; CIMS_DB_PATH
+    // is kept working so an existing Comedkare .env needs no edit. A relative
+    // path resolves against backend/ rather than the process working
+    // directory, so the service behaves the same however it was started.
+    const configured = process.env.KIMS_DB_PATH || process.env.CIMS_DB_PATH;
+    const dbFilePath = configured
+      ? path.resolve(__dirname, '..', configured)
+      : path.join(__dirname, '..', 'data', 'cims.db');
     db = openDatabase(dbFilePath);
   }
   return db;

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { CENTERS } from '../centers';
+import { useCenters } from '../context/CentersContext';
 import { useAuth } from '../context/AuthContext';
 import useViewport from '../hooks/useViewport';
 import PhotoInput from '../components/PhotoInput';
@@ -35,6 +35,7 @@ function calcLineItem(li) {
 }
 
 export default function AdminInvoiceEntry() {
+  const { centers } = useCenters();
   const { isMobile } = useViewport();
   const { user } = useAuth();
   const isSuperAdmin = user?.role === 'super_admin';
@@ -74,9 +75,12 @@ export default function AdminInvoiceEntry() {
   const [otherEditProjectName, setOtherEditProjectName] = useState('');
   const [lineItems, setLineItems] = useState([{ ...EMPTY_LINE_ITEM }]);
 
+  // Depends on `centers` because the list is fetched: on first render it is
+  // still empty, so a super admin would otherwise be left with no center
+  // selected until they picked one by hand.
   useEffect(() => {
-    setCenterId(isSuperAdmin ? (CENTERS[0]?.id || '') : (user?.centerId || ''));
-  }, [isSuperAdmin, user]);
+    setCenterId(isSuperAdmin ? (centers[0]?.id || '') : (user?.centerId || ''));
+  }, [isSuperAdmin, user, centers]);
 
   useEffect(() => {
     if (!centerId) return;
@@ -394,7 +398,7 @@ export default function AdminInvoiceEntry() {
         {isSuperAdmin && (
           <div style={styles.centerRow}>
             <select value={centerId} onChange={event => setCenterId(event.target.value)} style={styles.centerSelect}>
-              {CENTERS.map(center => <option key={center.id} value={center.id}>{center.name}</option>)}
+              {centers.map(center => <option key={center.id} value={center.id}>{center.name}</option>)}
             </select>
           </div>
         )}

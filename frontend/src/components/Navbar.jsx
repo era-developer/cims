@@ -15,13 +15,6 @@ export default function Navbar() {
   const isCompact = width <= 1180;
   const isMobile = width <= 720;
   const isAdmin = ['admin', 'super_admin'].includes(user?.role);
-  const adminLinks = [
-    { path: '/admin', label: 'Dashboard' },
-    { path: '/admin/inventory', label: 'Inventory' },
-    { path: '/admin/orders', label: 'Orders' },
-    { path: '/admin/my-center', label: 'My Center' },
-    { path: '/admin/users', label: 'Users' },
-  ];
   const navLinks = isAdmin
     ? (user?.role === 'super_admin'
       ? [
@@ -33,6 +26,7 @@ export default function Navbar() {
           { path: '/admin/procurement', label: 'Requests' },
           { path: '/admin/my-center', label: 'My Center' },
           { path: '/admin/users', label: 'Users' },
+          { path: '/admin/settings', label: 'Settings' },
         ]
       : [
           { path: '/admin', label: 'Dashboard' },

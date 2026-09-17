@@ -1,5 +1,5 @@
 const { sendReturnReminder } = require('./email');
-const { CENTERS } = require('./centers');
+const { listCenters } = require('./centers');
 
 function startOfDay(date) {
   const normalized = new Date(date);
@@ -28,7 +28,7 @@ async function processReturnReminders() {
   // avoids any import-order surprises.
   const { getOrdersForCenter, markReminderSent } = require('../routes/orders');
 
-  const orders = CENTERS.flatMap(center => getOrdersForCenter(center.id));
+  const orders = listCenters().flatMap(center => getOrdersForCenter(center.id));
   const candidates = orders.filter(order => shouldSendReminder(order));
   let sentCount = 0;
 
