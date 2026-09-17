@@ -97,6 +97,20 @@ Important:
 - Admin may reduce quantities during approval if full quantity is not available.
 - If reduced, only approved quantities are issued.
 
+### 4.0 The bell: every update in one place
+The bell icon in the top bar shows how many updates you have not read yet.
+Tap it for the latest ones; **See all** opens the full history with the date
+each was sent and when you read it. Everything the portal tells you — order
+received, approved, rejected, return recorded, the day-before return reminder,
+your account approval — is listed there, whether or not you also got the
+e-mail or a phone notification. Opening an entry marks it read and takes you
+to that order; **Mark all read** clears the badge.
+
+### 4.0a Return reminder
+The day before an order's expected return date, KIMS automatically sends you
+an e-mail with the full component list and the date, a phone notification (if
+enabled) and an entry in the bell. It is sent once per order.
+
 ### 4.1 Notifications on your phone
 KIMS can notify you the moment an admin acts on your order — approved,
 rejected, a return recorded, or a reminder the day before a return is due —

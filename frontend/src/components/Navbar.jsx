@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import BrandLogo from './BrandLogo';
 import QrScanner from './QrScanner';
 import QrIcon from './QrIcon';
+import NotificationBell from './NotificationBell';
 import { extractTagFromScan } from '../utils/scan';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
@@ -129,6 +130,7 @@ export default function Navbar() {
           <button style={styles.scanBtn} onClick={() => setScanOpen(true)} title="Scan a unit's QR label">
             <QrIcon size={15} />{!isMobile && <span>Scan QR code</span>}
           </button>
+          <NotificationBell />
           {!isAdmin && (
             <button style={styles.cartBtn} onClick={() => navigate('/cart')}>
               Cart

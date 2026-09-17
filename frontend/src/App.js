@@ -25,6 +25,7 @@ import RegisterLanding from './pages/RegisterLanding';
 import AdminSettings from './pages/AdminSettings';
 import AdminLabels from './pages/AdminLabels';
 import UnitPage from './pages/UnitPage';
+import Notifications from './pages/Notifications';
 
 function PrivateRoute({ children, role }) {
   const { user, loading } = useAuth();
@@ -151,6 +152,11 @@ export default function App() {
             <Route path="/unit/:tag" element={
               <PrivateRoute>
                 <AppLayout><UnitPage /></AppLayout>
+              </PrivateRoute>
+            } />
+            <Route path="/notifications" element={
+              <PrivateRoute>
+                <AppLayout><Notifications /></AppLayout>
               </PrivateRoute>
             } />
             <Route path="/register/:centerId" element={<RegisterLanding />} />

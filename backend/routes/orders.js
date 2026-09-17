@@ -354,6 +354,7 @@ router.post('/', authMiddleware, async (req, res) => {
   const row = loadOrderRows(db, centerId).find(r => r.order_id === orderId);
   const orderForNotification = buildOrderResponse(db, row);
   sendOrderNotification(orderForNotification, centerId).catch(console.error);
+  push.notifyStudentOrderPlaced(orderForNotification);
   push.notifyAdminsNewOrder(orderForNotification, { excludeUserId: req.user.id });
 
   res.status(201).json({ message: 'Order placed successfully', orderId });

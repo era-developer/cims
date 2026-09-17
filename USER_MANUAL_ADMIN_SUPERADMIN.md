@@ -339,7 +339,7 @@ receives what:
 | Order placed | Order received | New order (full details) |
 | Order approved / rejected | Status update | Status update |
 | Return requested / partial / returned | Status + return summary | Status + return summary |
-| Day before expected return | Return reminder | - |
+| Day before expected return | Return reminder (e-mail with component list + push + bell; once per order, checked hourly) | - |
 | Password reset code | Code | - |
 | Password changed or reset | Security notice | - |
 | Transfer request / approval / return | - | Super admin + centers involved |
@@ -349,19 +349,28 @@ Admin emails go to the center's own notification email if set in
 `Settings`, otherwise the org-wide order notification email. No email ever
 contains a password.
 
-### 9.5 Browser / phone notifications (push)
-Alongside e-mail, KIMS sends instant notifications to any device where the
-person enabled them. Nothing is sent to anyone who has not opted in.
+### 9.5 The bell (notification centre) and phone notifications
+Every user and admin has a **bell** in the top bar. It shows the unread count,
+the latest entries on tap, and **See all** opens `/notifications`: the full
+history with sent time, read time and an *Unread only* filter. Every event in
+the table below is written there for each recipient regardless of e-mail or
+push, so the bell is the complete record of what the portal told a person.
+Entries are kept 180 days after being read (a year if never read).
+
+Alongside e-mail and the bell, KIMS sends instant push notifications to any
+device where the person enabled them. Nothing is pushed to anyone who has not
+opted in.
 
 | Event | Student gets | Admins of that center + super admins get |
 |---|---|---|
-| Student places an order | - | New order (who, what) |
+| Student places an order | Order received | New order (who, what) |
 | Order approved | Approved, what to collect, return-by date | - |
 | Order rejected | Rejected, with the reason | - |
 | Student requests a return | - | Return requested (what is coming back) |
 | Partial / full return recorded | What is still outstanding / order closed | - |
 | Day before expected return | Return reminder | - |
 | Student self-registers | - | New registration to approve |
+| Admin approves a registration | Account approved (waiting in the bell at first sign-in) | - |
 
 The admin who performs an action never receives their own notification.
 Tapping a notification opens the order on the right page.

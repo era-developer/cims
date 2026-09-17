@@ -51,6 +51,7 @@ app.use('/api/assets', require('./routes/assets'));
 // What a scanned QR label resolves to, for any signed-in role.
 app.use('/api/units', require('./routes/units'));
 app.use('/api/push', require('./routes/push'));
+app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/programs', require('./routes/programs'));
 app.use('/api/internal-issues', require('./routes/internal-issues'));
 app.use('/api/procurement', require('./routes/procurement'));
@@ -242,6 +243,8 @@ app.listen(PORT, async () => {
 
 setInterval(async () => {
   try {
+    const pruned = require('./utils/notifications').prune();
+    if (pruned) console.log(`[NOTIFICATIONS] pruned ${pruned} old entries`);
     const reminderResult = await processReturnReminders();
     if (reminderResult.eligible || reminderResult.sent) {
       console.log(`[REMINDERS] checked=${reminderResult.checked} eligible=${reminderResult.eligible} sent=${reminderResult.sent}`);

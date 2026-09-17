@@ -107,7 +107,12 @@ self.addEventListener('push', event => {
     renotify: !!data.tag,
     data: { url: data.url || '/' },
   };
-  event.waitUntil(self.registration.showNotification(title, options));
+  event.waitUntil(Promise.all([
+    self.registration.showNotification(title, options),
+    // Tell any open portal tab so the bell updates without a reload.
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      .then(list => list.forEach(client => client.postMessage({ type: 'PUSH_RECEIVED' }))),
+  ]));
 });
 
 self.addEventListener('notificationclick', event => {

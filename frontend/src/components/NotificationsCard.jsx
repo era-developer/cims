@@ -72,7 +72,7 @@ export default function NotificationsCard({ compact = false, style }) {
     return (
       <div style={{ ...styles.banner, ...style }}>
         <span style={styles.bell} aria-hidden="true">🔔</span>
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ flex: '1 1 220px', minWidth: 0 }}>
           <div style={styles.bannerTitle}>Get notified on this device</div>
           <div style={styles.bannerSub}>Hear about {what} the moment they happen.</div>
           {error && <div style={styles.errorInline}>{error}</div>}

@@ -41,6 +41,8 @@
 - `Returned`: fully closed.
 
 ## 4a) Notifications
+- **Bell icon** (top bar): unread count, latest updates, **See all** for full history with read status.
+- Day before return date: automatic e-mail + phone notification + bell entry.
 - Tap **Enable** on the yellow bar (Browse page) to get order updates on this device.
 - Manage or test: `My Profile` → Notifications on this device.
 - iPhone: add KIMS to Home Screen first.

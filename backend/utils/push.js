@@ -1,6 +1,7 @@
 const webpush = require('web-push');
 const { getDb } = require('./db');
 const { getOrgShortName } = require('./settings');
+const notifications = require('./notifications');
 
 // Web Push (browser notifications) for students and admins. Sits next to the
 // e-mail notices: every place that sends a lifecycle e-mail also calls one of
@@ -123,20 +124,26 @@ async function sendToUser(userId, payload) {
   const rows = getDb().prepare('SELECT * FROM push_subscriptions WHERE user_id = ?').all(userId);
   return sendToSubscriptionRows(rows, payload);
 }
+// ---- delivery: in-app record + push ---------------------------------------
+// Every event is written to the notification centre for each recipient (so
+// the bell shows it even with push off), then pushed to whichever of their
+// devices opted in.
 
-// Notify the admins who look after a center (its own admins plus every
-// super admin), excluding the actor so an admin never gets pinged about a
-// change they made themselves.
-async function sendToCenterAdmins(centerId, payload, { excludeUserId } = {}) {
-  if (!isConfigured()) return { sent: 0, failed: 0, removed: 0 };
-  const rows = getDb().prepare(`
-    SELECT ps.* FROM push_subscriptions ps
-    JOIN users u ON u.id = ps.user_id
-    WHERE u.active = 1
-      AND (u.role = 'super_admin' OR (u.role = 'admin' AND u.center_id = ?))
-      AND (? IS NULL OR u.id <> ?)
-  `).all(centerId || '', excludeUserId || null, excludeUserId || null);
-  return sendToSubscriptionRows(rows, payload);
+async function deliver(userIds, { kind, title, body, url, ref }) {
+  const ids = [...new Set((userIds || []).filter(Boolean))];
+  if (!ids.length) return { recorded: 0, sent: 0, failed: 0, removed: 0 };
+  let recorded = 0;
+  try {
+    recorded = notifications.recordMany(ids, { kind, title, body, url, ref });
+  } catch (err) {
+    console.error('[notify] could not record in-app notification:', err.message);
+  }
+  const totals = { recorded, sent: 0, failed: 0, removed: 0 };
+  for (const id of ids) {
+    const r = await sendToUser(id, { title, body, url, tag: ref ? `${kind}-${ref}` : kind });
+    totals.sent += r.sent; totals.failed += r.failed; totals.removed += r.removed;
+  }
+  return totals;
 }
 
 // ---- the lifecycle messages -------------------------------------------------
@@ -161,16 +168,17 @@ function studentUserIdForOrder(order) {
 }
 
 function summarizeItems(items = [], max = 2) {
-  const names = items.map(i => `${i.qty} × ${i.name}`);
+  const names = (items || []).map(i => `${i.qty} × ${i.name}`);
+  if (!names.length) return '';
   if (names.length <= max) return names.join(', ');
   return `${names.slice(0, max).join(', ')} +${names.length - max} more`;
 }
 
 const STATUS_COPY = {
-  'Approved': o => ({ title: `Order ${o.orderId} approved`, body: `Collect ${summarizeItems(o.items)} from the lab.${o.expectedReturnDate ? ` Return by ${o.expectedReturnDate}.` : ''}` }),
-  'Rejected': o => ({ title: `Order ${o.orderId} rejected`, body: o.adminRemarks ? `Reason: ${o.adminRemarks}` : 'Open the order for details.' }),
-  'Partially Returned': o => ({ title: `Order ${o.orderId}: part return recorded`, body: o.outstandingItems?.length ? `Still with you: ${summarizeItems(o.outstandingItems)}` : 'Some items are still with you.' }),
-  'Returned': o => ({ title: `Order ${o.orderId} closed`, body: 'All components returned. Thank you!' }),
+  'Approved': o => ({ kind: 'order_approved', title: `Order ${o.orderId} approved`, body: `Collect ${summarizeItems(o.items)} from the lab.${o.expectedReturnDate ? ` Return by ${o.expectedReturnDate}.` : ''}` }),
+  'Rejected': o => ({ kind: 'order_rejected', title: `Order ${o.orderId} rejected`, body: o.adminRemarks ? `Reason: ${o.adminRemarks}` : 'Open the order for details.' }),
+  'Partially Returned': o => ({ kind: 'order_partial_return', title: `Order ${o.orderId}: part return recorded`, body: o.outstandingItems?.length ? `Still with you: ${summarizeItems(o.outstandingItems)}` : 'Some items are still with you.' }),
+  'Returned': o => ({ kind: 'order_returned', title: `Order ${o.orderId} closed`, body: 'All components returned. Thank you!' }),
 };
 
 // Student-facing status change. Fire-and-forget; never throws.
@@ -179,36 +187,51 @@ async function notifyStudentOrderStatus(order, status) {
     const make = STATUS_COPY[status];
     const userId = make ? studentUserIdForOrder(order) : null;
     if (!userId) return;
-    const msg = make(order);
-    await sendToUser(userId, { ...msg, url: orderUrl(order.orderId, false), tag: `order-${order.orderId}` });
+    await deliver([userId], { ...make(order), url: orderUrl(order.orderId, false), ref: order.orderId });
   } catch (err) {
     console.error('[push] student status notice failed:', err.message);
+  }
+}
+
+async function notifyStudentOrderPlaced(order) {
+  try {
+    const userId = studentUserIdForOrder(order);
+    if (!userId) return;
+    await deliver([userId], {
+      kind: 'order_placed',
+      title: `Order ${order.orderId} received`,
+      body: `${summarizeItems(order.items)} requested. You will be notified when it is reviewed.`,
+      url: orderUrl(order.orderId, false), ref: order.orderId,
+    });
+  } catch (err) {
+    console.error('[push] order placed notice failed:', err.message);
   }
 }
 
 async function notifyStudentReturnReminder(order) {
   try {
     const userId = studentUserIdForOrder(order);
-    if (!userId) return;
-    await sendToUser(userId, {
+    if (!userId) return { recorded: 0, sent: 0 };
+    return await deliver([userId], {
+      kind: 'return_reminder',
       title: `Return due tomorrow: ${order.orderId}`,
-      body: `${summarizeItems(order.outstandingItems?.length ? order.outstandingItems : order.items)} is due back on ${order.expectedReturnDate}.`,
-      url: orderUrl(order.orderId, false),
-      tag: `order-${order.orderId}`,
+      body: `${summarizeItems(order.outstandingItems?.length ? order.outstandingItems : order.items) || 'Your components'} ${(order.outstandingItems?.length || order.items?.length) ? 'is' : 'are'} due back on ${order.expectedReturnDate}. Please return to the lab.`,
+      url: orderUrl(order.orderId, false), ref: order.orderId,
     });
   } catch (err) {
     console.error('[push] return reminder notice failed:', err.message);
+    return { recorded: 0, sent: 0 };
   }
 }
 
 async function notifyAdminsNewOrder(order, { excludeUserId } = {}) {
   try {
-    await sendToCenterAdmins(order.centerId, {
+    await deliver(notifications.centerAdminIds(order.centerId, { excludeUserId }), {
+      kind: 'new_order',
       title: `New order ${order.orderId}`,
       body: `${order.studentName || 'A student'} requested ${summarizeItems(order.items)}.`,
-      url: orderUrl(order.orderId, true),
-      tag: `order-${order.orderId}`,
-    }, { excludeUserId });
+      url: orderUrl(order.orderId, true), ref: order.orderId,
+    });
   } catch (err) {
     console.error('[push] admin new-order notice failed:', err.message);
   }
@@ -216,12 +239,12 @@ async function notifyAdminsNewOrder(order, { excludeUserId } = {}) {
 
 async function notifyAdminsReturnRequested(order, { excludeUserId } = {}) {
   try {
-    await sendToCenterAdmins(order.centerId, {
+    await deliver(notifications.centerAdminIds(order.centerId, { excludeUserId }), {
+      kind: 'return_requested',
       title: `Return requested: ${order.orderId}`,
       body: `${order.studentName || 'A student'} is bringing back ${summarizeItems(order.outstandingItems?.length ? order.outstandingItems : order.items)}.`,
-      url: orderUrl(order.orderId, true),
-      tag: `order-${order.orderId}`,
-    }, { excludeUserId });
+      url: orderUrl(order.orderId, true), ref: order.orderId,
+    });
   } catch (err) {
     console.error('[push] admin return-request notice failed:', err.message);
   }
@@ -229,21 +252,36 @@ async function notifyAdminsReturnRequested(order, { excludeUserId } = {}) {
 
 async function notifyAdminsNewRegistration({ centerId, fullName, username }) {
   try {
-    await sendToCenterAdmins(centerId, {
+    await deliver(notifications.centerAdminIds(centerId), {
+      kind: 'new_registration',
       title: 'New student registration',
       body: `${fullName || username} is waiting for approval.`,
-      url: '/admin/users',
-      tag: 'registration',
+      url: '/admin/users', ref: username,
     });
   } catch (err) {
     console.error('[push] admin registration notice failed:', err.message);
   }
 }
 
+// The student's first entry in the bell: waiting for them at first sign-in.
+async function notifyAccountApproved(user) {
+  try {
+    if (!user?.id) return;
+    await deliver([user.id], {
+      kind: 'account_approved',
+      title: 'Your account is approved',
+      body: 'Welcome! You can now browse components and place orders.',
+      url: '/dashboard', ref: user.username,
+    });
+  } catch (err) {
+    console.error('[push] account approved notice failed:', err.message);
+  }
+}
+
 module.exports = {
   isConfigured, getPublicKey,
   saveSubscription, removeSubscription, countForUser, hasEndpoint,
-  sendToUser, sendToCenterAdmins,
-  notifyStudentOrderStatus, notifyStudentReturnReminder,
-  notifyAdminsNewOrder, notifyAdminsReturnRequested, notifyAdminsNewRegistration,
+  sendToUser, deliver,
+  notifyStudentOrderStatus, notifyStudentOrderPlaced, notifyStudentReturnReminder,
+  notifyAdminsNewOrder, notifyAdminsReturnRequested, notifyAdminsNewRegistration, notifyAccountApproved,
 };

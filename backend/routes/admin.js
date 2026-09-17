@@ -5,6 +5,7 @@ const { getWhatsappMessages } = require('../utils/whatsappDb');
 const { listUsers, createUser, updateUser, deleteUser, serializeUser, findUserById } = require('../utils/usersDb');
 const { verifyWhatsAppConnection, sendTestWhatsAppMessage } = require('../utils/whatsapp');
 const { sendAccountCreated, sendAccountApproved, sendTestEmail } = require('../utils/email');
+const push = require('../utils/push');
 const { createOtp } = require('../utils/otp');
 const {
   listCenters,
@@ -658,6 +659,7 @@ router.put('/users/:id', authMiddleware, adminOnly, async (req, res) => {
         centerId: updated.centerId,
         centerName: updated.centerId ? getCenterById(updated.centerId)?.name || '' : '',
       }).catch(err => console.error('[email] account-approved notice failed:', err.message));
+      push.notifyAccountApproved(updated);
     }
     res.json({ message: 'User updated', user: serializeUser(updated) });
   } catch (err) {
