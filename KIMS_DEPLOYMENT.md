@@ -132,11 +132,11 @@ WhatsApp handoff). Rebuild the frontend after changing them.
 Useful commands (any PowerShell):
 
 ```bash
-& "C:\Program Files\Tailscale	ailscale.exe" funnel status
+& "C:\Program Files\Tailscale\tailscale.exe" funnel status
 ```
 
 ```bash
-& "C:\Program Files\Tailscale	ailscale.exe" funnel --https=443 off
+& "C:\Program Files\Tailscale\tailscale.exe" funnel --https=443 off
 ```
 
 One-time admin-console settings worth keeping: **Machines → kims → Disable key
