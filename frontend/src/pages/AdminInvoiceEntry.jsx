@@ -527,7 +527,7 @@ export default function AdminInvoiceEntry() {
                     )}
                   </Field>
                   <div style={{ gridColumn: '1 / -1' }}>
-                    <PhotoInput label="Photo (optional)" value={li.image} onChange={value => updateLineItem(index, 'image', value)} onUploadStateChange={setPhotoUploading} />
+                    <PhotoInput label="Photo (optional)" name={li.assetName} value={li.image} onChange={value => updateLineItem(index, 'image', value)} onUploadStateChange={setPhotoUploading} />
                   </div>
                 </div>
                 <div style={styles.lineItemFooter}>
@@ -761,7 +761,7 @@ export default function AdminInvoiceEntry() {
                             )}
                           </Field>
                           <div style={{ gridColumn: '1 / -1' }}>
-                            <PhotoInput label="Photo (optional)" value={li.image} onChange={value => updateEditLineItem(index, 'image', value)} onUploadStateChange={setPhotoUploading} />
+                            <PhotoInput label="Photo (optional)" name={li.assetName} value={li.image} onChange={value => updateEditLineItem(index, 'image', value)} onUploadStateChange={setPhotoUploading} />
                           </div>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>

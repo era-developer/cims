@@ -129,7 +129,7 @@ function main() {
   }
 
   // Consistent snapshot even while the service has the file open.
-  const backup = args.db.replace(/\.db$/, '') + `.before-dedupe-${new Date().toISOString().replace(/[:.]/g, '-')}.db`;
+  const backup = path.join(require('../utils/storage').BACKUPS_DIR, `kims-before-dedupe-${new Date().toISOString().replace(/[:.]/g, '-')}.db`);
   db.exec(`VACUUM INTO '${backup.replace(/'/g, "''")}'`);
   console.log(`\nSnapshot: ${backup}`);
 

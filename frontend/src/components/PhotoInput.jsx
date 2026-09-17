@@ -47,7 +47,9 @@ function compressImageFile(file) {
 // onUploadStateChange(true/false) is optional -- forms that want to block
 // Save while a photo is still mid-upload (so they never submit a stale/
 // empty image value) can wire it up; PhotoInput works fine without it too.
-export default function PhotoInput({ value, onChange, label = 'Photo', onUploadStateChange }) {
+// `name` is the component's name; sent with the upload so the file on disk
+// is called after the component (data/components/<name>.jpg) instead of a UUID.
+export default function PhotoInput({ value, onChange, label = 'Photo', onUploadStateChange, name = '' }) {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [localPreviewUrl, setLocalPreviewUrl] = useState('');
@@ -73,6 +75,8 @@ export default function PhotoInput({ value, onChange, label = 'Photo', onUploadS
       const blob = await compressImageFile(file);
       setLocalPreview(blob);
       const formData = new FormData();
+      // Field order matters: multer only sees fields that arrive BEFORE the file.
+      if (name) formData.append('name', String(name).trim());
       formData.append('image', blob, 'photo.jpg');
       const { data } = await axios.post('/api/assets/upload-image', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },

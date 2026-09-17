@@ -61,8 +61,9 @@ KIMS/
 |   |   `-- legacy-centers.js       Frozen list for the old Comedkare migration scripts
 |   `-- data/
 |       |-- kims.db            The database
-|       |-- catalog_images/    Component photos
-|       `-- invoice_documents/ Uploaded invoice scans
+|       |-- backups/           Nightly snapshots (scheduled task "KIMS Backup")
+|       |-- components/        Component photos, named after the component
+|       `-- invoices/          Invoice scans: <center>/<year>/<invoice no>/<original name>
 |-- frontend/
 |   |-- src/                   React app
 |   `-- build/                 Production build (generated)
@@ -166,8 +167,9 @@ Opens on <http://localhost:3000>. Update the `proxy` in `frontend/package.json` 
 
 ## Data
 
-Everything lives in one SQLite file, `backend/data/kims.db`. Back it up by copying the
-file (stop the service first, or copy `kims.db`, `kims.db-wal` and `kims.db-shm` together).
+The database is one SQLite file, `backend/data/kims.db`; photos and invoice scans sit
+beside it in `components/` and `invoices/`. A scheduled task backs the database up
+nightly to `backend/data/backups/` — see `KIMS_DEPLOYMENT.md` for the layout and restore.
 
 Key tables:
 

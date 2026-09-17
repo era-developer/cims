@@ -1214,7 +1214,7 @@ export default function AdminInventory() {
                   </label>
                 )}
               </AField>
-              <PhotoInput label="Photo" value={editCatalogForm.image} onChange={value => setEditCatalogForm({ ...editCatalogForm, image: value })} onUploadStateChange={setPhotoUploading} />
+              <PhotoInput label="Photo" name={editCatalogForm.name} value={editCatalogForm.image} onChange={value => setEditCatalogForm({ ...editCatalogForm, image: value })} onUploadStateChange={setPhotoUploading} />
               <p style={styles.warrantyMovedNote}>
                 Warranty is set per purchase batch (different units of this component can have different warranty
                 dates) — set it on the invoice line item when adding stock, or per unit in View Units.
@@ -1318,7 +1318,7 @@ export default function AdminInventory() {
                   onChange={e => setAddForm({ ...addForm, purchasedFor: e.target.value })} />
               </AField>
               <div style={{ gridColumn: '1 / -1' }}>
-                <PhotoInput label="Photo (optional)" value={addForm.image} onChange={value => setAddForm({ ...addForm, image: value })} onUploadStateChange={setPhotoUploading} />
+                <PhotoInput label="Photo (optional)" name={addForm.assetName} value={addForm.image} onChange={value => setAddForm({ ...addForm, image: value })} onUploadStateChange={setPhotoUploading} />
               </div>
               <AField label={addForm.isBulk
                 ? 'Batch / Lot Reference (optional, one value applied to all units)'

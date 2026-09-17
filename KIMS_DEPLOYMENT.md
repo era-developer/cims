@@ -153,6 +153,38 @@ Note on Comedkare: its `comedkares-cims.duckdns.org:5000` address is plain
 HTTP with a router port-forward, so its logins cross the internet unencrypted.
 It is untouched here, but the same Funnel approach would fix it.
 
+## Where the data lives
+
+Everything the portal stores is under `backend\data`, laid out so a person can
+find things without the database:
+
+```
+backend\data  kims.db                          the database (plus -wal / -shm while running)
+  backups    kims-2026-09-17.db             nightly, 02:00, by the "KIMS Backup" scheduled task
+    kims-before-merge-....db       snapshots taken by the catalog tools before they change anything
+    backup.log
+  components    arduino-uno-r3.webp            one photo per component, named after it
+  invoices    AKTU6\                 <center code>\<year>\<invoice number>      Project Details.pdf          uploaded scans keep their original filename
+```
+
+Paths stored in the database are relative to `backend\data`, so the folder can
+be copied or restored anywhere and every link still works.
+
+**Backups:** `install-kims-backup-task.ps1` registers a Windows scheduled task
+that runs `backend\scriptsackup-db.js` nightly at 02:00 (and at start-up if
+the PC was off), as SYSTEM. It keeps 30 daily copies plus one per month for a
+year. To restore: stop the `KIMS` service, replace `kims.db` with a backup
+(delete the `-wal`/`-shm` files), start the service.
+
+A backup on the same disk does not survive that disk dying. Copy
+`backend\dataackups` (and `components` + `invoices`) somewhere else --
+Google Drive desktop, another PC -- on a schedule you are comfortable with.
+
+**Catalog housekeeping tools** (`backend\scripts`, all dry-run by default):
+- `dedupe-catalog.js` -- merges names identical except spacing/case/punctuation.
+- `merge-catalog.js --plan file.json` -- applies a hand-reviewed merge list.
+- `organize-data.js` -- re-files photos and invoice scans into the layout above.
+
 ## What the super admin can now change without a developer
 
 These were previously hardcoded or locked in `.env` behind a service restart.

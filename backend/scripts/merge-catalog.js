@@ -130,7 +130,7 @@ function main() {
     return;
   }
 
-  const backup = args.db.replace(/\.db$/, '') + `.before-merge-${new Date().toISOString().replace(/[:.]/g, '-')}.db`;
+  const backup = path.join(require('../utils/storage').BACKUPS_DIR, `kims-before-merge-${new Date().toISOString().replace(/[:.]/g, '-')}.db`);
   db.exec(`VACUUM INTO '${backup.replace(/'/g, "''")}'`);
   console.log(`Snapshot: ${backup}`);
 

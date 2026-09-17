@@ -17,16 +17,18 @@ const router = express.Router();
 // in routes/invoices.js. A photo captured via PhotoInput's "Take Photo" is
 // already resized/compressed client-side before it gets here, so 5MB is a
 // generous ceiling, not an expected size.
-const CATALOG_IMAGES_DIR = path.join(__dirname, '..', 'data', 'catalog_images');
-fs.mkdirSync(CATALOG_IMAGES_DIR, { recursive: true });
+const { COMPONENT_IMAGES_DIR, componentImagePath } = require('../utils/storage');
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
+// Photos are saved as data/components/<component-name>.<ext> so the folder
+// reads like the catalog. The form sends the component name as a `name`
+// field ahead of the file; without it the file gets a short generic stem.
 const catalogImageUpload = multer({
   storage: multer.diskStorage({
-    destination: CATALOG_IMAGES_DIR,
+    destination: COMPONENT_IMAGES_DIR,
     filename: (req, file, cb) => {
-      const safeExt = path.extname(file.originalname).slice(0, 10).replace(/[^a-zA-Z0-9.]/g, '') || '.jpg';
-      cb(null, `${crypto.randomUUID()}${safeExt}`);
+      const ext = path.extname(file.originalname).slice(0, 10) || (file.mimetype === 'image/png' ? '.png' : file.mimetype === 'image/webp' ? '.webp' : '.jpg');
+      cb(null, path.basename(componentImagePath(req.body?.name, ext)));
     },
   }),
   limits: { fileSize: 5 * 1024 * 1024, files: 1 },

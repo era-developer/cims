@@ -20,25 +20,33 @@ const LOGO_FILE_PATH = path.join(__dirname, '..', 'assets', 'logo.png');
 const LOGO_PATH = fs.existsSync(LOGO_FILE_PATH) ? LOGO_FILE_PATH : null;
 
 // Scanned/photographed copies of the original vendor invoice -- stored on
-// disk (not in the DB) since these can be real multi-page PDFs, unlike the
-// small base64 component photos in product_catalog.image.
-const DOCS_ROOT = path.join(__dirname, '..', 'data', 'invoice_documents');
+// disk (not in the DB) since these can be real multi-page PDFs. Filed as
+// data/invoices/<CENTER CODE>/<year>/<invoice number>/<original filename>,
+// so the folder can be browsed without the portal. See utils/storage.js.
+const { invoiceDocumentDir, safeFilename, uniquePath, toRelative, resolveStored } = require('../utils/storage');
 const ALLOWED_DOC_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'application/pdf']);
 
-function invoiceDocsDir(invoiceId) {
-  return path.join(DOCS_ROOT, String(invoiceId));
+function invoiceFolderFor(db, invoiceId) {
+  const row = db.prepare(`
+    SELECT i.invoice_number, i.invoice_date, c.code AS center_code
+    FROM invoices i JOIN centers c ON c.id = i.center_id WHERE i.id = ?
+  `).get(invoiceId);
+  if (!row) throw new Error('Invoice not found');
+  return invoiceDocumentDir({ centerCode: row.center_code, invoiceDate: row.invoice_date, invoiceNumber: row.invoice_number });
 }
 
 const documentUpload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => {
-      const dir = invoiceDocsDir(req.params.id);
-      fs.mkdirSync(dir, { recursive: true });
-      cb(null, dir);
+      try {
+        cb(null, invoiceFolderFor(getDb(), req.params.id));
+      } catch (err) {
+        cb(err);
+      }
     },
     filename: (req, file, cb) => {
-      const safeExt = path.extname(file.originalname).slice(0, 10).replace(/[^a-zA-Z0-9.]/g, '');
-      cb(null, `${Date.now()}-${crypto.randomUUID()}${safeExt}`);
+      const dir = invoiceFolderFor(getDb(), req.params.id);
+      cb(null, path.basename(uniquePath(dir, safeFilename(file.originalname, 'document'))));
     },
   }),
   limits: { fileSize: 15 * 1024 * 1024, files: 10 },
@@ -213,7 +221,7 @@ router.post('/:id/documents', authMiddleware, superAdminOnly, (req, res) => {
       VALUES (?, ?, ?, ?, ?, ?)
     `);
     const created = req.files.map(file => {
-      const id = insert.run(invoice.id, file.originalname, file.mimetype, file.size, file.path, req.user.username).lastInsertRowid;
+      const id = insert.run(invoice.id, file.originalname, file.mimetype, file.size, toRelative(file.path), req.user.username).lastInsertRowid;
       return { id, fileName: file.originalname, mimeType: file.mimetype, fileSize: file.size };
     });
     res.status(201).json({ documents: created });
@@ -232,10 +240,11 @@ router.get('/:id/documents', authMiddleware, adminOnly, (req, res) => {
 router.get('/:id/documents/:docId', authMiddleware, adminOnly, (req, res) => {
   const db = getDb();
   const doc = db.prepare('SELECT * FROM invoice_documents WHERE id = ? AND invoice_id = ?').get(req.params.docId, req.params.id);
-  if (!doc || !fs.existsSync(doc.storage_path)) return res.status(404).json({ message: 'Document not found' });
+  const filePath = doc ? resolveStored(doc.storage_path) : '';
+  if (!doc || !fs.existsSync(filePath)) return res.status(404).json({ message: 'Document not found' });
   res.setHeader('Content-Type', doc.mime_type);
   res.setHeader('Content-Disposition', `inline; filename="${doc.file_name.replace(/"/g, '')}"`);
-  fs.createReadStream(doc.storage_path).pipe(res);
+  fs.createReadStream(filePath).pipe(res);
 });
 
 router.delete('/:id/documents/:docId', authMiddleware, superAdminOnly, (req, res) => {
@@ -243,7 +252,7 @@ router.delete('/:id/documents/:docId', authMiddleware, superAdminOnly, (req, res
   const doc = db.prepare('SELECT * FROM invoice_documents WHERE id = ? AND invoice_id = ?').get(req.params.docId, req.params.id);
   if (!doc) return res.status(404).json({ message: 'Document not found' });
   db.prepare('DELETE FROM invoice_documents WHERE id = ?').run(doc.id);
-  fs.unlink(doc.storage_path, () => {}); // best-effort; DB record is the source of truth either way
+  fs.unlink(resolveStored(doc.storage_path), () => {}); // best-effort; DB record is the source of truth either way
   res.json({ message: 'Document deleted' });
 });
 

@@ -58,7 +58,9 @@ app.use('/api/procurement', require('./routes/procurement'));
 // -hosted (Drive) component photos require. Filenames are random UUIDs
 // assigned once at upload time and never reused, so it's safe to let
 // browsers cache them indefinitely instead of re-fetching on every visit.
-app.use('/catalog-images', express.static(path.join(__dirname, 'data', 'catalog_images'), {
+// URL kept as /catalog-images for every stored image path; the folder on
+// disk is data/components (see utils/storage.js).
+app.use('/catalog-images', express.static(require('./utils/storage').COMPONENT_IMAGES_DIR, {
   maxAge: '30d',
   immutable: true,
 }));
