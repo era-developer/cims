@@ -1,6 +1,6 @@
-# CIMS Admin and Super Admin Quick Cheat Sheet
+# KIMS Admin and Super Admin Quick Cheat Sheet
 
-Use this one-page version for daily operations.
+**Kalam Pragati Inventory Management System.** Use this one-page version for daily operations.
 
 ## 1) Role boundaries
 
@@ -12,6 +12,7 @@ Super Admin:
 - Works across all centers.
 - Handles transfer approvals in `Transfers`.
 - Uses global analytics and center-wide exports.
+- Manages centers and notification contacts in `Settings`.
 
 ## 2) Start-of-day checklist
 
@@ -50,7 +51,7 @@ When adding/updating component, keep:
 - invoice number
 - vendor name
 - project/purpose
-- purchased for (`ERA Foundation` or `Comedkares`)
+- purchased for (for example `ERA Foundation` or `Kalam Pragati`)
 
 ## 6) Center-to-center flow
 
@@ -66,7 +67,16 @@ Super Admin (`Transfers`):
 4. Approve transfer (stock moves both centers).
 5. On return request, mark returned (stock reverses back).
 
-## 7) Downloads for reporting
+## 7) Settings (super admin)
+
+From `Settings`:
+- Change the order-notification email / admin WhatsApp number when the
+  responsible admin changes. Effective immediately.
+- Add a new center: enter the name, check the suggested code, create.
+  It appears in login and every dropdown at once.
+- A center with records is deactivated, never deleted.
+
+## 8) Downloads for reporting
 
 From dashboard:
 - Inventory report
@@ -75,8 +85,9 @@ From dashboard:
 - Users report
 - Activity logs
 
-## 8) Common issue checks
+## 9) Common issue checks
 
 - Request not visible: verify center filter + status filter.
 - Insufficient stock in transfer approve: choose another center or reduce qty.
 - Student cannot login after register: user still pending approval.
+- Order emails to the wrong person: fix the address in `Settings`.

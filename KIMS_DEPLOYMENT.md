@@ -77,24 +77,20 @@ Health check: <http://localhost:5001/api/health>
 
 ## Still to configure
 
-Two external services are **deliberately left unconfigured**, because reusing
-Comedkare's would mix the two programmes on one credential:
+### 1. Email (SMTP) — configured
 
-### 1. Email (SMTP)
+KIMS sends from **`gopalancims@gmail.com`** (Gmail App Password in
+`backend\.env`, set 2026-09-17). This is separate from CIMS's
+`comedkares.cims@gmail.com`, so revoking one credential never affects the other
+portal. `/api/health` shows `"email": {"ok": true}` when the login is verified.
 
-CIMS sends through the Gmail account `comedkares.cims@gmail.com` using an app
-password. Kalam Pragati needs its own mailbox — otherwise KIMS order mail
-arrives *from Comedkare*, and revoking one credential breaks both portals.
+To rotate: generate a new App Password (Google Account → Security → 2-Step
+Verification → App Passwords), update `SMTP_PASS`, `Restart-Service KIMS`.
 
-1. Create a Gmail account for Kalam Pragati.
-2. Enable 2-Step Verification, then generate an **App Password**.
-3. Put it in `backend\.env` as `SMTP_USER` / `SMTP_PASS`.
-4. Restart the service.
+### 2. WhatsApp (n8n → Meta WhatsApp Cloud API) — not yet configured
 
-Until then the portal works normally; email notifications are skipped and
-`/api/health` reports email as not configured.
-
-### 2. WhatsApp (n8n → Meta WhatsApp Cloud API)
+Deliberately left unconfigured rather than reusing Comedkare's, which would mix
+the two programmes on one credential.
 
 CIMS does not call WhatsApp directly — it POSTs to an **n8n webhook**, and the
 Meta credentials live inside that n8n instance. KIMS needs either its own n8n

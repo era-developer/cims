@@ -1,385 +1,255 @@
-# CIMS - Component Inventory Management System
+# KIMS - Kalam Pragati Inventory Management System
 
-> **🟢 Status: Ready for Production Launch** | April 6, 2026
+> **Kalam Pragati** — *Empowering Engineers with Skills for Success* — an initiative of the ERA Foundation.
 
-A full-stack, open-source Component Inventory Management System for academic labs and innovation centers. It manages component stock, student requests, admin approvals, and Excel-based logs without requiring a database.
+KIMS manages the component inventory of Kalam Pragati centers: what is in stock, which
+student has borrowed what, admin approvals, returns, damage, invoices, and
+center-to-center transfers. Every physical unit is tracked individually by asset tag.
+
+It is a fork of the ERA Foundation's CIMS (Comedkare) portal, running as a fully separate
+deployment. See [KIMS_DEPLOYMENT.md](KIMS_DEPLOYMENT.md) for how the two are kept apart.
 
 ---
 
-## 🚀 Quick Start
+## Quick start
 
 ```bash
-# Start the system
-cd backend
+cd D:\KIMS\backend
 node server.js
-
-# Open browser
-http://localhost:5000
 ```
 
-**Default Credentials:**
-- Super Admin: `superadmin` / `superadmin123`
-- Center Admin: `jp_nagar_admin` / `admin123`
-- Student: `jp_nagar_student1` / `student123`
+Open <http://localhost:5001>.
+
+In production KIMS runs as the Windows service **`KIMS`** (installed by
+`install-kims-service.ps1`), so it is normally already up.
+
+There are no default credentials. The super admin account was created by the seed
+script and its password was shown once at seed time; change it from **My Profile**
+after first login. Create every other account from **Admin → Users**.
 
 ---
 
-## ✨ What's New (April 2026)
-
-- ✅ **Multi-Center Support**: 9 independent centers with isolated data
-- ✅ **Mobile Fixed**: Dynamic API URL detection - login works on all devices
-- ✅ **Email System**: Per-center email IDs with common SMTP gateway
-- ✅ **Single Port**: Backend + Frontend on port 5000 (no proxies needed)
-- ✅ **Fresh Start**: Clean data state ready for production
-- ✅ **Tested**: All systems verified and working
-
----
-
-## Tech Stack
+## Tech stack
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | React 18, React Router 6 |
-| Backend | Node.js + Express |
-| Storage | Excel files via ExcelJS |
-| Email | Nodemailer |
-| WhatsApp | n8n + Meta WhatsApp Cloud API (optional) |
+| Frontend | React 18, React Router 6 (served as a static build by the backend) |
+| Backend | Node.js 22+ / Express |
+| Database | SQLite via Node's built-in `node:sqlite` — one file, `backend/data/kims.db` |
+| Email | Nodemailer over Gmail SMTP |
+| WhatsApp | n8n webhook → Meta WhatsApp Cloud API (optional) |
+| Reports | ExcelJS (Excel exports), PDFKit (invoice / order PDFs) |
 | Auth | JWT + bcryptjs |
-| Deployment | PM2 |
+| Service | NSSM Windows service (PM2 config also provided) |
 
 ---
 
-## Project Structure
+## Project structure
 
 ```text
-cims/
+KIMS/
 |-- backend/
-|   |-- server.js
-|   |-- .env
-|   |-- routes/
-|   |-- middleware/
-|   `-- utils/
+|   |-- server.js              Express app; serves API + built frontend on one port
+|   |-- .env                   Port, DB path, JWT secret, SMTP, WhatsApp (not in git)
+|   |-- db/migrations/         Schema, applied automatically at startup
+|   |-- routes/                auth, centers, components, orders, admin, invoices, assets,
+|   |                          transfers, programs, procurement, internal-issues, webhooks
+|   |-- utils/                 centers.js, settings.js, email.js, whatsapp.js, db.js ...
+|   |-- scripts/
+|   |   |-- seed-kims.js            Build a fresh KIMS database
+|   |   |-- link-catalog-images.js  Carry component photos over from CIMS
+|   |   `-- legacy-centers.js       Frozen list for the old Comedkare migration scripts
+|   `-- data/
+|       |-- kims.db            The database
+|       |-- catalog_images/    Component photos
+|       `-- invoice_documents/ Uploaded invoice scans
 |-- frontend/
-|   |-- public/
-|   |-- src/
-|   `-- build/
-|-- README.md
-|-- DEPLOYMENT_GUIDE.md
-|-- start.bat
-`-- start.sh
+|   |-- src/                   React app
+|   `-- build/                 Production build (generated)
+|-- install-kims-service.ps1   Install as the KIMS Windows service
+|-- KIMS_DEPLOYMENT.md         Deployment, isolation from CIMS, what to configure
+|-- USER_MANUAL_ADMIN_SUPERADMIN.md
+|-- USER_MANUAL_STUDENT.md
+|-- CHEAT_SHEET_ADMIN_SUPERADMIN.md
+`-- CHEAT_SHEET_STUDENT.md
 ```
 
 ---
 
-## Installation And Setup
+## Installation
 
 ### Prerequisites
 
-- Node.js v18 or later
+- Node.js **v22 or later** (the `node:sqlite` module ships with Node)
 - npm
-- Git (optional)
 
-### Configure Environment
+### Build and run
 
-Edit `backend/.env`:
+```bash
+cd D:\KIMS\frontend && npm install && npm run build
+```
+
+```bash
+cd D:\KIMS\backend && npm install && node server.js
+```
+
+The backend serves the built React app from `frontend/build`, so after the build only
+`node server.js` (or the Windows service) is needed.
+
+### Configure `backend/.env`
 
 ```env
-PORT=5000
-JWT_SECRET=change_this_to_something_random_and_long
+PORT=5001
+KIMS_DB_PATH=./data/kims.db
+JWT_SECRET=<long random string, unique to this deployment>
 
-# Email settings (for order notifications)
-CENTER_EMAIL=lab.coordinator@yourcollege.edu
+# Email
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
-SMTP_USER=your_gmail@gmail.com
-SMTP_PASS=your_gmail_app_password
+SMTP_USER=<kalam pragati gmail address>
+SMTP_PASS=<gmail app password>
 
-# WhatsApp settings (optional, via n8n)
-N8N_WHATSAPP_ENABLED=true
-N8N_WHATSAPP_OUTBOUND_WEBHOOK=https://your-n8n-instance/webhook/cims-whatsapp-outbound
-N8N_WHATSAPP_SHARED_SECRET=replace_with_a_long_random_secret
-N8N_WHATSAPP_ADMIN_TO=+919999999999
+# Public URL (email footers, registration QR)
+SITE_URL=http://localhost:5001
+
+# WhatsApp via n8n (optional)
+N8N_WHATSAPP_ENABLED=false
+# N8N_WHATSAPP_OUTBOUND_WEBHOOK=
+# N8N_WHATSAPP_SHARED_SECRET=
 ```
 
-Gmail App Password setup:
+Gmail App Password: Google Account → Security → 2-Step Verification → App Passwords →
+create one for Mail, and use it as `SMTP_PASS`.
 
-1. Go to `https://myaccount.google.com`
-2. Open `Security`
-3. Enable `2-Step Verification`
-4. Open `App Passwords`
-5. Create a password for Mail and use it as `SMTP_PASS`
-
-n8n WhatsApp setup:
-
-1. Run n8n where it can receive public webhooks
-2. Create an outbound workflow for CIMS order and status events
-3. Send WhatsApp using the Meta WhatsApp Cloud API node
-4. Set `N8N_WHATSAPP_OUTBOUND_WEBHOOK` to that webhook URL
-5. Set the same `N8N_WHATSAPP_SHARED_SECRET` in both CIMS and n8n
-6. Forward incoming WhatsApp replies to `POST /api/webhooks/whatsapp`
+**Notification recipients and branding are not in `.env`.** The order-notification
+email, admin WhatsApp number, organisation name and sender name are stored in the
+database and edited under **Admin → Settings** — no restart needed. The `.env` values
+are only fallbacks.
 
 ---
 
-## Quick Run Flow
+## Running as a Windows service
 
-Use this order for the normal local setup:
+From an elevated PowerShell:
 
 ```bash
-# 1) Install backend dependencies
-cd cims/backend
-npm install
-
-# 2) Install frontend dependencies
-cd ../frontend
-npm install
-
-# 3) Build the frontend
-npm run build
-
-# 4) Start the backend
-cd ../backend
-node server.js
+powershell -ExecutionPolicy Bypass -File D:\KIMS\install-kims-service.ps1
 ```
 
-Open:
-
-- App: `http://localhost:5000`
-- API health: `http://localhost:5000/api/health`
-
-The backend serves the built React app from `frontend/build`, so after the build finishes you only need to run `node server.js` for normal usage.
-
----
-
-## Run Modes
-
-### Option A - Normal Local Run
-
-Use this when you want the full app from one URL:
+Then:
 
 ```bash
-cd cims/frontend
-npm run build
-
-cd ../backend
-node server.js
+Restart-Service KIMS
 ```
 
-Open `http://localhost:5000`
+Logs: `backend\nssm-out.log`, `backend\nssm-err.log`.
+Health: <http://localhost:5001/api/health> — reports whether SMTP and WhatsApp are configured.
 
-### Option B - Frontend Development Mode
-
-Use this while editing React files and you want hot reload:
+### Rebuild after frontend changes
 
 ```bash
-# Terminal 1
-cd cims/backend
-node server.js
-
-# Terminal 2
-cd cims/frontend
-npm start
+cd D:\KIMS\frontend && npm run build
 ```
 
-Open `http://localhost:3000`
+Then `Restart-Service KIMS` (or restart `node server.js`).
 
-In development mode, the React dev server uses the proxy in `frontend/package.json` to reach the backend on `http://localhost:5000`.
-
-### Rebuild After Frontend Changes
-
-If you changed React code and you are using the normal local run flow:
+### Frontend development mode (hot reload)
 
 ```bash
-cd cims/frontend
-npm run build
-
-cd ../backend
-node server.js
+cd D:\KIMS\frontend && npm start
 ```
+
+Opens on <http://localhost:3000>. Update the `proxy` in `frontend/package.json` to
+`http://localhost:5001` if the dev server cannot reach the API.
 
 ---
 
-## Maintenance & Cleanup
+## Data
 
-- **Canonical inventory sync script:** Use `node backend/scripts/updateGopalanInventory.js [centerIds...]` to refresh any center from its Excel export. The script now handles all centers, defaults blank stocks to zero, mirrors approved values to `Total Procured`, and logs which rows were touched.
-- **Legacy scripts:** The previous helpers (`importReferenceInventory.js`, `sync-inventories.js`) are documented in `CLEANUP.md` and are retained only under `backend/scripts/legacy/` for reference. The active workflow should not call them directly.
-- **Cleanup reference:** See `CLEANUP.md` for the latest audit of untracked data dumps, archived documents, and the guidelines for keeping the repo lean (archiving logs outside Git, ignoring future center exports, etc.).
+Everything lives in one SQLite file, `backend/data/kims.db`. Back it up by copying the
+file (stop the service first, or copy `kims.db`, `kims.db-wal` and `kims.db-shm` together).
 
-## Running Globally With ngrok
+Key tables:
 
-After the backend is running on port `5000`, start ngrok in a new terminal:
+| Table | Contents |
+|-------|---------|
+| `centers` | Centers (managed from Admin → Settings) |
+| `app_settings` | Org name, notification email, WhatsApp number, sender name |
+| `users` / `students` | Accounts and student profiles |
+| `product_catalog` | Component types, per center |
+| `assets` | Every physical unit, with its tag and lifecycle status |
+| `issue_records` | Student orders and what was issued / returned / damaged |
+| `invoices` | Procurement invoices and line items |
+| `transfers` | Center-to-center loans |
+| `activity_logs` | Audit trail |
+
+Stock is not a stored number: it is the count of `assets` with status `available`.
+
+### Rebuilding the database from scratch
 
 ```bash
-ngrok http 5000
+cd D:\KIMS\backend\scripts
+node seed-kims.js --db ../data/kims.db --apply
+node link-catalog-images.js --db ../data/kims.db --apply
 ```
 
-ngrok will print a public HTTPS URL like:
-
-```text
-https://your-project-name.ngrok-free.dev
-```
-
-Share that URL to access the app outside your local network.
-
-Notes:
-
-- Free ngrok URLs usually change every time ngrok restarts
-- Some visitors may see an ngrok warning page before reaching the app
-- Since the backend serves the built frontend, tunneling port `5000` exposes both the UI and the API
+The seed refuses to run against a database that already has data.
 
 ---
 
-## Running Continuously
+## Features
 
-### Using PM2
+### Student portal
+- Self-registration (approved by a center admin), login with username or email
+- Browse components with photos, search and classification filters, live stock
+- Cart → checkout with project details, team members and terms acceptance
+- Email OTP confirmation on order submission
+- Track orders, request returns, keep profile updated
+- WhatsApp handoff to the center admin after ordering (when configured)
 
-```bash
-# Install PM2 globally
-npm install -g pm2
+### Admin portal
+- Center dashboard: stock, low stock, pending orders and registrations, asset values
+- Inventory: components and individual asset units, tag codes, photos, warranty,
+  damage/consumption with reasons, internal issue and return for staff use
+- Orders: approve with quantity edits, reject, process returns and damage
+- Invoices: procurement entry with line items, GST, vendor, attached scans, PDF
+- Users: approve registrations, create and manage accounts
+- Programs and per-program issue history
+- My Center: request components from other centers or from the super admin
+- Excel exports: inventory, orders, users, transfers, activity logs
 
-# Build frontend first
-cd cims/frontend
-npm run build
+### Super admin only
+- Everything above across all centers, plus analytics
+- **Settings**: add / edit / deactivate centers; set the order-notification email and
+  admin WhatsApp number, org-wide and per center
+- Transfers: approve center-to-center loans and returns
+- Procurement requests from centers
 
-# Start backend with PM2
-cd ../backend
-pm2 start server.js --name cims
-
-# Auto-start on system reboot
-pm2 startup
-pm2 save
-```
-
-Useful commands:
-
-```bash
-pm2 status
-pm2 logs cims
-pm2 restart cims
-pm2 stop cims
-```
-
----
-
-## Default Credentials
-
-| Role | Username | Password |
-|------|----------|----------|
-| Admin | `admin` | `admin123` |
-| Student | `student1` | `student123` |
-| Student | `student2` | `pass123` |
-
-Change these immediately after first login from the Admin -> Users section.
+### Notifications
+- Order placed → email to the center's notification address (or the org default)
+- Order approved / rejected / return reminders → email to the student
+- Optional WhatsApp equivalents through n8n
 
 ---
 
-## Excel Files Generated
+## Access from other devices
 
-All data is stored in `backend/data/`:
-
-| File | Contents |
-|------|---------|
-| `inventory.xlsx` | Components, stock, totals, location |
-| `orders.xlsx` | Requests, student details, status, remarks |
-| `users.xlsx` | User accounts with hashed passwords |
-| `activity_logs.xlsx` | Login, order, update, and delete activity |
-| `whatsapp_messages.xlsx` | Incoming WhatsApp replies from n8n |
-
-These reports can be downloaded from the Admin dashboard.
+Find this machine's IP (`ipconfig`) and open `http://YOUR_IP:5001` on the same network.
+For access from outside, put a tunnel or reverse proxy in front of port 5001 and set
+`SITE_URL` (and `REACT_APP_SITE_URL` before building) to the public address.
 
 ---
 
-## Features Overview
+## Customisation
 
-### Student Portal
-
-- Login with username and password
-- Browse components with search and category filtering
-- View stock status in real time
-- Add items to cart and update quantities
-- Submit checkout details including academic and project information
-- Track order status
-
-### Admin Portal
-
-- View dashboard statistics
-- Add, edit, delete, and update component stock
-- Toggle component visibility for students
-- Approve or reject orders with remarks
-- Create student and admin accounts
-- Download Excel reports
-
-### Center-to-Center Transfer Requests
-
-- The **My Center** page (new admin tab) is the single place to request components from other labs. Click the request button, add the required components (suggestions arrive as you type), provide the optional link/notes, and submit the form with program details and responsible-person contact information.
-- Requests are forwarded to the super admin for approval and supply-center selection. Notifications are emailed to both centers, and the inventory stock is adjusted automatically in the supplying and receiving centers once the transfer is approved or returned.
-- If a component is missing from your inventory, add it via the Inventory page before including it in a transfer request so the system can track stock levels and procurement history properly.
-- Super admins review every request on the **Admin Transfers** page (`/admin/transfers`), pick the supply center, add supplier remarks, and mark the stock as returned when the borrowed components are back in place.
-- The history block below the “My Center” form now mirrors the student “My Orders” view, including responsible-person/contact info. Each approved transfer presents a “Return components” button that opens a dialog for optional courier/tracking details; submitting it sends the return confirmation email to both the super admin and the supplying center.
-
-### Email Notifications
-
-- Order placed -> email to center or lab email
-- Order approved or rejected -> email to student
-
-### WhatsApp Notifications
-
-- Optional order and status events sent from CIMS to n8n
-- Incoming replies stored in `backend/data/whatsapp_messages.xlsx`
-- Admin messages endpoint available at `/api/admin/whatsapp/messages`
-
----
-
-## Access From Other Devices On The Same Network
-
-Find your computer's IP address:
-
-- Windows: `ipconfig`
-- macOS/Linux: `ifconfig` or `ip a`
-
-Then open:
-
-```text
-http://YOUR_IP:5000
-```
-
----
-
-## Customization
-
-### Add Your Institution Logo
-
-Replace the SVG logo block in `frontend/src/components/Navbar.jsx` and `frontend/src/pages/Login.jsx` with your `<img>` tag.
-
-### Change Center Name
-
-Search for `CIMS` in the codebase and replace it with your center name.
-
-### Add More Fields To The Order Form
-
-Edit `frontend/src/pages/Cart.jsx` and update the `INITIAL_DETAILS` object and the form fields.
-
----
-
-## Adding Components Later
-
-1. Log in as admin
-2. Go to Inventory
-3. Click `+ Add New Component`
-4. Fill in the component details
-5. Save to make it visible to students
-
----
-
-## Support Resources
-
-- Node.js docs: `https://nodejs.org/docs`
-- React docs: `https://react.dev`
-- ExcelJS: `https://github.com/exceljs/exceljs`
-- Nodemailer: `https://nodemailer.com`
-- PM2: `https://pm2.keymetrics.io`
+- **Logo**: replace `frontend/public/logo.png` and `backend/assets/logo.png`, then rebuild.
+- **Names / colours**: `REACT_APP_ORG_NAME`, `REACT_APP_APP_SHORT_NAME`,
+  `REACT_APP_PRIMARY_COLOR` at build time; `ORG_NAME`, `ORG_SHORT_NAME`,
+  `EMAIL_SENDER_NAME` in `backend/.env`; or edit at runtime in Admin → Settings.
+- **Order form fields**: `frontend/src/pages/Cart.jsx`, `INITIAL_DETAILS`.
 
 ---
 
 ## License
 
-MIT License - free for academic and educational use.
+MIT License — free for academic and educational use.

@@ -1,11 +1,13 @@
-# CIMS Student User Manual
+# KIMS Student User Manual
 
-This guide explains how students register, place component requests, and complete the return flow in CIMS.
+**KIMS - Kalam Pragati Inventory Management System** (ERA Foundation)
+
+This guide explains how students register, place component requests, and complete the return flow in KIMS.
 
 ## 1) Login and registration
 
 ### 1.1 First-time registration
-1. Open the CIMS URL (for example `http://localhost:5000` or your ngrok URL).
+1. Open the KIMS URL given by your center (for example `http://localhost:5001` on the lab network).
 2. On the login page, click `Student Register`.
 3. Fill all required fields:
    - Full name
@@ -13,7 +15,7 @@ This guide explains how students register, place component requests, and complet
    - Email
    - Mobile
    - College
-   - Center
+   - Center (for example `AKTU, Lucknow`)
    - Password and confirm password
 4. Click `Submit Registration`.
 5. Wait for center admin approval before signing in.
@@ -62,12 +64,14 @@ Stock behavior:
    - Project Name
    - Expected Date of Return
    - Purpose
-5. Click `Submit Request`.
+5. Accept the terms and click `Submit Request`.
+6. Enter the one-time code sent to your email to confirm the order.
 
 What happens on submit:
 - Order is created with status `Pending`.
 - The requested quantity is reserved from live stock.
 - Admin gets notification for review.
+- A `Send WhatsApp to Admin` button appears so you can notify the center admin directly.
 
 ## 4) Track order status
 

@@ -1,10 +1,10 @@
-# CIMS Student Quick Cheat Sheet
+# KIMS Student Quick Cheat Sheet
 
-Use this as a fast reference during onboarding and demo sessions.
+**Kalam Pragati Inventory Management System.** Use this as a fast reference during onboarding and demo sessions.
 
 ## 1) First time setup
 
-1. Open CIMS URL.
+1. Open the KIMS URL given by your center.
 2. Click `Student Register`.
 3. Fill required fields and submit.
 4. Wait for admin approval.
@@ -28,7 +28,8 @@ Use this as a fast reference during onboarding and demo sessions.
    - project/course
    - expected return date
    - purpose
-4. Submit request.
+4. Accept the terms and submit.
+5. Enter the one-time code emailed to you to confirm.
 
 ## 4) Status meaning
 

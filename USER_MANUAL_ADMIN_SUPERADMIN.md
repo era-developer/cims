@@ -1,4 +1,6 @@
-# CIMS Admin and Super Admin User Manual
+# KIMS Admin and Super Admin User Manual
+
+**KIMS - Kalam Pragati Inventory Management System** (ERA Foundation)
 
 This guide covers daily operations for center admins and super admins:
 - student orders
@@ -6,6 +8,7 @@ This guide covers daily operations for center admins and super admins:
 - user approvals
 - center-to-center transfers
 - reporting and exports
+- centers and notification settings (super admin)
 
 ## 1) Roles and scope
 
@@ -19,16 +22,21 @@ This guide covers daily operations for center admins and super admins:
 - Can switch center context in dashboard/inventory/orders/users.
 - Can review and approve center-to-center transfers in `Transfers`.
 - Can access global analytics and cross-center reports.
+- Can add and manage centers, and change the order-notification email and
+  WhatsApp number, in `Settings` (see section 9).
 
 ## 2) Daily menu map
 
 Top navigation:
 - `Dashboard`
 - `Inventory`
+- `Invoices`
 - `Orders`
 - `My Center`
 - `Users`
 - `Transfers` (super admin only)
+- `Requests` (super admin only) - procurement requests raised by centers
+- `Settings` (super admin only) - centers and notification contacts
 
 ## 3) Dashboard usage
 
@@ -64,7 +72,7 @@ Additional procurement fields (new):
 - Invoice number
 - Vendor name
 - Project / purpose
-- Purchased for (`ERA Foundation` or `Comedkares`)
+- Purchased for (for example `ERA Foundation` or `Kalam Pragati`)
 
 ### 4.2 Key inventory controls
 - Quick `+ / -` stock buttons
@@ -207,11 +215,50 @@ Stock movement on return:
 - Requesting center stock decreases.
 - Supplying center stock increases back.
 
-## 9) Email and notification behavior
+## 9) Settings: centers and notification contacts (super admin only)
 
-Order and transfer lifecycle sends email notifications to configured recipients.
+Open `Settings`. Changes take effect immediately - no restart, no developer.
 
-Center admin email routing uses center-specific env keys (for example `JP_NAGAR_EMAIL`, `YELAHANKA_EMAIL`, etc.) with fallback to `CENTER_EMAIL`.
+### 9.1 Order notifications
+- `Order notification email`: where new-order alerts go when a center has no
+  address of its own.
+- `Admin WhatsApp number`: the number students are handed to after placing an
+  order, when the center has none of its own. Entering 10 digits assumes `+91`.
+
+Use this whenever the responsible admin changes.
+
+### 9.2 Centers
+The table lists every center with its code, contact details and status.
+
+Add a center:
+1. Enter the `Center name` (for example `AKTU, Lucknow`). The code and ID are
+   suggested automatically; adjust the code if needed.
+2. Optionally set an order email and WhatsApp number for this center. Leave
+   blank to inherit the org-wide values above.
+3. Click `Create center`.
+
+The new center appears at once in the login registration dropdown, every
+center selector, and inventory scoping.
+
+Edit / deactivate / remove:
+- `Edit` changes the name, code or contacts.
+- `Deactivate` hides the center from new orders and dropdowns; its records stay.
+- `Remove` deletes a center that has never been used. A center that owns
+  users, stock, orders or invoices is deactivated instead - history is never
+  destroyed. The confirmation tells you which it will be.
+- The last active center cannot be removed.
+
+Rules:
+- Center codes are printed on asset tags - keep them stable once tags exist.
+- Center IDs are permanent.
+
+### 9.3 Email and notification behavior
+Order and transfer lifecycle events send email to:
+- the center's own notification email, if set in `Settings`, otherwise
+- the org-wide order notification email.
+
+Student-facing emails (approval, rejection, return reminders, OTP codes) go
+to the student's registered address.
 
 ## 10) Report downloads and audit
 
@@ -251,8 +298,12 @@ Super admin:
 - Refresh transfers page and check status tab/filter.
 
 ### Center dropdown appears empty
-- Verify center list in config and current user role.
+- Check `Settings` -> Centers: at least one center must be active.
 - Reload the page after login/session refresh.
+
+### Order emails going to the wrong person
+- Update the address in `Settings` -> Order notifications, or the center's own
+  email in the Centers table. No restart needed.
 
 ### "Insufficient stock" during transfer approve
 - Supply center does not have enough stock for selected quantity.
