@@ -232,11 +232,11 @@ The seed refuses to run against a database that already has data.
 
 ---
 
-## Access from other devices
+## Access
 
-Find this machine's IP (`ipconfig`) and open `http://YOUR_IP:5001` on the same network.
-For access from outside, put a tunnel or reverse proxy in front of port 5001 and set
-`SITE_URL` (and `REACT_APP_SITE_URL` before building) to the public address.
+- **Public (anywhere):** <https://kims.tailf03e8e.ts.net> — served through Tailscale
+  Funnel from this PC. See `KIMS_DEPLOYMENT.md` for how it works and how to manage it.
+- **Same network:** find this machine's IP (`ipconfig`) and open `http://YOUR_IP:5001`.
 
 ---
 

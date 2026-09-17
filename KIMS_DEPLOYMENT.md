@@ -109,12 +109,47 @@ N8N_WHATSAPP_SHARED_SECRET=<shared secret>
 
 Until then the WhatsApp handoff button is simply hidden from students.
 
-### 3. Public URL
+### 3. Public URL — configured (Tailscale Funnel)
 
-`SITE_URL` in `backend\.env` is `http://localhost:5001`. Update it once KIMS has
-a hostname or tunnel — it is used in email footers and the student registration
-QR code. Set `REACT_APP_SITE_URL` to the same value and rebuild the frontend so
-the QR points at the public address rather than the current origin.
+KIMS is reachable worldwide at **<https://kims.tailf03e8e.ts.net>** via
+[Tailscale Funnel](https://tailscale.com/kb/1223/funnel): free, HTTPS with an
+auto-renewing Let's Encrypt certificate, no router port-forwarding and no open
+ports on this PC. Tailscale is signed in as `gopalancims@` and installed as a
+Windows service (Automatic), so the address comes back by itself after a
+reboot. The only way the site goes down is this PC being off or offline.
+
+How it is wired:
+
+```
+Internet ──HTTPS──> Tailscale relay ──> tailscale.exe (this PC) ──> http://127.0.0.1:5001 (KIMS service)
+```
+
+`SITE_URL` in `backend\.env` and `REACT_APP_SITE_URL` / `REACT_APP_ADMIN_LOGIN_URL`
+in `frontend\.env` are set to this address (email footers, registration QR,
+WhatsApp handoff). Rebuild the frontend after changing them.
+
+Useful commands (any PowerShell):
+
+```bash
+& "C:\Program Files\Tailscale	ailscale.exe" funnel status
+```
+
+```bash
+& "C:\Program Files\Tailscale	ailscale.exe" funnel --https=443 off
+```
+
+One-time admin-console settings worth keeping: **Machines → kims → Disable key
+expiry** (otherwise the machine must re-login every 180 days), and **DNS →
+HTTPS Certificates** enabled.
+
+For a memorable address, put a free short link (the `s.gy` service Comedkare
+uses) in front of it. Moving to a real subdomain such as
+`kims.erafoundationindia.org` later means switching to a Cloudflare Tunnel;
+nothing in the app needs to change beyond the two `.env` URLs.
+
+Note on Comedkare: its `comedkares-cims.duckdns.org:5000` address is plain
+HTTP with a router port-forward, so its logins cross the internet unencrypted.
+It is untouched here, but the same Funnel approach would fix it.
 
 ## What the super admin can now change without a developer
 
