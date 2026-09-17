@@ -75,6 +75,8 @@ From `Settings`:
 - Add a new center: enter the name, check the suggested code, create.
   It appears in login and every dropdown at once.
 - A center with records is deactivated, never deleted.
+- Add / rename business heads (funding entities on invoices). Launch
+  default is `ERA Foundation`.
 
 ## 8) Downloads for reporting
 

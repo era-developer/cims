@@ -15,6 +15,7 @@ const {
   slugifyId,
 } = require('../utils/centers');
 const settings = require('../utils/settings');
+const businessHeads = require('../utils/businessHeads');
 const { authMiddleware, adminOnly, superAdminOnly } = require('../middleware/auth');
 const { getDb } = require('../utils/db');
 const { getOrdersForCenter } = require('./orders');
@@ -294,6 +295,79 @@ router.delete('/centers/:centerId', authMiddleware, superAdminOnly, async (req, 
     res.json(result);
   } catch (error) {
     res.status(error.status || 500).json({ message: error.message || 'Failed to remove center' });
+  }
+});
+
+// ---------- Business heads ----------
+//
+// The funding entity an invoice is booked against. Any admin may read the
+// list (the invoice form needs it); only a super admin may change it.
+
+router.get('/business-heads', authMiddleware, adminOnly, async (req, res) => {
+  const includeInactive = req.user.role === 'super_admin'
+    && ['1', 'true', 'yes'].includes(String(req.query.includeInactive || '').toLowerCase());
+  res.json(businessHeads.listBusinessHeads({ includeInactive }));
+});
+
+router.post('/business-heads', authMiddleware, superAdminOnly, async (req, res) => {
+  try {
+    const head = businessHeads.createBusinessHead({ name: req.body.name });
+    await logActivity('BUSINESS_HEAD_CREATED', req.user.username, {
+      role: req.user.role,
+      info: `Created business head "${head.name}"`,
+    });
+    res.status(201).json(head);
+  } catch (error) {
+    res.status(error.status || 500).json({ message: error.message || 'Failed to create business head' });
+  }
+});
+
+router.put('/business-heads/:id', authMiddleware, superAdminOnly, async (req, res) => {
+  try {
+    const head = businessHeads.updateBusinessHead(Number(req.params.id), {
+      name: req.body.name,
+      active: req.body.active,
+    });
+    await logActivity('BUSINESS_HEAD_UPDATED', req.user.username, {
+      role: req.user.role,
+      info: `Updated business head "${head.name}" (active=${head.active})`,
+    });
+    res.json(head);
+  } catch (error) {
+    res.status(error.status || 500).json({ message: error.message || 'Failed to update business head' });
+  }
+});
+
+router.get('/business-heads/:id/usage', authMiddleware, superAdminOnly, async (req, res) => {
+  const head = businessHeads.getBusinessHeadById(Number(req.params.id));
+  if (!head) return res.status(404).json({ message: 'Business head not found' });
+  const references = businessHeads.countReferences(head.id);
+  res.json({ id: head.id, references, canHardDelete: Object.keys(references).length === 0 });
+});
+
+router.delete('/business-heads/:id', authMiddleware, superAdminOnly, async (req, res) => {
+  try {
+    const head = businessHeads.getBusinessHeadById(Number(req.params.id));
+    if (!head) return res.status(404).json({ message: 'Business head not found' });
+
+    // The invoice form's business head is a required field, so an empty
+    // list would block invoice entry org-wide.
+    if (head.active && businessHeads.listBusinessHeads().length <= 1) {
+      return res.status(400).json({
+        message: 'Cannot remove the only active business head. Add another first.',
+      });
+    }
+
+    const result = businessHeads.deleteBusinessHead(head.id);
+    await logActivity(result.deleted ? 'BUSINESS_HEAD_DELETED' : 'BUSINESS_HEAD_DEACTIVATED', req.user.username, {
+      role: req.user.role,
+      info: result.deleted
+        ? `Deleted unused business head "${head.name}"`
+        : `Deactivated business head "${head.name}" -- retained existing invoices`,
+    });
+    res.json(result);
+  } catch (error) {
+    res.status(error.status || 500).json({ message: error.message || 'Failed to remove business head' });
   }
 });
 
@@ -862,14 +936,21 @@ router.get('/download/:type', authMiddleware, adminOnly, async (req, res) => {
     }
 
     if (type === 'assets') {
-      const businessHeadParam = String(req.query.businessHead || 'all').trim().toLowerCase();
+      // Accepts a business head id (what the dashboard now sends), or a name
+      // for older links. 'all' means no filter.
+      const businessHeadParam = String(req.query.businessHead || 'all').trim();
       const db = getDb();
       const clauses = [];
       const params = [];
       if (centerId) { clauses.push('a.center_id = ?'); params.push(centerId); }
-      if (businessHeadParam !== 'all') {
-        clauses.push('LOWER(bh.name) = ?');
-        params.push(businessHeadParam === 'comedk' ? 'comedk' : businessHeadParam === 'era' ? 'era foundation' : businessHeadParam);
+      let businessHeadLabel = 'All';
+      if (businessHeadParam.toLowerCase() !== 'all') {
+        const byId = /^\d+$/.test(businessHeadParam)
+          ? businessHeads.getBusinessHeadById(Number(businessHeadParam))
+          : null;
+        businessHeadLabel = byId ? byId.name : businessHeadParam;
+        clauses.push('LOWER(bh.name) = LOWER(?)');
+        params.push(businessHeadLabel);
       }
       const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
 
@@ -982,7 +1063,7 @@ router.get('/download/:type', authMiddleware, adminOnly, async (req, res) => {
       infoSheet.getColumn(3).width = 24;
 
       const summaryRows = [
-        ['Business Head Filter', businessHeadParam === 'all' ? 'All (ComedK + ERA Foundation)' : businessHeadParam],
+        ['Business Head Filter', businessHeadLabel === 'All' ? 'All (combined)' : businessHeadLabel],
         ['Center', centerId ? (getCenterById(centerId)?.name || centerId) : 'All Centers'],
         ['Total Assets', assets.length],
         ['Total Value (Base)', totalBase],
@@ -1025,7 +1106,7 @@ router.get('/download/:type', authMiddleware, adminOnly, async (req, res) => {
         });
       }
 
-      const filenameBh = businessHeadParam === 'all' ? 'combined' : businessHeadParam;
+      const filenameBh = businessHeadLabel === 'All' ? 'combined' : businessHeadLabel.toLowerCase().replace(/[^a-z0-9]+/g, '_');
       res.setHeader('Content-Disposition', `attachment; filename=${centerId || 'all_centers'}_assets_${filenameBh}.xlsx`);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       return wb.xlsx.write(res).then(() => res.end());

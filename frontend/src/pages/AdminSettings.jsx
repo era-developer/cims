@@ -4,8 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import { useCenters } from '../context/CentersContext';
 import useViewport from '../hooks/useViewport';
 
-// Super-admin settings: who order notifications go to, and which centers
-// exist.
+// Super-admin settings: who order notifications go to, which business heads
+// invoices can be booked against, and which centers exist.
 //
 // Both were previously fixed at deploy time -- notification contacts lived in
 // backend/.env behind a service restart, and centers were a hardcoded array in
@@ -42,15 +42,22 @@ export default function AdminSettings() {
   const [savingCenter, setSavingCenter] = useState(false);
   const [centerError, setCenterError] = useState('');
 
+  const [heads, setHeads] = useState([]);
+  const [headName, setHeadName] = useState('');
+  const [editingHeadId, setEditingHeadId] = useState(null);
+  const [savingHead, setSavingHead] = useState(false);
+  const [headError, setHeadError] = useState('');
+
   const isSuperAdmin = user?.role === 'super_admin';
 
   const load = useCallback(async () => {
     try {
       // includeInactive: a super admin managing centers needs to see retired
       // ones in order to bring one back.
-      const [settingsRes, centersRes] = await Promise.all([
+      const [settingsRes, centersRes, headsRes] = await Promise.all([
         axios.get('/api/admin/settings'),
         axios.get('/api/admin/centers?includeInactive=true'),
+        axios.get('/api/admin/business-heads?includeInactive=true'),
       ]);
       setSettings(settingsRes.data);
       setNotifyForm({
@@ -58,6 +65,7 @@ export default function AdminSettings() {
         whatsappAdmin: settingsRes.data.whatsappAdmin || '',
       });
       setCenters(Array.isArray(centersRes.data) ? centersRes.data : []);
+      setHeads(Array.isArray(headsRes.data) ? headsRes.data : []);
       setError('');
     } catch (err) {
       setError(err?.response?.data?.message || 'Unable to load settings');
@@ -194,6 +202,82 @@ export default function AdminSettings() {
     }
   }
 
+  // ---------- Business heads ----------
+
+  function startEditHead(head) {
+    setEditingHeadId(head.id);
+    setHeadName(head.name);
+    setHeadError('');
+  }
+
+  function cancelEditHead() {
+    setEditingHeadId(null);
+    setHeadName('');
+    setHeadError('');
+  }
+
+  async function saveHead(event) {
+    event.preventDefault();
+    setSavingHead(true);
+    setHeadError('');
+    try {
+      if (editingHeadId) {
+        await axios.put(`/api/admin/business-heads/${editingHeadId}`, { name: headName });
+        flash(`Business head renamed to "${headName.trim()}".`);
+      } else {
+        await axios.post('/api/admin/business-heads', { name: headName });
+        flash(`Business head "${headName.trim()}" added.`);
+      }
+      cancelEditHead();
+      await load();
+    } catch (err) {
+      setHeadError(err?.response?.data?.message || 'Unable to save business head');
+    } finally {
+      setSavingHead(false);
+    }
+  }
+
+  async function toggleHeadActive(head) {
+    try {
+      await axios.put(`/api/admin/business-heads/${head.id}`, { active: !head.active });
+      flash(`Business head "${head.name}" ${head.active ? 'deactivated' : 'reactivated'}.`);
+      await load();
+    } catch (err) {
+      setHeadError(err?.response?.data?.message || 'Unable to update business head');
+    }
+  }
+
+  async function removeHead(head) {
+    let usage = { canHardDelete: true, references: {} };
+    try {
+      const { data } = await axios.get(`/api/admin/business-heads/${head.id}/usage`);
+      usage = data;
+    } catch {
+      // Cautious wording below covers it.
+    }
+    const summary = Object.entries(usage.references || {})
+      .map(([table, count]) => `${count} ${table}`)
+      .join(', ');
+    const confirmText = usage.canHardDelete
+      ? `Delete business head "${head.name}"? Nothing is booked against it, so it will be removed completely.`
+      : `"${head.name}" is booked on ${summary}.
+
+It will be deactivated instead of deleted: hidden from new invoices, with existing records kept.
+
+Continue?`;
+    if (!window.confirm(confirmText)) return;
+
+    try {
+      const { data } = await axios.delete(`/api/admin/business-heads/${head.id}`);
+      flash(data.deleted
+        ? `Business head "${head.name}" deleted.`
+        : `Business head "${head.name}" deactivated; its invoices were kept.`);
+      await load();
+    } catch (err) {
+      setHeadError(err?.response?.data?.message || 'Unable to remove business head');
+    }
+  }
+
   if (!isSuperAdmin) {
     return <div style={styles.page}><div style={styles.card}>Super admin access required.</div></div>;
   }
@@ -246,6 +330,77 @@ export default function AdminSettings() {
           <span style={styles.metaLabel}>Emails are sent as</span>
           <span style={styles.metaValue}>{settings?.emailSenderName || '-'}</span>
         </div>
+      </div>
+
+      {/* ---------- Business heads ---------- */}
+      <div style={styles.card}>
+        <h2 style={styles.cardTitle}>Business heads</h2>
+        <p style={styles.cardHint}>
+          The funding entity an invoice is booked against. Every head listed here is
+          offered in the Invoices and Add Component forms and gets its own column in
+          the dashboard's asset-value breakdown.
+        </p>
+
+        {headError && <div style={styles.errorBanner}>{headError}</div>}
+
+        <div style={styles.tableWrap}>
+          <table style={styles.table}>
+            <thead>
+              <tr>
+                <th style={styles.th}>Business head</th>
+                <th style={styles.th}>Status</th>
+                <th style={styles.th}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {heads.map(head => (
+                <tr key={head.id} style={head.active ? undefined : styles.inactiveRow}>
+                  <td style={styles.td}><span style={styles.centerName}>{head.name}</span></td>
+                  <td style={styles.td}>
+                    <span style={head.active ? styles.activePill : styles.inactivePill}>
+                      {head.active ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                  <td style={styles.td}>
+                    <div style={styles.actions}>
+                      <button style={styles.linkBtn} onClick={() => startEditHead(head)}>Rename</button>
+                      <button style={styles.linkBtn} onClick={() => toggleHeadActive(head)}>
+                        {head.active ? 'Deactivate' : 'Reactivate'}
+                      </button>
+                      <button style={styles.dangerLinkBtn} onClick={() => removeHead(head)}>Remove</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {!heads.length && (
+                <tr><td style={styles.td} colSpan={3}>No business heads yet -- invoices cannot be entered until one exists.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div style={styles.divider} />
+
+        <h3 style={styles.subCardTitle}>{editingHeadId ? 'Rename business head' : 'Add a business head'}</h3>
+        <form onSubmit={saveHead}>
+          <div style={{ ...styles.formGrid, ...(isMobile ? styles.formGridMobile : {}) }}>
+            <Field
+              label="Name"
+              value={headName}
+              onChange={setHeadName}
+              placeholder="ERA Foundation"
+              required
+            />
+          </div>
+          <div style={styles.formActions}>
+            <button type="submit" style={{ ...styles.primaryBtn, opacity: savingHead ? 0.7 : 1 }} disabled={savingHead}>
+              {savingHead ? 'Saving...' : editingHeadId ? 'Save name' : 'Add business head'}
+            </button>
+            {editingHeadId && (
+              <button type="button" style={styles.secondaryBtn} onClick={cancelEditHead}>Cancel</button>
+            )}
+          </div>
+        </form>
       </div>
 
       {/* ---------- Centers ---------- */}

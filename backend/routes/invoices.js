@@ -7,6 +7,7 @@ const PDFDocument = require('pdfkit');
 const { getDb } = require('../utils/db');
 const { authMiddleware, adminOnly, superAdminOnly } = require('../middleware/auth');
 const { requireCenter, listCenters, getCenterById } = require('../utils/centers');
+const { listBusinessHeads } = require('../utils/businessHeads');
 const { isCriticalAssetName } = require('../utils/classifications');
 const { createAssetTagGenerator } = require('../utils/assetTag');
 
@@ -122,7 +123,9 @@ router.get('/lookups', authMiddleware, adminOnly, (req, res) => {
   res.json({
     classifications: db.prepare('SELECT id, name FROM classifications WHERE name != ? ORDER BY sort_order').all('Unclassified (Legacy)'),
     vendors: db.prepare('SELECT id, name FROM vendors ORDER BY name').all(),
-    businessHeads: db.prepare('SELECT id, name FROM business_heads ORDER BY name').all(),
+    // Active only: a deactivated head stays on its historical invoices but
+    // must not be offered for new ones. Managed in Admin -> Settings.
+    businessHeads: listBusinessHeads().map(head => ({ id: head.id, name: head.name })),
     projects: centerId
       ? db.prepare('SELECT id, name, status FROM projects WHERE center_id = ? ORDER BY name').all(centerId)
       : [],

@@ -123,6 +123,8 @@ They are now in the database, editable under **Admin → Settings**:
 - **Admin WhatsApp number** — org-wide, and per center. Entering 10 digits
   assumes `+91`.
 - **Centers** — add, rename, edit contacts, deactivate, remove.
+- **Business heads** — the funding entities invoices are booked against
+  (launch default: ERA Foundation). Dashboard columns follow this list.
 
 Adding a center takes effect immediately: it appears in the login screen's
 registration dropdown, every admin center selector, and inventory scoping,

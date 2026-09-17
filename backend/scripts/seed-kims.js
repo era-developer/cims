@@ -11,6 +11,7 @@
 //   - one super_admin: kalampragati@erafoundationindia.org / 9686737460
 //   - the full component catalogue, names preserved, every item at stock 0
 //   - org settings (name, tagline, notification email + WhatsApp number)
+//   - one business head: ERA Foundation
 //
 // Stock 0 is the natural state, not something that needs zeroing: stock is
 // derived as COUNT(assets WHERE status='available'), so seeding the catalog
@@ -44,6 +45,11 @@ const SUPER_ADMIN = {
   mobile: '9686737460',
   role: 'super_admin',
 };
+
+// Funding entities invoices are booked against. The invoice form's business
+// head is a required dropdown, so at least one must exist at launch. More can
+// be added by a super admin under Settings.
+const BUSINESS_HEADS = ['ERA Foundation'];
 
 const ORG_SETTINGS = {
   'org.name': 'Kalam Pragati',
@@ -229,6 +235,9 @@ async function run(args) {
     for (const item of master.items) {
       insertCatalog.run(CENTER.id, item.name, item.classificationId, item.category, item.unit);
     }
+
+    const insertBusinessHead = db.prepare('INSERT INTO business_heads (name, active) VALUES (?, 1)');
+    for (const name of BUSINESS_HEADS) insertBusinessHead.run(name);
 
     const insertSetting = db.prepare(`
       INSERT INTO app_settings (key, value, updated_at, updated_by)

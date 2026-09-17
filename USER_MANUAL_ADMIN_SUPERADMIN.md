@@ -227,7 +227,19 @@ Open `Settings`. Changes take effect immediately - no restart, no developer.
 
 Use this whenever the responsible admin changes.
 
-### 9.2 Centers
+### 9.2 Business heads
+A business head is the funding entity an invoice is booked against (at launch:
+`ERA Foundation`). Every active head is offered in the Invoices and Add
+Component forms and gets its own column in the dashboard's asset-value
+breakdown.
+
+- `Add business head`: enter the name and save. Available immediately.
+- `Rename`: changes the name everywhere, including past invoices.
+- `Deactivate`: hides it from new invoices; past invoices keep it.
+- `Remove`: deletes a head nothing is booked against; otherwise deactivates it.
+- The last active head cannot be removed - the invoice form requires one.
+
+### 9.3 Centers
 The table lists every center with its code, contact details and status.
 
 Add a center:
@@ -252,7 +264,7 @@ Rules:
 - Center codes are printed on asset tags - keep them stable once tags exist.
 - Center IDs are permanent.
 
-### 9.3 Email and notification behavior
+### 9.4 Email and notification behavior
 Order and transfer lifecycle events send email to:
 - the center's own notification email, if set in `Settings`, otherwise
 - the org-wide order notification email.

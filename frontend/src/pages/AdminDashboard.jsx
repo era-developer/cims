@@ -9,6 +9,14 @@ import { formatInr } from '../utils/currency';
 
 // Append one line here as each V2.1 phase ships, so the notice on the
 // dashboard always reflects what's actually live, not what's planned.
+// Colours cycle through this list, one per business head, in list order.
+const BH_PALETTE = [
+  { tone: '#2e7d32', bg: '#e8f5e9' },
+  { tone: '#1565c0', bg: '#e3f2fd' },
+  { tone: '#6a1b9a', bg: '#f3e5f5' },
+  { tone: '#ef6c00', bg: '#fff3e0' },
+];
+
 export default function AdminDashboard() {
   const { centers } = useCenters();
   const { isMobile } = useViewport();
@@ -130,12 +138,19 @@ export default function AdminDashboard() {
     { label: 'Total Asset Value + GST', value: selectedClassRow?.total_value_with_gst, tone: '#5b21b6', bg: '#ede9fe' },
   ];
 
+  // One column per business head the backend reports (it returns every
+  // real head, even at zero). They used to be two hardcoded Comedkare
+  // names; heads are now managed by a super admin in Settings, so the
+  // columns and their colours are derived from whatever exists.
   const businessHeads = assetValues?.byBusinessHead || [];
-  const businessHeadColumns = [
-    { key: 'comedk', name: 'ComedK', tone: '#1565c0', bg: '#e3f2fd', data: businessHeads.find(b => b.businessHeadName === 'ComedK') },
-    { key: 'era', name: 'ERA Foundation', tone: '#2e7d32', bg: '#e8f5e9', data: businessHeads.find(b => b.businessHeadName === 'ERA Foundation') },
-  ];
+  const businessHeadColumns = businessHeads
+    .filter(b => b.businessHeadName !== 'Unspecified')
+    .map((b, index) => {
+      const palette = BH_PALETTE[index % BH_PALETTE.length];
+      return { key: String(b.businessHeadId), name: b.businessHeadName, tone: palette.tone, bg: palette.bg, data: b };
+    });
   const unspecifiedHead = businessHeads.find(b => b.businessHeadName === 'Unspecified');
+  const businessHeadNames = businessHeadColumns.map(col => col.name).join(' + ') || 'business head';
 
   // Carries the selected classification into Inventory as a name (Inventory
   // filters by classification_name client-side, not by id), so picking a
@@ -241,7 +256,7 @@ export default function AdminDashboard() {
           <div style={styles.sectionHeader}>
             <div>
               <h2 style={styles.sectionTitle}>Asset Value by Business Head</h2>
-              <p style={styles.sectionText}>ComedK and ERA Foundation, split out from the combined total above.</p>
+              <p style={styles.sectionText}>{businessHeadNames}, split out from the combined total above.</p>
             </div>
           </div>
           <div style={{ ...styles.bhGrid, ...(isMobile ? styles.bhGridMobile : {}) }}>
@@ -263,13 +278,13 @@ export default function AdminDashboard() {
 
           {unspecifiedHead && (
             <div style={styles.bhUnspecifiedNote}>
-              Note: {formatInr(unspecifiedHead.total_value)} of asset value has no business head recorded on its invoice yet (shows under neither column above).
+              Note: {formatInr(unspecifiedHead.total_value)} of asset value has no business head recorded on its invoice yet (not shown in any column above).
             </div>
           )}
 
           <div style={styles.bhCombinedRow}>
             <div>
-              <div style={styles.bhCombinedLabel}>Total center{isSuperAdmin && !centerId ? 's' : ''} asset value (ComedK + ERA Foundation combined)</div>
+              <div style={styles.bhCombinedLabel}>Total center{isSuperAdmin && !centerId ? 's' : ''} asset value ({businessHeadNames} combined)</div>
               <div style={styles.bhCombinedValue}>{assetValues ? formatInr(assetValues.total_value) : '...'} <span style={styles.bhCombinedGst}>({assetValues ? formatInr(assetValues.total_value_with_gst) : '...'} incl. GST)</span></div>
             </div>
             <button style={styles.bhDownloadBtnCombined} onClick={() => downloadFile('assets', { businessHead: 'all' })}>
@@ -283,7 +298,7 @@ export default function AdminDashboard() {
             <div style={styles.sectionHeader}>
               <div>
                 <h2 style={styles.sectionTitle}>Center Overview</h2>
-                <p style={styles.sectionText}>Live activity across all nine centers.</p>
+                <p style={styles.sectionText}>Live activity across {centers.length === 1 ? "the center" : `all ${centers.length} centers`}.</p>
               </div>
             </div>
             <div style={styles.tableWrap}>
@@ -444,7 +459,7 @@ const styles = {
   quickDescription: { fontSize: '13px', color: '#64748b', lineHeight: 1.6, marginBottom: '14px' },
   quickCta: { fontSize: '13px', fontWeight: 700 },
   section: { background: '#fff', borderRadius: '18px', padding: '24px', marginBottom: '24px', boxShadow: '0 2px 12px rgba(26,35,126,0.07)' },
-  bhGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px', marginBottom: '18px' },
+  bhGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '18px', marginBottom: '18px' },
   bhGridMobile: { gridTemplateColumns: '1fr' },
   bhColumn: { border: '1px solid #e2e8f0', borderRadius: '16px', overflow: 'hidden', display: 'flex', flexDirection: 'column' },
   bhHeader: { padding: '14px 18px', fontFamily: "'DM Sans', sans-serif", fontSize: '17px', fontWeight: 800 },
