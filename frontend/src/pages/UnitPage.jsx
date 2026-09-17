@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import useViewport from '../hooks/useViewport';
 import QrScanner from '../components/QrScanner';
 import QrIcon from '../components/QrIcon';
+import BackBar from '../components/BackBar';
 import { extractTagFromScan } from '../utils/scan';
 
 // The page a QR label leads to. Students see the component and their own
@@ -85,12 +86,15 @@ export default function UnitPage() {
   }
 
   const backHome = () => navigate(isAdmin ? '/admin' : '/dashboard');
+  const backTo = isAdmin ? '/admin/inventory' : '/dashboard';
+  const backLabel = isAdmin ? 'Back to inventory' : 'Back to browse';
 
-  if (loading) return <div style={styles.page}><div style={styles.card}>Looking up {tag}...</div></div>;
+  if (loading) return <div style={styles.page}><BackBar to={backTo} label={backLabel} /><div style={styles.card}>Looking up {tag}...</div></div>;
 
   if (error || !data) {
     return (
       <div style={styles.page}>
+        <BackBar to={backTo} label={backLabel} />
         <div style={styles.card}>
           <div style={styles.errorBox}>{error}</div>
           <div style={styles.actions}>
@@ -108,6 +112,7 @@ export default function UnitPage() {
 
   return (
     <div style={{ ...styles.page, ...(isMobile ? styles.pageMobile : {}) }}>
+      <BackBar to={backTo} label={backLabel} />
       <div style={styles.card}>
         {/* ---------- Header: what is this ---------- */}
         <div style={styles.header}>

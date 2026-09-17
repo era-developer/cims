@@ -1,55 +1,56 @@
 import React from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useCenters } from '../context/CentersContext';
-import { APP_LONG_NAME, APP_SUBTITLE, PRIMARY_COLOR, LOGO_URL } from '../brand';
+import { APP_LONG_NAME, ORG_NAME, PRIMARY_COLOR, LOGO_URL } from '../brand';
 
+// Landing page for a center's registration link (/register/<centerId>).
+// Styled inline like the rest of the app; the Tailwind classes it used to
+// carry never applied because the project does not include Tailwind.
 export default function RegisterLanding() {
   const { centerId } = useParams();
   const { centers, loading } = useCenters();
   const center = centers.find(c => c.id === centerId);
 
-  // The center list is fetched, so an unknown id is only genuinely unknown
-  // once loading has finished -- otherwise every visit flashes "not found".
-  if (loading) {
-    return <div className="p-6">Loading...</div>;
-  }
-
-  if (!center) {
-    return <div className="p-6">Center not found</div>;
-  }
+  const body = (() => {
+    if (loading) return <p style={styles.muted}>Loading…</p>;
+    if (!center) {
+      return (
+        <>
+          <h2 style={styles.h2}>Center not found</h2>
+          <p style={styles.muted}>This registration link is not valid. Ask your center for the correct one, or sign in below.</p>
+          <Link to="/" style={{ ...styles.btn, ...styles.secondary }}>Go to sign in</Link>
+        </>
+      );
+    }
+    return (
+      <>
+        <h2 style={styles.h2}>Welcome to {center.name}</h2>
+        <p style={styles.muted}>Register as a student to browse components, place requests for your projects and track returns.</p>
+        <Link to={`/?register=1&centerId=${encodeURIComponent(centerId)}`} style={{ ...styles.btn, background: PRIMARY_COLOR, color: '#fff' }}>Register now</Link>
+        <Link to="/" style={{ ...styles.btn, ...styles.secondary }}>I already have an account — sign in</Link>
+      </>
+    );
+  })();
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="max-w-md w-full bg-white rounded-lg shadow-md p-6">
-        <div className="text-center mb-6">
-          <img src={LOGO_URL} alt="Logo" className="mx-auto h-12 w-auto mb-4" />
-          <h1 className="text-2xl font-bold text-gray-900">{APP_SUBTITLE}</h1>
-          <p className="text-gray-600">{APP_LONG_NAME}</p>
-        </div>
-        
-        <div className="mb-6">
-          <h2 className="text-xl font-semibold mb-2">Welcome to {center.name}</h2>
-          <p className="text-gray-600">
-            Register as a student to access the component inventory and place orders for your projects.
-          </p>
-        </div>
-
-        <div className="space-y-4">
-          <Link
-            to={`/?register=1&centerId=${centerId}`}
-            className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 block text-center"
-            style={{ backgroundColor: PRIMARY_COLOR }}
-          >
-            Register Now
-          </Link>
-          <Link
-            to="/"
-            className="w-full bg-gray-200 text-gray-800 py-2 px-4 rounded-md hover:bg-gray-300 block text-center"
-          >
-            Back to Login
-          </Link>
-        </div>
+    <div style={styles.page}>
+      <div style={styles.card}>
+        <img src={LOGO_URL} alt={ORG_NAME} style={styles.logo} />
+        <div style={styles.appName}>{APP_LONG_NAME}</div>
+        <div style={styles.body}>{body}</div>
       </div>
     </div>
   );
 }
+
+const styles = {
+  page: { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', background: 'linear-gradient(160deg, #17355f 0%, #2d2a6e 100%)', fontFamily: "'DM Sans', sans-serif" },
+  card: { background: '#fff', borderRadius: '18px', padding: '28px 26px', width: '100%', maxWidth: '440px', boxShadow: '0 30px 80px rgba(0,0,0,0.3)', textAlign: 'center' },
+  logo: { height: '56px', width: 'auto', maxWidth: '100%', objectFit: 'contain' },
+  appName: { fontSize: '12px', color: '#6b7280', fontWeight: 600, marginTop: '8px', marginBottom: '22px' },
+  body: { display: 'flex', flexDirection: 'column', gap: '10px', textAlign: 'left' },
+  h2: { fontSize: '20px', fontWeight: 800, color: '#1a1a2e', margin: 0 },
+  muted: { color: '#4b5563', fontSize: '14px', lineHeight: 1.55, margin: '0 0 6px' },
+  btn: { display: 'block', textAlign: 'center', padding: '12px 14px', borderRadius: '10px', fontWeight: 700, fontSize: '14px', textDecoration: 'none' },
+  secondary: { background: '#f1f3f9', color: '#1a1a2e', border: '1px solid #d7dde9' },
+};

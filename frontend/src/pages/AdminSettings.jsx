@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { useCenters } from '../context/CentersContext';
 import useViewport from '../hooks/useViewport';
+import BackBar from '../components/BackBar';
 
 // Super-admin settings: who order notifications go to, which business heads
 // invoices can be booked against, and which centers exist.
@@ -307,6 +308,7 @@ Continue?`;
 
   return (
     <div style={{ ...styles.page, ...(isMobile ? styles.pageMobile : {}) }}>
+      <BackBar to="/admin" label="Back to dashboard" />
       <div style={styles.header}>
         <h1 style={styles.title}>Settings</h1>
         <p style={styles.subtitle}>Notification contacts and centers for {settings?.orgName || 'this portal'}.</p>

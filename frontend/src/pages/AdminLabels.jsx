@@ -5,6 +5,7 @@ import QRCode from 'react-qr-code';
 import { useAuth } from '../context/AuthContext';
 import { APP_SHORT_NAME } from '../brand';
 import { unitLabelUrl } from '../utils/scan';
+import BackBar from '../components/BackBar';
 
 // Printable sheet of QR labels for physical units.
 //
@@ -84,8 +85,10 @@ export default function AdminLabels() {
     });
   }
 
-  if (loading) return <div style={styles.page}>Loading units...</div>;
-  if (error) return <div style={styles.page}><div style={styles.error}>{error}</div></div>;
+  const backTo = params.get('invoiceId') ? '/admin/invoices' : '/admin/inventory';
+  const backLabel = params.get('invoiceId') ? 'Back to invoices' : 'Back to inventory';
+  if (loading) return <div style={styles.page}><BackBar to={backTo} label={backLabel} />Loading units...</div>;
+  if (error) return <div style={styles.page}><BackBar to={backTo} label={backLabel} /><div style={styles.error}>{error}</div></div>;
 
   return (
     <div style={styles.page}>
@@ -99,6 +102,7 @@ export default function AdminLabels() {
         }
       `}</style>
 
+      <div className="no-print"><BackBar to={backTo} label={backLabel} /></div>
       <div className="no-print" style={styles.toolbar}>
         <div>
           <h1 style={styles.title}>QR labels{componentName ? ` — ${componentName}` : ''}</h1>
