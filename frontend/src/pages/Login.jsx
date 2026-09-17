@@ -413,7 +413,7 @@ export default function Login() {
               <button type="button" style={styles.forgotLink} onClick={openForgotPassword}>Forgot password?</button>
               {canOfferInstall && (
                 <button type="button" style={styles.installBtn} onClick={installApp}>
-                  <span aria-hidden="true" style={styles.installIcon}>&#x2913;</span> Install {APP_SHORT_NAME} app on this phone
+                  <span aria-hidden="true" style={styles.installIcon}>&#x2913;</span> Install the {APP_SHORT_NAME} app on this phone/desktop
                 </button>
               )}
               {showIosHint && (

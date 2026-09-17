@@ -26,8 +26,8 @@ Notes:
 
 ### 1.1a Install KIMS as an app (optional)
 KIMS can be added to your phone's home screen and opens like an app:
-- **Android (Chrome):** open the KIMS link. On your first visit a small **Get KIMS as an app** window offers the install; otherwise tap **Install KIMS app on this
-  phone** just below *Forgot password?* on the sign-in page (or the browser menu -> *Install app*).
+- **Android (Chrome):** open the KIMS link. On your first visit a small **Get KIMS as an app** window offers the install; otherwise tap **Install the KIMS app on this
+  phone/desktop** just below *Forgot password?* on the sign-in page (or the browser menu -> *Install app*).
 - **iPhone (Safari):** open the KIMS link, tap **Share**, then **Add to Home
   Screen**.
 The app updates itself; there is nothing to reinstall.
@@ -83,7 +83,11 @@ What happens on submit:
 
 ## 4) Track order status
 
-Go to `My Orders` to track each order.
+Go to `My Orders` to track each order. The status chips under the search box
+(All, Active, Pending, Approved / to return, Return requested, Partially
+returned, Returned, Rejected) show a count each and filter the list; the four
+tiles on the Browse page (Total, Active, Returnables, Partially Returned) open
+My Orders already filtered to that slice.
 
 Order statuses:
 - `Pending`: waiting for admin review

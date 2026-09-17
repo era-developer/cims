@@ -124,10 +124,22 @@ export default function StudentDashboard() {
             <p style={styles.heroSub}>Browse available components, check live availability, and add them to your cart.</p>
           </div>
           <div style={{ ...styles.heroStats, ...(isMobile ? styles.heroStatsMobile : {}) }}>
-            <div style={{ ...styles.statPill, ...(isMobile ? styles.statPillMobile : {}) }}>{orderStats.totalOrders} Total Orders</div>
-            <div style={{ ...styles.statPill, ...(isMobile ? styles.statPillMobile : {}) }}>{orderStats.activeOrders} Active Orders</div>
-            <div style={{ ...styles.statPill, ...(isMobile ? styles.statPillMobile : {}) }}>{orderStats.returnables} Returnables</div>
-            <div style={{ ...styles.statPill, ...(isMobile ? styles.statPillMobile : {}) }}>{orderStats.partiallyReturned} Partially Returned</div>
+            {/* Each tile opens My Orders already filtered to that slice. */}
+            {[
+              { label: 'Total Orders', value: orderStats.totalOrders, status: 'all' },
+              { label: 'Active Orders', value: orderStats.activeOrders, status: 'active' },
+              { label: 'Returnables', value: orderStats.returnables, status: 'approved' },
+              { label: 'Partially Returned', value: orderStats.partiallyReturned, status: 'partial' },
+            ].map(tile => (
+              <button
+                type="button"
+                key={tile.status}
+                onClick={() => navigate(tile.status === 'all' ? '/my-orders' : `/my-orders?status=${tile.status}`)}
+                title={`Open ${tile.label.toLowerCase()} in My Orders`}
+                style={{ ...styles.statPill, ...(isMobile ? styles.statPillMobile : {}) }}>
+                {tile.value} {tile.label}
+              </button>
+            ))}
           </div>
         </div>
       </div>
@@ -298,7 +310,7 @@ const styles = {
   heroSub: { color: 'rgba(255,255,255,0.80)', fontSize: '14px', maxWidth: '500px', lineHeight: 1.6 },
   heroStats: { display: 'flex', gap: '10px', flexWrap: 'wrap' },
   heroStatsMobile: { width: '100%' },
-  statPill: { background: 'rgba(255,255,255,0.15)', color: '#fff', padding: '8px 16px', borderRadius: '20px', fontSize: '13px', fontWeight: 600, backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.2)' },
+  statPill: { background: 'rgba(255,255,255,0.15)', color: '#fff', padding: '8px 16px', borderRadius: '20px', fontSize: '13px', fontWeight: 600, backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" },
   statPillMobile: { flex: '1 1 150px', textAlign: 'center' },
   content: { maxWidth: '1400px', margin: '0 auto', padding: '28px 24px' },
   contentMobile: { padding: '22px 14px 28px' },

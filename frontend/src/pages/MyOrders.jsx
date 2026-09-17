@@ -14,6 +14,19 @@ const STATUS_STYLES = {
 
 const RETURN_FLOW_STATUSES = new Set(['Return Requested', 'Partially Returned', 'Returned']);
 
+// Status filter chips. Keys travel in the URL (?status=active) so the
+// dashboard tiles can deep-link straight to a slice.
+const STATUS_FILTERS = [
+  { key: 'all', label: 'All', match: () => true },
+  { key: 'active', label: 'Active', match: o => !['Returned', 'Rejected'].includes(o.status) },
+  { key: 'pending', label: 'Pending', match: o => o.status === 'Pending' },
+  { key: 'approved', label: 'Approved / to return', match: o => o.status === 'Approved' },
+  { key: 'return-requested', label: 'Return requested', match: o => o.status === 'Return Requested' },
+  { key: 'partial', label: 'Partially returned', match: o => o.status === 'Partially Returned' },
+  { key: 'returned', label: 'Returned', match: o => o.status === 'Returned' },
+  { key: 'rejected', label: 'Rejected', match: o => o.status === 'Rejected' },
+];
+
 export default function MyOrders() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { isMobile } = useViewport();
@@ -23,6 +36,7 @@ export default function MyOrders() {
   const [processingId, setProcessingId] = useState('');
   const [pageMsg, setPageMsg] = useState('');
   const [search, setSearch] = useState('');
+  const [statusKey, setStatusKey] = useState('all');
   const [downloadingId, setDownloadingId] = useState('');
 
   useEffect(() => {
@@ -33,7 +47,17 @@ export default function MyOrders() {
 
   useEffect(() => {
     setSearch(searchParams.get('q') || '');
+    const wanted = searchParams.get('status') || 'all';
+    setStatusKey(STATUS_FILTERS.some(f => f.key === wanted) ? wanted : 'all');
   }, [searchParams]);
+
+  function handleStatusChange(key) {
+    setStatusKey(key);
+    const next = new URLSearchParams(searchParams);
+    if (key && key !== 'all') next.set('status', key);
+    else next.delete('status');
+    setSearchParams(next, { replace: true });
+  }
 
   async function fetchOrders() {
     try {
@@ -54,7 +78,10 @@ export default function MyOrders() {
     setSearchParams(next, { replace: true });
   }
 
+  const activeFilter = STATUS_FILTERS.find(f => f.key === statusKey) || STATUS_FILTERS[0];
+  const countFor = filter => orders.filter(filter.match).length;
   const filteredOrders = orders.filter(order => {
+    if (!activeFilter.match(order)) return false;
     const query = search.trim().toLowerCase();
     if (!query) return true;
 
@@ -131,10 +158,28 @@ export default function MyOrders() {
           />
         </div>
 
+        <div style={styles.chips} role="tablist" aria-label="Filter by status">
+          {STATUS_FILTERS.map(filter => {
+            const active = filter.key === statusKey;
+            const n = countFor(filter);
+            return (
+              <button
+                type="button"
+                key={filter.key}
+                role="tab"
+                aria-selected={active}
+                onClick={() => handleStatusChange(filter.key)}
+                style={{ ...styles.chip, ...(active ? styles.chipActive : {}), ...(n === 0 && !active ? styles.chipEmpty : {}) }}>
+                {filter.label} <span style={{ ...styles.chipCount, ...(active ? styles.chipCountActive : {}) }}>{n}</span>
+              </button>
+            );
+          })}
+        </div>
+
         {filteredOrders.length === 0 ? (
           <div style={styles.empty}>
             <h3>{orders.length === 0 ? 'No orders yet' : 'No matching orders'}</h3>
-            <p>{orders.length === 0 ? 'You have not placed any component requests.' : 'Try a different search term.'}</p>
+            <p>{orders.length === 0 ? 'You have not placed any component requests.' : statusKey !== 'all' && !search.trim() ? `No orders are "${activeFilter.label}" right now.` : 'Try a different search term or filter.'}</p>
           </div>
         ) : (
           <div style={styles.list}>
@@ -369,7 +414,13 @@ const styles = {
   countBadge: { background: '#1a237e', color: '#fff', padding: '6px 16px', borderRadius: '20px', fontWeight: 700, fontSize: '14px' },
   fullWidthBadge: { width: '100%', textAlign: 'center' },
   infoBox: { background: '#eef2ff', border: '1px solid #c7d2fe', color: '#1e3a8a', padding: '12px 14px', borderRadius: '12px', marginBottom: '18px', fontSize: '13px', fontWeight: 600 },
-  searchBar: { marginBottom: '18px' },
+  searchBar: { marginBottom: '12px' },
+  chips: { display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '18px' },
+  chip: { display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 12px', borderRadius: '999px', border: '1.5px solid #dbe3f0', background: '#fff', color: '#1a1a2e', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" },
+  chipActive: { background: '#2d2a6e', borderColor: '#2d2a6e', color: '#fff' },
+  chipEmpty: { color: '#9ca3af' },
+  chipCount: { background: '#f1f3f9', color: '#4b5563', borderRadius: '999px', padding: '1px 7px', fontSize: '11px', fontWeight: 800 },
+  chipCountActive: { background: 'rgba(255,255,255,0.2)', color: '#fff' },
   searchInput: { width: '100%', padding: '12px 14px', border: '1.5px solid #dbe3f0', borderRadius: '12px', fontSize: '14px', fontFamily: "'DM Sans', sans-serif", outline: 'none', background: '#fff' },
   loading: { padding: '80px', textAlign: 'center', color: '#6b7280', fontSize: '16px' },
   empty: { textAlign: 'center', padding: '80px 20px', color: '#6b7280', background: '#fff', borderRadius: '16px' },
