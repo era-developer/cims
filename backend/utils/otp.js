@@ -60,7 +60,10 @@ async function createOtp(db, { userId, purpose, targetEmail, expiresInMinutes = 
 }
 
 // Returns { ok: true } or { ok: false, reason: 'not_found' | 'expired' | 'too_many_attempts' | 'incorrect', attemptsRemaining? }
-async function verifyOtp(db, { userId, purpose, code }) {
+// consume=false checks the code without burning it, so a caller can validate
+// first and only consume once the thing the code protects has actually
+// happened (an order that then fails on stock must not eat the code).
+async function verifyOtp(db, { userId, purpose, code, consume = true }) {
   const now = new Date().toISOString();
   const row = db.prepare(`
     SELECT * FROM otp_codes WHERE user_id = ? AND purpose = ? AND consumed_at IS NULL
@@ -76,8 +79,13 @@ async function verifyOtp(db, { userId, purpose, code }) {
     const attemptsRemaining = Math.max(MAX_ATTEMPTS - (row.attempts + 1), 0);
     return { ok: false, reason: attemptsRemaining <= 0 ? 'too_many_attempts' : 'incorrect', attemptsRemaining };
   }
-  db.prepare('UPDATE otp_codes SET consumed_at = ? WHERE id = ?').run(now, row.id);
-  return { ok: true };
+  if (consume) db.prepare('UPDATE otp_codes SET consumed_at = ? WHERE id = ?').run(now, row.id);
+  return { ok: true, otpId: row.id };
+}
+
+function consumeOtp(db, otpId) {
+  if (!otpId) return;
+  db.prepare('UPDATE otp_codes SET consumed_at = ? WHERE id = ? AND consumed_at IS NULL').run(new Date().toISOString(), otpId);
 }
 
 function otpErrorMessage(reason) {
@@ -90,4 +98,4 @@ function otpErrorMessage(reason) {
   }
 }
 
-module.exports = { createOtp, verifyOtp, otpErrorMessage, OTP_LENGTH, EXPIRY_MINUTES, MAX_ATTEMPTS, RESEND_COOLDOWN_SECONDS };
+module.exports = { createOtp, verifyOtp, consumeOtp, otpErrorMessage, OTP_LENGTH, EXPIRY_MINUTES, MAX_ATTEMPTS, RESEND_COOLDOWN_SECONDS };

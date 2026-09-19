@@ -78,6 +78,10 @@ export default function AdminOrders() {
     try {
       const { data } = await axios.get('/api/orders', { params: centerId ? { centerId } : {} });
       setOrders(data.reverse());
+      // The tab badge should be right before the tab is ever opened.
+      axios.get('/api/internal-issues', { params: centerId ? { centerId } : {} })
+        .then(res => setInternalCount(Array.isArray(res.data) ? res.data.length : 0))
+        .catch(() => {});
     } catch (err) {
       setPageMsg(err.response?.data?.message || 'Unable to load orders right now.');
     } finally {

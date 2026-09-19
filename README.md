@@ -3,8 +3,7 @@
 > **Kalam Pragati** — *Empowering Engineers with Skills for Success* — an initiative of the ERA Foundation.
 
 KIMS manages the component inventory of Kalam Pragati centers: what is in stock, which
-student has borrowed what, admin approvals, returns, damage, invoices, and
-center-to-center transfers. Every physical unit is tracked individually by asset tag.
+student has borrowed what, admin approvals, returns, damage, invoices, and. Every physical unit is tracked individually by asset tag.
 
 It is a fork of the ERA Foundation's CIMS (Comedkare) portal, running as a fully separate
 deployment. See [KIMS_DEPLOYMENT.md](KIMS_DEPLOYMENT.md) for how the two are kept apart.
@@ -53,7 +52,7 @@ KIMS/
 |   |-- .env                   Port, DB path, JWT secret, SMTP, WhatsApp (not in git)
 |   |-- db/migrations/         Schema, applied automatically at startup
 |   |-- routes/                auth, centers, components, orders, admin, invoices, assets,
-|   |                          transfers, programs, procurement, internal-issues, webhooks
+|   |                          programs, procurement, internal-issues, webhooks
 |   |-- utils/                 centers.js, settings.js, email.js, whatsapp.js, db.js ...
 |   |-- scripts/
 |   |   |-- seed-kims.js            Build a fresh KIMS database
@@ -187,7 +186,6 @@ Key tables:
 | `assets` | Every physical unit, with its tag and lifecycle status |
 | `issue_records` | Student orders and what was issued / returned / damaged |
 | `invoices` | Procurement invoices and line items |
-| `transfers` | Center-to-center loans |
 | `activity_logs` | Audit trail |
 
 Stock is not a stored number: it is the count of `assets` with status `available`.
@@ -223,13 +221,12 @@ The seed refuses to run against a database that already has data.
 - Users: approve registrations, create and manage accounts
 - Programs and per-program issue history
 - My Center: request components from other centers or from the super admin
-- Excel exports: inventory, orders, users, transfers, activity logs
+- Excel exports: inventory, orders, users, internal use, activity logs
 
 ### Super admin only
 - Everything above across all centers, plus analytics
 - **Settings**: add / edit / deactivate centers; set the order-notification email and
   admin WhatsApp number, org-wide and per center
-- Transfers: approve center-to-center loans and returns
 - Procurement requests from centers
 
 ### Notifications

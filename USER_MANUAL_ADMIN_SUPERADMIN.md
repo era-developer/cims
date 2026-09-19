@@ -6,7 +6,7 @@ This guide covers daily operations for center admins and super admins:
 - student orders
 - inventory control
 - user approvals
-- center-to-center transfers
+- internal use (staff pulls)
 - reporting and exports
 - centers and notification settings (super admin)
 
@@ -20,7 +20,7 @@ This guide covers daily operations for center admins and super admins:
 ## 1.2 Super Admin
 - Access to all centers.
 - Can switch center context in dashboard/inventory/orders/users.
-- Can review and approve center-to-center transfers in `Transfers`.
+- Reviews procurement requests raised by centers in `Requests`.
 - Can access global analytics and cross-center reports.
 - Can add and manage centers, and change the order-notification email and
   WhatsApp number, in `Settings` (see section 9).
@@ -42,7 +42,6 @@ Top navigation:
 - `Orders`
 - `My Center`
 - `Users`
-- `Transfers` (super admin only)
 - `Requests` (super admin only) - procurement requests raised by centers
 - `Settings` (super admin only) - centers and notification contacts
 
@@ -59,7 +58,7 @@ Dashboard provides:
 Downloads available:
 - Inventory report
 - Orders report (with date filter)
-- Center transfer report
+- Internal use report
 - Users report
 - Activity logs
 
@@ -91,7 +90,7 @@ Additional procurement fields (new):
 
 Rules:
 - Keep component names consistent across centers.
-- Add new components before requesting them in transfer flow.
+- Add new components (via an invoice) before they can be issued.
 
 ## 4.3 QR labels and scanning
 
@@ -113,18 +112,26 @@ role allows:
 goes to the same unit page. Type the tag if the camera is unavailable.
 
 Inside workflows:
-- **Recording a return** (`Orders`, `Internal Use` return): `Scan QR code`
-  keeps the scanner open; each scanned unit appears in the scanner window with
+- **Recording a return** (`Orders`, internal use): a single `Scan QR code`
+  for the whole return; each scanned unit appears in the scanner window with
   **Good / Damaged** buttons -- you choose, then scan the next. Scanning never
   decides the condition.
-- **Internal Use** (`Inventory` -> `Internal Use`): `Scan QR code` on the right
-  adds each unit you pick off the shelf; exactly those units are issued.
+- **Internal Use** (`Inventory` -> `Internal Use`): `Scan QR code` adds each
+  unit you pick off the shelf, or **type the asset tag** in the box beside it
+  and press **Add unit**; exactly those units are issued, any extra quantity
+  is filled from stock.
 - **Swapping a unit**: `Scan QR code` on the label of the unit in hand.
 
 **New stock:** after saving an invoice, the success message offers
 **Print N QR labels now** for exactly the units just created. The same is
 available later from the invoice's detail view (`QR labels for this invoice`).
 Stick the labels on before shelving.
+
+## 4.4 Internal use (staff pulling components)
+`Inventory` -> `Internal Use`: who is taking them, an optional **Program**,
+the reason, optional session details, and the components -- scan units, type
+tags, or just enter a quantity. Stock reduces immediately. Return them from
+`Orders` -> **Internal use** tab (or `Inventory` -> `Return`).
 
 ## 5) Student registration approval and user management
 
@@ -188,96 +195,40 @@ Use rejection when request cannot be fulfilled.
 Reserved stock is restored automatically.
 
 ### 6.4 Process return
-For `Return Requested` or `Partially Returned`:
-1. Open return entry.
-2. Enter returned and damaged quantities per component.
-3. Save update.
+For `Return Requested` or `Partially Returned`, open the order and click
+**Record Returned Items** (or **Continue Return Entry**). There is **one
+Scan QR code button for the whole order**:
+1. Tap **Scan QR code**. Scan the first unit the student hands over.
+2. The scanner shows the unit and its component and asks **Good / Damaged**
+   (or Skip). Choose; the scanner is immediately ready for the next unit. A
+   numbered list in the scanner window shows progress per component
+   (e.g. *1 Raspberry Pi 1/2*). **Done** closes it.
+3. Units can also be set by hand with the **Not returned / Good / Damaged**
+   buttons beside each tag.
+4. If any unit is Damaged, a reason is required.
+5. **Save Return Update**.
 
 System behavior:
-- Good returned quantity adds back to stock.
-- Damaged quantity increments damaged count.
-- Status closes as `Returned` when no pending balance remains.
+- Good units go back to `available`; Damaged units become `damaged` (fix
+  later with **Fix Status** on the order if it was a mistake).
+- Status becomes `Partially Returned` while anything is still out and
+  `Returned` once every unit is back.
+- **Swap** appears beside a unit only while it is still out; use it when the
+  physical unit in hand is not the one the system assigned.
 
-## 7) My Center: center-to-center request flow (admin side)
+### 6.5 Internal use tab (staff pulls, not student orders)
+The **Internal use** tab on `Orders` is the full register of components pulled
+by staff for sessions, demos and repairs -- open and closed -- with who took
+them, when, the program, each unit's tag and return state. Filter with
+**All / Still out / Returned** and the search box. Anything still out has a
+**Record return** button that opens the same one-scanner return dialog as
+above. To pull components, use `Inventory` -> `Internal Use` (see 4.4).
 
-Open `My Center`.
-
-### 7.1 Raise request
-1. Click `Request components from another center`.
-2. Add components using inventory autocomplete suggestions.
-3. Enter quantity for each component.
-4. Fill program/contact details:
-   - Program / project name
-   - Responsible person
-   - Responsible email
-   - Purpose
-   - Desired return date
-   - Additional notes
-5. Submit request.
-
-After submit:
-- Button state changes to waiting for super admin approval.
-- Request appears in `Request history`.
-
-### 7.2 Request history filters
-- `Requested`: requests raised by your center
-- `Sent`: requests supplied by your center
-
-Each card includes:
-- transfer id
-- status
-- requesting/supply center details
-- responsible person/email
-- requested components and quantities
-
-### 7.3 Raise return request (requesting center)
-For approved transfers:
-1. Click `Return components`.
-2. Fill optional popup details:
-   - courier/transporter
-   - tracking id
-   - notes
-3. Submit.
-
-Return request goes to:
-- super admin
-- originally supplying center admin (via email)
-
-## 8) Transfers page (super admin only)
-
-Open `Transfers`.
-
-### 8.1 Review queue
-- Use center dropdown for scope
-- Use status tabs/dropdown (`All`, `Pending`, `Approved`, `Return Requested`, etc.)
-
-### 8.2 Approve transfer
-For `Pending` transfer:
-1. Review requested components and qty.
-2. Optionally edit quantities.
-3. Select supply center.
-4. Add supplier remarks.
-5. Click `Approve transfer`.
-
-Stock movement on approval:
-- Supplying center stock decreases.
-- Requesting center stock increases.
-- Supply center assignment is locked after approval.
-
-### 8.3 Mark as returned
-For `Return Requested` transfer:
-1. Add return confirmation notes.
-2. Click `Mark as returned`.
-
-Stock movement on return:
-- Requesting center stock decreases.
-- Supplying center stock increases back.
-
-## 9) Settings: centers and notification contacts (super admin only)
+## 7) Settings: centers and notification contacts (super admin only)
 
 Open `Settings`. Changes take effect immediately - no restart, no developer.
 
-### 9.1 Order notifications
+### 7.1 Order notifications
 - `Order notification email`: where new-order alerts go when a center has no
   address of its own.
 - `Admin WhatsApp number`: the number students are handed to after placing an
@@ -289,7 +240,7 @@ saving it. The WhatsApp test reports clearly if WhatsApp is not yet configured.
 
 Use this whenever the responsible admin changes.
 
-### 9.2 Business heads
+### 7.2 Business heads
 A business head is the funding entity an invoice is booked against (at launch:
 `ERA Foundation`). Every active head is offered in the Invoices and Add
 Component forms and gets its own column in the dashboard's asset-value
@@ -301,7 +252,7 @@ breakdown.
 - `Remove`: deletes a head nothing is booked against; otherwise deactivates it.
 - The last active head cannot be removed - the invoice form requires one.
 
-### 9.3 Centers
+### 7.3 Centers
 The table lists every center with its code, contact details and status.
 
 Add a center:
@@ -326,7 +277,7 @@ Rules:
 - Center codes are printed on asset tags - keep them stable once tags exist.
 - Center IDs are permanent.
 
-### 9.4 Email and notification behavior
+### 7.4 Email and notification behavior
 Every email is sent as **"Kalam Pragati - KIMS"** with the KIMS logo. Who
 receives what:
 
@@ -342,14 +293,13 @@ receives what:
 | Day before expected return | Return reminder (e-mail with component list + push + bell; once per order, checked hourly) | - |
 | Password reset code | Code | - |
 | Password changed or reset | Security notice | - |
-| Transfer request / approval / return | - | Super admin + centers involved |
 | Procurement request / status | - | Super admin, then the requesting center |
 
 Admin emails go to the center's own notification email if set in
 `Settings`, otherwise the org-wide order notification email. No email ever
 contains a password.
 
-### 9.5 The bell (notification centre) and phone notifications
+### 7.5 The bell (notification centre) and phone notifications
 Every user and admin has a **bell** in the top bar. It shows the unread count,
 the latest entries on tap, and **See all** opens `/notifications`: the full
 history with sent time, read time and an *Unread only* filter. Every event in
@@ -387,7 +337,7 @@ when the browser drops them or the user is deleted. The server keys live in
 `backend.env` (`VAPID_*`, see KIMS_DEPLOYMENT.md); regenerating them
 silently invalidates every device, so leave them alone.
 
-## 10) Report downloads and audit
+## 8) Report downloads and audit
 
 Use Dashboard download section for exports:
 
@@ -395,15 +345,14 @@ Use Dashboard download section for exports:
    - detailed student/order fields
    - issued component-level sheet
    - return and damaged quantities
-2. `Center Transfer Report`
-   - summary sheet and component sheet
-   - requested center, supply center, status, remarks
+2. `Internal Use Report`
+   - every staff pull with units, return state and program
 3. `Inventory`, `Users`, and `Logs` reports
 
 Tip:
 - Use date filters before orders export for monthly reporting.
 
-## 11) Recommended daily checklist
+## 9) Recommended daily checklist
 
 Admin:
 1. Approve pending student registrations.
@@ -413,16 +362,12 @@ Admin:
 5. Review My Center request history.
 
 Super admin:
-1. Review pending transfer requests.
-2. Assign supply center and approve.
-3. Confirm return requests.
-4. Export daily/weekly transfer and order reports.
+1. Review procurement requests from centers.
+2. Approve student registrations still pending.
+3. Check the Internal use tab for anything out too long.
+4. Export daily/weekly order and internal-use reports.
 
-## 12) Common admin issues
-
-### Request not visible in super admin transfers
-- Confirm request was submitted successfully from `My Center`.
-- Refresh transfers page and check status tab/filter.
+## 10) Common admin issues
 
 ### Center dropdown appears empty
 - Check `Settings` -> Centers: at least one center must be active.
@@ -431,10 +376,6 @@ Super admin:
 ### Order emails going to the wrong person
 - Update the address in `Settings` -> Order notifications, or the center's own
   email in the Centers table. No restart needed.
-
-### "Insufficient stock" during transfer approve
-- Supply center does not have enough stock for selected quantity.
-- Reduce qty or choose another supply center.
 
 ### Frontend build missing page appears
 Build frontend and restart backend:

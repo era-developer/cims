@@ -8,7 +8,7 @@ const { sendOrderNotification, sendStatusUpdate, sendOtpEmail } = require('../ut
 const push = require('../utils/push');
 const { authMiddleware, adminOnly } = require('../middleware/auth');
 const { swapAsset } = require('../utils/assetSwap');
-const { createOtp, verifyOtp, otpErrorMessage } = require('../utils/otp');
+const { createOtp, verifyOtp, consumeOtp, otpErrorMessage } = require('../utils/otp');
 
 const router = express.Router();
 
@@ -269,7 +269,9 @@ router.post('/', authMiddleware, async (req, res) => {
   if (!otpCode) {
     return res.status(400).json({ message: 'Enter the verification code sent to your email before submitting.' });
   }
-  const otpResult = await verifyOtp(db, { userId: req.user.id, purpose: 'order_confirmation', code: otpCode });
+  // Checked, not consumed: if the order then fails (stock ran out while the
+  // student was typing) the same code still works on the retry.
+  const otpResult = await verifyOtp(db, { userId: req.user.id, purpose: 'order_confirmation', code: otpCode, consume: false });
   if (!otpResult.ok) {
     return res.status(400).json({ message: otpErrorMessage(otpResult.reason) });
   }
@@ -344,6 +346,7 @@ router.post('/', authMiddleware, async (req, res) => {
       }
     }
 
+    consumeOtp(db, otpResult.otpId);
     db.exec('COMMIT');
   } catch (err) {
     db.exec('ROLLBACK');
