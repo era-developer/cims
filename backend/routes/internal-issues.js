@@ -29,8 +29,9 @@ function reasonFromNotes(notes) {
 
 function loadIssueDetail(db, id) {
   const issue = db.prepare(`
-    SELECT ii.*, p.name AS program_name
+    SELECT ii.*, p.name AS program_name, c.name AS center_name
     FROM internal_issues ii LEFT JOIN projects p ON p.id = ii.project_id
+    LEFT JOIN centers c ON c.id = ii.center_id
     WHERE ii.id = ?
   `).get(id);
   if (!issue) return null;
@@ -58,7 +59,7 @@ function loadIssueDetail(db, id) {
   });
 
   return {
-    id: issue.id, issueCode: issue.issue_code, centerId: issue.center_id, takenBy: issue.taken_by,
+    id: issue.id, issueCode: issue.issue_code, centerId: issue.center_id, centerName: issue.center_name || '', takenBy: issue.taken_by,
     projectId: issue.project_id, programName: issue.program_name, reason: issue.reason, status: issue.status,
     studentCount: issue.student_count, teamCount: issue.team_count, instituteName: issue.institute_name,
     issuedBy: issue.issued_by, issuedAt: issue.issued_at, returnedAt: issue.returned_at,
@@ -78,7 +79,6 @@ router.post('/', authMiddleware, adminOnly, (req, res) => {
   const normalizedTeamCount = teamCount !== undefined && teamCount !== '' ? Number(teamCount) : null;
   const trimmedInstituteName = String(instituteName || '').trim() || null;
   if (!trimmedTakenBy) return res.status(400).json({ message: 'Who is taking the components is required' });
-  if (!projectId && !String(otherProgramName || '').trim()) return res.status(400).json({ message: 'Select which program this is for' });
   if (!trimmedReason) return res.status(400).json({ message: 'A reason is required' });
   const requestedItems = Array.isArray(items) ? items.filter(i => Number(i.qty) > 0) : [];
   if (!requestedItems.length) return res.status(400).json({ message: 'Add at least one component' });
@@ -94,11 +94,12 @@ router.post('/', authMiddleware, adminOnly, (req, res) => {
       const existing = db.prepare('SELECT id FROM projects WHERE center_id = ? AND name = ?').get(centerId, trimmed);
       resolvedProjectId = existing ? existing.id
         : db.prepare('INSERT INTO projects (name, center_id) VALUES (?, ?)').run(trimmed, centerId).lastInsertRowid;
-    } else {
+    } else if (projectId) {
       const program = db.prepare('SELECT id FROM projects WHERE id = ? AND center_id = ?').get(projectId, centerId);
       if (!program) throw new Error('Program not found for this center');
       resolvedProjectId = program.id;
     }
+    // No program is fine: a quick pull for a demo or a repair does not need one.
 
     // An item may pin specific units (assetIds) -- the ones the admin
     // scanned at the shelf. Those must be available units of that component;
@@ -157,11 +158,15 @@ router.post('/', authMiddleware, adminOnly, (req, res) => {
   }
 });
 
+// A super admin with no center chosen sees every center's records (the
+// Orders page's "All Centers" view); a center admin only ever sees their own.
 router.get('/', authMiddleware, adminOnly, (req, res) => {
   const db = getDb();
   const centerId = getScopedCenterId(req);
-  if (!centerId) return res.json([]);
-  const ids = db.prepare('SELECT id FROM internal_issues WHERE center_id = ? ORDER BY issued_at DESC').all(centerId).map(r => r.id);
+  if (!centerId && req.user.role !== 'super_admin') return res.json([]);
+  const ids = centerId
+    ? db.prepare('SELECT id FROM internal_issues WHERE center_id = ? ORDER BY issued_at DESC').all(centerId).map(r => r.id)
+    : db.prepare('SELECT id FROM internal_issues ORDER BY issued_at DESC').all().map(r => r.id);
   res.json(ids.map(id => loadIssueDetail(db, id)));
 });
 

@@ -44,7 +44,8 @@ app.use('/api/centers', require('./routes/centers'));
 app.use('/api/components', require('./routes/components'));
 app.use('/api/orders', require('./routes/orders'));
 app.use('/api/admin', require('./routes/admin'));
-app.use('/api/transfers', require('./routes/transfers'));
+// Center-to-center transfers were retired for KIMS (single-centre programme);
+// the route file stays for the data model but is no longer mounted.
 app.use('/api/webhooks', require('./routes/webhooks'));
 app.use('/api/invoices', require('./routes/invoices'));
 app.use('/api/assets', require('./routes/assets'));

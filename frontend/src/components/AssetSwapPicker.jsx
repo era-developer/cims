@@ -21,6 +21,11 @@ export default function AssetSwapPicker({ asset, catalogId, swapUrl, onSwapped }
   const [error, setError] = useState('');
   const [scanning, setScanning] = useState(false);
 
+  // Only a unit that is actually out against this line (reserved/issued) can
+  // be swapped; a returned or disposed unit has nothing to swap out of, and
+  // the server refuses it anyway -- so do not offer the button.
+  if (asset?.status && !['reserved', 'issued'].includes(asset.status)) return null;
+
   // Scanning the label of the unit actually in hand selects it -- no need to
   // read a tag off a shelf and find it in the dropdown.
   function handleScan(text) {

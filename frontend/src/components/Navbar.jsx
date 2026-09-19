@@ -27,7 +27,6 @@ export default function Navbar() {
           { path: '/admin/inventory', label: 'Inventory' },
           { path: '/admin/invoices', label: 'Invoices' },
           { path: '/admin/orders', label: 'Orders' },
-          { path: '/admin/transfers', label: 'Transfers' },
           { path: '/admin/procurement', label: 'Requests' },
           { path: '/admin/my-center', label: 'My Center' },
           { path: '/admin/users', label: 'Users' },
@@ -56,9 +55,6 @@ export default function Navbar() {
     if (isAdmin) {
       if (location.pathname.startsWith('/admin/users')) {
         return { path: '/admin/users', placeholder: 'Search users...' };
-      }
-      if (location.pathname.startsWith('/admin/transfers')) {
-        return { path: '/admin/transfers', placeholder: 'Search transfers...' };
       }
       if (location.pathname.startsWith('/admin/orders')) {
         return { path: '/admin/orders', placeholder: 'Search orders...' };

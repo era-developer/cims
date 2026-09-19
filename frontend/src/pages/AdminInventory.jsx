@@ -4,8 +4,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import SmartImage from '../components/SmartImage';
 import PhotoInput from '../components/PhotoInput';
 import ProgramSelect, { OTHER_PROGRAM, resolveProgramName } from '../components/ProgramSelect';
-import AssetSwapPicker from '../components/AssetSwapPicker';
-import AssetConditionPicker from '../components/AssetConditionPicker';
+import InternalReturnDialog from '../components/InternalReturnDialog';
 import QrScanner from '../components/QrScanner';
 import QrIcon from '../components/QrIcon';
 import { extractTagFromScan } from '../utils/scan';
@@ -150,11 +149,10 @@ export default function AdminInventory() {
   const [returnListOpen, setReturnListOpen] = useState(false);
   const [openInternalIssues, setOpenInternalIssues] = useState([]);
   const [returnLoading, setReturnLoading] = useState(false);
-  const [returningIssue, setReturningIssue] = useState(null);
-  const [returnAssetForm, setReturnAssetForm] = useState({});
-  const [returnDamageReason, setReturnDamageReason] = useState('');
-  const [returnSaving, setReturnSaving] = useState(false);
+  const [returningIssue, setReturningIssue] = useState(null);   // { id, issueCode }
   const [returnMsg, setReturnMsg] = useState('');
+  const [internalTagInput, setInternalTagInput] = useState('');
+  const [internalTagBusy, setInternalTagBusy] = useState(false);
   const [correctionPrompt, setCorrectionPrompt] = useState(null);
   const [correctionReason, setCorrectionReason] = useState('');
   const [correctionSaving, setCorrectionSaving] = useState(false);
@@ -554,19 +552,22 @@ export default function AdminInventory() {
   // Scanning a label at the shelf adds that exact unit to the internal-use
   // list: the component row is created or found, its quantity grows by one,
   // and the unit is pinned so the backend issues *this* unit, not any one.
-  async function handleInternalScan(text) {
-    const tag = extractTagFromScan(text);
+  // Resolve a tag (scanned or typed) to a unit and pin it on the matching row.
+  // Returns a human note either way; throws nothing.
+  async function pinInternalUnitByTag(rawTag) {
+    const tag = extractTagFromScan(rawTag);
+    if (!tag) return 'Enter or scan an asset tag.';
     try {
       const { data } = await axios.get(`/api/units/${encodeURIComponent(tag)}`);
       if (data.unit.status !== 'available') {
-        setInternalScanNote(`${data.unit.assetTag} is ${data.unit.status.replace('_', ' ')} -- not available to issue.`);
-        return;
+        return `${data.unit.assetTag} is ${data.unit.status.replace('_', ' ')} -- not available to issue.`;
       }
       if (data.unit.centerId !== centerId) {
-        setInternalScanNote(`${data.unit.assetTag} belongs to ${data.unit.centerName}.`);
-        return;
+        return `${data.unit.assetTag} belongs to ${data.unit.centerName}.`;
       }
+      let already = false;
       setInternalUseRows(prev => {
+        if (prev.some(r => (r.assetIds || []).includes(data.unit.id))) { already = true; return prev; }
         if (prev.some(r => (r.assetIds || []).includes(data.unit.id))) return prev;
         const rows = prev.map(r => ({ ...r }));
         const idx = rows.findIndex(r => r.name.trim().toLowerCase() === data.component.name.toLowerCase());
@@ -582,10 +583,26 @@ export default function AdminInventory() {
         if (blank >= 0) rows[blank] = fresh; else rows.push(fresh);
         return rows;
       });
-      setInternalScanNote(`Added ${data.unit.assetTag} (${data.component.name}). Scan the next unit or close.`);
+      return already ? `${data.unit.assetTag} is already in the list.` : `Added ${data.unit.assetTag} (${data.component.name}).`;
     } catch (err) {
-      setInternalScanNote(err?.response?.data?.message || `Could not find "${tag}".`);
+      return err?.response?.data?.message || `Could not find "${tag}".`;
     }
+  }
+
+  async function handleInternalScan(text) {
+    const note = await pinInternalUnitByTag(text);
+    setInternalScanNote(`${note} Scan the next unit or close.`);
+  }
+
+  // Typed entry next to the scanner: the tag printed on the label, for a
+  // webcam-less desk or a smudged code.
+  async function handleInternalTagAdd() {
+    if (!internalTagInput.trim() || internalTagBusy) return;
+    setInternalTagBusy(true);
+    const note = await pinInternalUnitByTag(internalTagInput.trim());
+    setInternalScanNote(note);
+    if (/^Added/.test(note)) setInternalTagInput('');
+    setInternalTagBusy(false);
   }
 
   function unpinInternalUnit(index, assetId) {
@@ -672,73 +689,16 @@ export default function AdminInventory() {
   }
 
   function openReturnEntry(issue) {
-    setReturningIssue(issue);
     setReturnMsg('');
-    const initial = {};
-    issue.items.forEach(item => {
-      const issuedAssets = Array.isArray(item.assets) ? item.assets.filter(a => a.status === 'issued') : [];
-      initial[item.id] = issuedAssets.map(a => ({ ...a, condition: 'skip' }));
-    });
-    setReturnAssetForm(initial);
-    setReturnDamageReason('');
+    setReturningIssue({ id: issue.id, issueCode: issue.issueCode });
   }
 
-  function setReturnAssetCondition(itemId, assetId, condition) {
-    setReturnAssetForm(prev => ({
-      ...prev,
-      [itemId]: (prev[itemId] || []).map(a => (a.id === assetId ? { ...a, condition } : a)),
-    }));
-  }
-
-  async function refreshReturningIssue() {
-    if (!returningIssue) return;
-    try {
-      const { data } = await axios.get(`/api/internal-issues/${returningIssue.id}`);
-      setReturningIssue(data);
-      // A swap changes which asset IDs exist for that item -- rebuild its
-      // condition picker from the fresh list rather than holding onto
-      // stale/now-invalid asset IDs.
-      const rebuilt = {};
-      data.items.forEach(item => {
-        const issuedAssets = Array.isArray(item.assets) ? item.assets.filter(a => a.status === 'issued') : [];
-        rebuilt[item.id] = issuedAssets.map(a => ({ ...a, condition: 'skip' }));
-      });
-      setReturnAssetForm(rebuilt);
-    } catch {
-      // Swap already succeeded server-side; a stale asset tag list here is harmless.
-    }
-  }
-
-  async function handleReturnSubmit() {
-    setReturnMsg('');
-    const payloadItems = Object.entries(returnAssetForm)
-      .map(([itemId, assets]) => ({
-        itemId: Number(itemId),
-        returnedAssetIds: assets.filter(a => a.condition === 'good').map(a => a.id),
-        damagedAssetIds: assets.filter(a => a.condition === 'damaged').map(a => a.id),
-      }))
-      .filter(entry => entry.returnedAssetIds.length || entry.damagedAssetIds.length);
-    if (!payloadItems.length) {
-      setReturnMsg('Select the condition for at least one returned unit.');
-      return;
-    }
-    const anyDamaged = payloadItems.some(entry => entry.damagedAssetIds.length);
-    if (anyDamaged && !returnDamageReason.trim()) {
-      setReturnMsg('Enter a reason for the unit(s) being returned damaged.');
-      return;
-    }
-    setReturnSaving(true);
-    try {
-      await axios.post(`/api/internal-issues/${returningIssue.id}/return`, { items: payloadItems, damageReason: returnDamageReason.trim() });
-      await fetchItems();
-      await openReturnListModal();
-      setActionMsgType('success');
-      setActionMsg(`${returningIssue.issueCode} return recorded.`);
-    } catch (err) {
-      setReturnMsg(err.response?.data?.message || 'Unable to record the return.');
-    } finally {
-      setReturnSaving(false);
-    }
+  async function handleInternalReturnSaved(issue) {
+    setReturningIssue(null);
+    await fetchItems();
+    await openReturnListModal();
+    setActionMsgType('success');
+    setActionMsg(`${issue?.issueCode || 'Internal use'} return recorded.`);
   }
 
   async function performBulkAction(programFields) {
@@ -1432,7 +1392,7 @@ export default function AdminInventory() {
                   onChange={e => setInternalUseForm({ ...internalUseForm, takenBy: e.target.value })} required />
               </AField>
               <ProgramSelect
-                programs={internalUsePrograms} mode="id" label="Program" required
+                programs={internalUsePrograms} mode="id" label="Program (optional)"
                 value={internalUseForm.projectId} otherValue={internalUseForm.otherProgramName}
                 onChange={value => setInternalUseForm({ ...internalUseForm, projectId: value })}
                 onOtherChange={value => setInternalUseForm({ ...internalUseForm, otherProgramName: value })}
@@ -1460,11 +1420,24 @@ export default function AdminInventory() {
                 </AField>
               </div>
               <AField label="Components">
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '8px' }}>
+                  <input
+                    style={{ ...styles.bulkSelect2, flex: '1 1 180px', fontFamily: "'DM Mono', Consolas, monospace" }}
+                    placeholder="Type an asset tag, e.g. AKTU-ELEC-00008"
+                    value={internalTagInput}
+                    onChange={e => setInternalTagInput(e.target.value.toUpperCase())}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleInternalTagAdd(); } }}
+                  />
+                  <button type="button" style={styles.addBtnSecondary} onClick={handleInternalTagAdd} disabled={internalTagBusy || !internalTagInput.trim()}>
+                    {internalTagBusy ? 'Adding…' : 'Add unit'}
+                  </button>
                   <button type="button" style={styles.scanBtn} onClick={() => { setInternalScanNote(''); setInternalScanOpen(true); }}>
                     <QrIcon size={15} /> Scan QR code
                   </button>
                 </div>
+                {!internalScanOpen && internalScanNote && (
+                  <div style={{ fontSize: '12px', color: /^Added/.test(internalScanNote) ? '#2e7d32' : '#c62828', fontWeight: 600, marginBottom: '8px' }}>{internalScanNote}</div>
+                )}
                 {internalScanOpen && (
                   <QrScanner
                     title="Scan units to issue"
@@ -1520,93 +1493,46 @@ export default function AdminInventory() {
       )}
 
       {returnListOpen && (
-        <div style={styles.overlay} onClick={() => !returnSaving && setReturnListOpen(false)}>
+        <div style={styles.overlay} onClick={() => setReturnListOpen(false)}>
           <div style={{ ...styles.drawer, maxWidth: '560px', ...(isMobile ? styles.drawerMobile : {}) }} onClick={event => event.stopPropagation()}>
-            {!returningIssue ? (
-              <>
-                <div style={styles.drawerHeader}>
-                  <h3 style={styles.modalTitle}>Return Internal Use</h3>
-                  <button style={styles.closeBtn} onClick={() => setReturnListOpen(false)}>X</button>
-                </div>
-                {returnMsg && <div style={{ ...styles.actionMsg, ...styles.actionMsgError }}>{returnMsg}</div>}
-                {returnLoading ? (
-                  <div style={styles.loading}>Loading...</div>
-                ) : openInternalIssues.length === 0 ? (
-                  <p style={styles.sub}>Nothing currently outstanding for this center.</p>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {openInternalIssues.map(issue => (
-                      <button key={issue.id} type="button" style={{ ...styles.docRow, cursor: 'pointer', textAlign: 'left' }} onClick={() => openReturnEntry(issue)}>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 700, fontSize: '13px' }}>{issue.issueCode} · {issue.takenBy}</div>
-                          <div style={{ fontSize: '12px', color: '#64748b' }}>{issue.reason} · {issue.status}</div>
-                          {(issue.studentCount != null || issue.teamCount != null || issue.instituteName) && (
-                            <div style={{ fontSize: '11px', color: '#94a3b8' }}>
-                              {[issue.studentCount != null && `${issue.studentCount} student${issue.studentCount === 1 ? '' : 's'}`,
-                                issue.teamCount != null && `${issue.teamCount} team${issue.teamCount === 1 ? '' : 's'}`,
-                                issue.instituteName].filter(Boolean).join(' · ')}
-                            </div>
-                          )}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </>
+            <div style={styles.drawerHeader}>
+              <h3 style={styles.modalTitle}>Return Internal Use</h3>
+              <button style={styles.closeBtn} onClick={() => setReturnListOpen(false)}>X</button>
+            </div>
+            {returnMsg && <div style={{ ...styles.actionMsg, ...styles.actionMsgError }}>{returnMsg}</div>}
+            {returnLoading ? (
+              <div style={styles.loading}>Loading...</div>
+            ) : openInternalIssues.length === 0 ? (
+              <p style={styles.sub}>Nothing currently outstanding for this center.</p>
             ) : (
-              <>
-                <div style={styles.drawerHeader}>
-                  <div>
-                    <h3 style={styles.modalTitle}>{returningIssue.issueCode}</h3>
-                    <p style={styles.sub}>Taken by {returningIssue.takenBy} -- {returningIssue.reason}</p>
-                  </div>
-                  <button style={styles.closeBtn} onClick={() => setReturningIssue(null)} disabled={returnSaving}>X</button>
-                </div>
-                {returnMsg && <div style={{ ...styles.actionMsg, ...styles.actionMsgError }}>{returnMsg}</div>}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {returningIssue.items.filter(item => item.outstandingQty > 0).map(item => (
-                    <div key={item.id} style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px' }}>
-                      <div style={{ fontWeight: 700, fontSize: '13px', marginBottom: '4px' }}>{item.name} -- {item.outstandingQty} outstanding</div>
-                      {Array.isArray(item.assets) && item.assets.filter(a => a.status === 'issued').length > 0 && (
-                        <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '10px' }}>
-                          Not the right physical unit?{' '}
-                          {item.assets.filter(a => a.status === 'issued').map(a => (
-                            <span key={a.id} style={{ display: 'inline-flex', alignItems: 'center', marginRight: '10px' }}>
-                              {a.assetTag}{a.serialNumber ? ` (SN: ${a.serialNumber})` : ''}
-                              <AssetSwapPicker
-                                asset={a}
-                                catalogId={item.catalogId}
-                                swapUrl={`/api/internal-issues/${returningIssue.id}/items/${item.id}/swap-asset`}
-                                onSwapped={refreshReturningIssue}
-                              />
-                            </span>
-                          ))}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {openInternalIssues.map(issue => (
+                  <button key={issue.id} type="button" style={{ ...styles.docRow, cursor: 'pointer', textAlign: 'left' }} onClick={() => openReturnEntry(issue)}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: '13px' }}>{issue.issueCode} · {issue.takenBy}</div>
+                      <div style={{ fontSize: '12px', color: '#64748b' }}>{issue.reason} · {issue.status}</div>
+                      {(issue.studentCount != null || issue.teamCount != null || issue.instituteName) && (
+                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>
+                          {[issue.studentCount != null && `${issue.studentCount} student${issue.studentCount === 1 ? '' : 's'}`,
+                            issue.teamCount != null && `${issue.teamCount} team${issue.teamCount === 1 ? '' : 's'}`,
+                            issue.instituteName].filter(Boolean).join(' · ')}
                         </div>
                       )}
-                      <AssetConditionPicker
-                        assets={returnAssetForm[item.id] || []}
-                        onChange={(assetId, condition) => setReturnAssetCondition(item.id, assetId, condition)}
-                      />
                     </div>
-                  ))}
-                </div>
-                {Object.values(returnAssetForm).some(assets => assets.some(a => a.condition === 'damaged')) && (
-                  <AField label="Reason for the damaged unit(s) (required)">
-                    <input style={styles.bulkSelect2} value={returnDamageReason}
-                      onChange={e => setReturnDamageReason(e.target.value)}
-                      placeholder="What happened to it?" />
-                  </AField>
-                )}
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '14px' }}>
-                  <button type="button" style={styles.addBtnSecondary} onClick={() => setReturningIssue(null)} disabled={returnSaving}>Back</button>
-                  <button type="button" style={styles.addBtn} disabled={returnSaving} onClick={handleReturnSubmit}>
-                    {returnSaving ? 'Saving...' : 'Record Return'}
                   </button>
-                </div>
-              </>
+                ))}
+              </div>
             )}
           </div>
         </div>
+      )}
+
+      {returningIssue && (
+        <InternalReturnDialog
+          issueId={returningIssue.id}
+          onClose={() => setReturningIssue(null)}
+          onSaved={handleInternalReturnSaved}
+        />
       )}
     </div>
   );

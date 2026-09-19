@@ -7,6 +7,8 @@ import useViewport from '../hooks/useViewport';
 import AssetSwapPicker from '../components/AssetSwapPicker';
 import AssetConditionFix from '../components/AssetConditionFix';
 import AssetConditionPicker from '../components/AssetConditionPicker';
+import ReturnScanner from '../components/ReturnScanner';
+import InternalUseList from '../components/InternalUseList';
 import IssueUnitsDialog from '../components/IssueUnitsDialog';
 
 const STATUS_STYLES = {
@@ -28,7 +30,8 @@ export default function AdminOrders() {
   const [orders, setOrders] = useState([]);
   const [filtered, setFiltered] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('All');
+  const [filter, setFilter] = useState(searchParams.get('tab') === 'internal' ? 'Internal use' : 'All');
+  const [internalCount, setInternalCount] = useState(null);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(null);
   const [expandedOrderId, setExpandedOrderId] = useState(null);
@@ -58,7 +61,7 @@ export default function AdminOrders() {
 
   useEffect(() => {
     let data = orders;
-    if (filter !== 'All') data = data.filter(order => order.status === filter);
+    if (filter !== 'All' && filter !== 'Internal use') data = data.filter(order => order.status === filter);
     if (search) {
       const query = search.toLowerCase();
       data = data.filter(order =>
@@ -188,7 +191,7 @@ export default function AdminOrders() {
         <div style={styles.header}>
           <div>
             <h1 style={styles.title}>Order Management</h1>
-            <p style={styles.sub}>Approve requests, record damaged returns, and track partially returned items.</p>
+            <p style={styles.sub}>Approve requests, record returns, and track partially returned items. The Internal use tab holds every component pulled by staff for sessions and projects.</p>
           </div>
         </div>
 
@@ -204,12 +207,12 @@ export default function AdminOrders() {
         {pageMsg && <div style={styles.infoBox}>{pageMsg}</div>}
 
         <div style={{ ...styles.tabs, ...(isMobile ? styles.tabsMobile : {}) }}>
-          {['All', 'Pending', 'Approved', 'Return Requested', 'Partially Returned', 'Returned', 'Rejected'].map(tab => (
+          {['All', 'Pending', 'Approved', 'Return Requested', 'Partially Returned', 'Returned', 'Rejected', 'Internal use'].map(tab => (
             <button
               key={tab}
-              style={{ ...styles.tab, ...(filter === tab ? styles.tabActive : {}) }}
+              style={{ ...styles.tab, ...(filter === tab ? styles.tabActive : {}), ...(tab === 'Internal use' ? styles.tabInternal : {}), ...(tab === 'Internal use' && filter === tab ? styles.tabInternalActive : {}) }}
               onClick={() => setFilter(tab)}>
-              {tab} <span style={styles.tabCount}>{counts[tab]}</span>
+              {tab} <span style={styles.tabCount}>{tab === 'Internal use' ? (internalCount ?? '…') : counts[tab]}</span>
             </button>
           ))}
         </div>
@@ -217,13 +220,17 @@ export default function AdminOrders() {
         <div style={styles.searchBar}>
           <input
             style={styles.search}
-            placeholder="Search by student, order ID, college, project..."
+            placeholder={filter === 'Internal use' ? 'Search by code, who took it, program, component...' : 'Search by student, order ID, college, project...'}
             value={search}
             onChange={event => handleSearchChange(event.target.value)}
           />
         </div>
 
-        <div style={styles.list}>
+        {filter === 'Internal use' && (
+          <InternalUseList centerId={centerId} search={search} onCount={setInternalCount} onChanged={fetchOrders} />
+        )}
+
+        <div style={{ ...styles.list, ...(filter === 'Internal use' ? { display: 'none' } : {}) }}>
           {filtered.length === 0 ? (
             <div style={styles.empty}>No orders found</div>
           ) : filtered.map(order => {
@@ -353,7 +360,12 @@ export default function AdminOrders() {
                         {selected === order.orderId && editorMode === 'return' ? (
                           <div style={styles.actionExpanded}>
                             <div style={styles.returnPanelTitle}>Return Entry</div>
-                            <p style={styles.returnPanelHint}>Pick the condition of each specific unit being returned right now. Leave a unit as "Not returned" if the student still has it.</p>
+                            <p style={styles.returnPanelHint}>Scan each unit as it comes back and pick its condition, or use the buttons per unit. Leave a unit as "Not returned" if the student still has it.</p>
+                            <ReturnScanner
+                              groups={returnDraft.map(item => ({ id: item.id, name: item.name, assets: item.assets }))}
+                              onChange={setAssetCondition}
+                              style={{ marginBottom: '10px' }}
+                            />
                             <div style={styles.returnItemList}>
                               {returnDraft.map(item => (
                                 <div key={`${order.orderId}-${item.id}`} style={styles.returnItemCard}>
@@ -584,6 +596,8 @@ const styles = {
   tabsMobile: { flexWrap: 'nowrap', overflowX: 'auto', paddingBottom: '6px' },
   tab: { padding: '9px 16px', border: '1.5px solid #e2e8f0', borderRadius: '10px', background: '#fff', color: '#6b7280', cursor: 'pointer', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' },
   tabActive: { background: '#1a237e', borderColor: '#1a237e', color: '#fff' },
+  tabInternal: { marginLeft: 'auto', borderColor: '#f9a825', color: '#92400e' },
+  tabInternalActive: { background: '#f9a825', borderColor: '#f9a825', color: '#102548' },
   tabCount: { background: 'rgba(255,255,255,0.25)', borderRadius: '10px', padding: '1px 7px', fontSize: '11px' },
   searchBar: { marginBottom: '16px' },
   search: { width: '100%', padding: '11px 16px', border: '1.5px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', fontFamily: "'DM Sans', sans-serif", outline: 'none', background: '#fff' },

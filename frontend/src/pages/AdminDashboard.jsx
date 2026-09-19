@@ -171,7 +171,6 @@ export default function AdminDashboard() {
   const downloads = [
     { type: 'inventory', label: 'Inventory Report', note: 'Components, stock, photos, and locations' },
     { type: 'orders', label: 'Orders Report', note: 'Requests, issue status, and returns' },
-    { type: 'transfers', label: 'Center Transfer Report', note: 'Requested + sent center-to-center movement details' },
     { type: 'internal-issues', label: 'Internal Use Report', note: 'Session components, asset tags, and returns' },
     { type: 'users', label: 'Users Report', note: 'Manual users and self-registered students' },
     { type: 'logs', label: 'Activity Logs', note: 'System activity and audit trail' },

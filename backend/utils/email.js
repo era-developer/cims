@@ -1,4 +1,6 @@
 const nodemailer = require('nodemailer');
+const dns = require('dns');
+const net = require('net');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
@@ -44,12 +46,42 @@ function getSmtpConfig() {
   };
 }
 
+// This PC has no usable IPv6 route. Nodemailer resolves the SMTP host itself
+// and, whenever its A lookup comes back empty (it does intermittently under
+// the service account), it falls back to the AAAA record and caches that for
+// five minutes -- every send in that window dies with ENETUNREACH. So the
+// hostname is resolved here to an IPv4 address via the OS resolver and the
+// transport is given the IP, with the real hostname kept as the TLS server
+// name so the certificate still checks out. Falls back to the hostname if the
+// lookup itself fails.
+const RESOLVE_TTL_MS = 10 * 60 * 1000;
+let resolvedSmtp = { host: '', address: '', at: 0 };
+
+async function resolveSmtpHost(host) {
+  if (net.isIP(host)) return host;
+  if (resolvedSmtp.host === host && Date.now() - resolvedSmtp.at < RESOLVE_TTL_MS) return resolvedSmtp.address;
+  try {
+    const { address } = await dns.promises.lookup(host, { family: 4 });
+    resolvedSmtp = { host, address, at: Date.now() };
+    return address;
+  } catch (err) {
+    console.error(`[EMAIL DNS] IPv4 lookup for ${host} failed: ${err.message}`);
+    return resolvedSmtp.host === host && resolvedSmtp.address ? resolvedSmtp.address : host;
+  }
+}
+
 function createTransporter() {
   const config = getSmtpConfig();
+  const useAddress = resolvedSmtp.host === config.host && resolvedSmtp.address;
   return nodemailer.createTransport({
-    host: config.host,
+    host: useAddress ? resolvedSmtp.address : config.host,
     port: config.port,
     secure: config.secure,
+    name: 'kims.local',
+    tls: useAddress ? { servername: config.host } : undefined,
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 30000,
     auth: {
       user: config.user,
       pass: config.pass,
@@ -464,6 +496,7 @@ async function sendMessage(transporter, options) {
     return { ok: true, messageId: info.messageId || '' };
   } catch (err) {
     console.error('[EMAIL ERROR]', err.message);
+    noteSendFailure(err);
     return { ok: false, error: err.message };
   }
 }
@@ -490,6 +523,7 @@ async function verifyEmailConnection(force = false) {
   if (!verifyPromise || force) {
     verifyPromise = (async () => {
       try {
+        await resolveSmtpHost(config.host);
         const transporter = createTransporter();
         await transporter.verify();
         const result = {
@@ -525,7 +559,18 @@ async function ensureEmailReady(contextLabel) {
     console.error(`[EMAIL SKIP] ${contextLabel}: ${status.message}`);
     return false;
   }
+  // Keep the IPv4 address fresh between verifications (cheap: cached 10 min).
+  await resolveSmtpHost(getSmtpConfig().host);
   return true;
+}
+
+// A send that dies on the wire (not an SMTP rejection) means the cached
+// "verified OK" is stale; drop it so the next send re-verifies and re-resolves.
+function noteSendFailure(err) {
+  if (err && /ENETUNREACH|ECONNRESET|ETIMEDOUT|ECONNREFUSED|EHOSTUNREACH|ENOTFOUND|EAI_AGAIN/.test(String(err.code || err.message || ''))) {
+    lastVerifyResult = null;
+    resolvedSmtp = { host: '', address: '', at: 0 };
+  }
 }
 
 async function sendOrderNotification(order, centerId) {
