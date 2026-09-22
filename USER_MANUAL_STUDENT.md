@@ -1,13 +1,13 @@
-# KIMS Student User Manual
+# CIMS Student User Manual
 
-**KIMS - Kalam Pragati Inventory Management System** (ERA Foundation)
+**CIMS - Comedkares Innovation Hub Inventory Management System** (ERA Foundation)
 
-This guide explains how students register, place component requests, and complete the return flow in KIMS.
+This guide explains how students register, place component requests, and complete the return flow in CIMS.
 
 ## 1) Login and registration
 
 ### 1.1 First-time registration
-1. Open **<https://kalampragati.s.gy/kims>**.
+1. Open **<https://comedkares.s.gy/cims>**.
 2. On the login page, click `Student Register`.
 3. Fill all required fields:
    - Full name
@@ -15,7 +15,7 @@ This guide explains how students register, place component requests, and complet
    - Email
    - Mobile
    - College
-   - Center (for example `AKTU, Lucknow`)
+   - Center (your Comedkares center, for example `J P Nagar, Bengaluru`)
    - Password and confirm password
 4. Click `Submit Registration`.
 5. Wait for center admin approval before signing in.
@@ -24,11 +24,11 @@ Notes:
 - You can also register through the center registration link/QR.
 - If login says approval is pending, contact your center admin.
 
-### 1.1a Install KIMS as an app (optional)
-KIMS can be added to your phone's home screen and opens like an app:
-- **Android (Chrome):** open the KIMS link. On your first visit a small **Get KIMS as an app** window offers the install; otherwise tap **Install the KIMS app on this
+### 1.1a Install CIMS as an app (optional)
+CIMS can be added to your phone's home screen and opens like an app:
+- **Android (Chrome):** open the CIMS link. On your first visit a small **Get CIMS as an app** window offers the install; otherwise tap **Install the CIMS app on this
   phone/desktop** just below *Forgot password?* on the sign-in page (or the browser menu -> *Install app*).
-- **iPhone (Safari):** open the KIMS link, tap **Share**, then **Add to Home
+- **iPhone (Safari):** open the CIMS link, tap **Share**, then **Add to Home
   Screen**.
 The app updates itself; there is nothing to reinstall.
 
@@ -111,12 +111,12 @@ e-mail or a phone notification. Opening an entry marks it read and takes you
 to that order; **Mark all read** clears the badge.
 
 ### 4.0a Return reminder
-The day before an order's expected return date, KIMS automatically sends you
+The day before an order's expected return date, CIMS automatically sends you
 an e-mail with the full component list and the date, a phone notification (if
 enabled) and an entry in the bell. It is sent once per order.
 
 ### 4.1 Notifications on your phone
-KIMS can notify you the moment an admin acts on your order — approved,
+CIMS can notify you the moment an admin acts on your order — approved,
 rejected, a return recorded, or a reminder the day before a return is due —
 even when the portal is closed.
 
@@ -126,7 +126,7 @@ even when the portal is closed.
   to **My Profile → Notifications on this device**.
 - Each device is separate: enable it on your phone and on your laptop if you
   use both.
-- **iPhone/iPad:** notifications only work after adding KIMS to the Home Screen
+- **iPhone/iPad:** notifications only work after adding CIMS to the Home Screen
   (Share → Add to Home Screen) and opening it from there.
 - If you tapped *Block* by mistake, allow notifications for the site from the
   browser's address-bar site settings and try again.

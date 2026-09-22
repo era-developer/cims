@@ -1,10 +1,10 @@
-# KIMS Student Quick Cheat Sheet
+# CIMS Student Quick Cheat Sheet
 
-**Kalam Pragati Inventory Management System.** Use this as a fast reference during onboarding and demo sessions.
+**Comedkares Innovation Hub Inventory Management System.** Use this as a fast reference during onboarding and demo sessions.
 
 ## 1) First time setup
 
-1. Open **<https://kalampragati.s.gy/kims>**.
+1. Open **<https://comedkares.s.gy/cims>**.
 2. Click `Student Register`.
 3. Fill required fields and submit.
 4. Wait for admin approval.
@@ -45,7 +45,7 @@
 - Day before return date: automatic e-mail + phone notification + bell entry.
 - Tap **Enable** on the yellow bar (Browse page) to get order updates on this device.
 - Manage or test: `My Profile` → Notifications on this device.
-- iPhone: add KIMS to Home Screen first.
+- iPhone: add CIMS to Home Screen first.
 
 ## 5) Return process
 

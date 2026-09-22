@@ -1,18 +1,20 @@
-# KIMS Admin and Super Admin Quick Cheat Sheet
+# CIMS Admin and Super Admin Quick Cheat Sheet
 
-**Kalam Pragati Inventory Management System.** Use this one-page version for daily operations.
+**Comedkares Innovation Hub Inventory Management System.** Use this one-page version for daily operations.
 
 ## 1) Role boundaries
 
 Admin:
 - Works on own center only.
-- Handles users, inventory, orders, and My Center.
+- Handles users, inventory, orders, and My Center (procurement requests
+  and transfers from other centers).
 
 Super Admin:
 - Works across all centers.
+- Approves center-to-center transfers in `Transfers`.
 - Handles procurement requests in `Requests`.
 - Uses global analytics and center-wide exports.
-- Manages centers and notification contacts in `Settings`.
+- Manages centers, business heads and notification contacts in `Settings`.
 
 ## 2) Start-of-day checklist
 
@@ -21,6 +23,7 @@ Super Admin:
 3. Check returns (`Return Requested`, `Partially Returned`).
 4. Review low stock in `Inventory`.
 5. Review `Orders -> Internal use` for anything still out.
+6. Super admin: check `Transfers` for `Pending` requests.
 
 ## 3) Orders workflow (student requests)
 
@@ -48,7 +51,7 @@ When adding/updating component, keep:
 - invoice number
 - vendor name
 - project/purpose
-- purchased for (for example `ERA Foundation` or `Kalam Pragati`)
+- purchased for (for example `ERA Foundation` or `ComedK`)
 
 ## 5b) QR labels and scanning
 
@@ -60,6 +63,18 @@ When adding/updating component, keep:
 - Returns: `Scan returned unit` marks it Good; tap `Damaged` for the rest.
 - Swap: `Scan` inside the Swap dialog picks the unit in hand.
 
+## 5c) Transfers between centers
+
+- Ask: `My Center` -> **Request components from another center** -> add
+  components (must already be in your catalog), program, responsible person,
+  purpose -> submit. Super admins are emailed and notified.
+- Approve (super admin): `Transfers` -> `Pending` -> check quantities ->
+  pick the supply center (suggested ones have stock) -> `Approve transfer`.
+  Units move to the requesting center immediately.
+- Return: requesting admin -> **Return components** on the request (courier
+  details optional); super admin -> `Mark as returned`. Units go back.
+- Search on `Transfers`: by transfer ID, center, component, program, person.
+
 ## 6) Settings (super admin)
 
 From `Settings`:
@@ -68,12 +83,14 @@ From `Settings`:
 - Add a new center: enter the name, check the suggested code, create.
   It appears in login and every dropdown at once.
 - A center with records is deactivated, never deleted.
-- Add / rename business heads (funding entities on invoices). Launch
-  default is `ERA Foundation`.
+- Add / rename business heads (funding entities on invoices): `ERA
+  Foundation` and `ComedK` at launch.
+- Centers table shows the order email actually in use; *(default)* means
+  it comes from the `.env` hub mailbox or the org-wide address.
 
 ## 6a) Notifications
 - **Bell** (top bar): unread count; **See all** = full history with read status for every update sent to you.
-- Dashboard yellow bar → **Enable** to get new orders, return requests and registrations instantly.
+- Dashboard yellow bar → **Enable** to get new orders, return requests, registrations and transfer updates instantly.
 - Manage / test: **My Center** (admin) or **Settings** (super admin).
 - You never get a notification for an action you took yourself.
 
@@ -82,6 +99,7 @@ From `Settings`:
 From dashboard:
 - Inventory report
 - Orders report (with date range)
+- Center transfer report
 - Internal use report
 - Users report
 - Activity logs
@@ -91,3 +109,5 @@ From dashboard:
 - Request not visible: verify center filter + status filter.
 - Student cannot login after register: user still pending approval.
 - Order emails to the wrong person: fix the address in `Settings`.
+- Transfer will not approve ("not in X's catalog"): the supply center needs
+  a component with exactly that name; pick a suggested center or add it there.
