@@ -62,12 +62,23 @@ app.use('/api/procurement', require('./routes/procurement'));
 // -hosted (Drive) component photos require. Filenames are random UUIDs
 // assigned once at upload time and never reused, so it's safe to let
 // browsers cache them indefinitely instead of re-fetching on every visit.
-// URL kept as /catalog-images for every stored image path; the folder on
-// disk is data/components (see utils/storage.js).
-app.use('/catalog-images', express.static(require('./utils/storage').COMPONENT_IMAGES_DIR, {
+// URL kept as /catalog-images for every stored image path; new uploads go
+// to data/components (see utils/storage.js). Photos uploaded before that
+// layout existed still sit in data/catalog_images and are still referenced
+// by the same URLs, so that folder is served as a fallback until
+// scripts/organize-data.js has moved them. Both are optional at startup.
+const storage = require('./utils/storage');
+const legacyCatalogImagesDir = path.join(storage.DATA_ROOT, 'catalog_images');
+app.use('/catalog-images', express.static(storage.COMPONENT_IMAGES_DIR, {
   maxAge: '30d',
   immutable: true,
 }));
+if (fs.existsSync(legacyCatalogImagesDir)) {
+  app.use('/catalog-images', express.static(legacyCatalogImagesDir, {
+    maxAge: '30d',
+    immutable: true,
+  }));
+}
 
 // Serve frontend build in production
 const frontendBuild = path.join(__dirname, '../frontend/build');

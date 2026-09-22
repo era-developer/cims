@@ -231,9 +231,12 @@ router.put('/:id', authMiddleware, adminOnly, async (req, res) => {
       if (!supplyCenterId) return res.status(400).json({ message: 'Supply center selection is required' });
       const supplyCenter = requireCenter(supplyCenterId);
 
-      const approvedComponents = Array.isArray(req.body.components)
-        ? req.body.components.map(normalizeComponent).filter(item => item.id && item.qty > 0)
-        : loadTransferItems(db, row.id);
+      // loadTransferItems returns transfer_items rows (their own id, catalog
+      // id under catalogId); normalise so `id` is the catalog id either way.
+      const approvedComponents = (Array.isArray(req.body.components)
+        ? req.body.components
+        : loadTransferItems(db, row.id).map(item => ({ id: item.catalogId, name: item.name, qty: item.qty, unit: item.unit }))
+      ).map(normalizeComponent).filter(item => item.id && item.qty > 0);
       if (!approvedComponents.length) return res.status(400).json({ message: 'At least one valid component is required for approval' });
 
       db.exec('BEGIN TRANSACTION');

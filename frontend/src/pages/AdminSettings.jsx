@@ -470,10 +470,18 @@ Continue?`;
                   </td>
                   <td style={styles.td}><span style={styles.codePill}>{center.code}</span></td>
                   <td style={styles.td}>
-                    {center.notificationEmail || <span style={styles.inherited}>uses default</span>}
+                    {center.notificationEmail || (
+                      <span style={styles.inherited} title="Not set for this center; showing the .env or org-wide fallback in use">
+                        {center.effectiveEmail ? `${center.effectiveEmail} (default)` : 'uses default'}
+                      </span>
+                    )}
                   </td>
                   <td style={styles.td}>
-                    {center.whatsappNumber || <span style={styles.inherited}>uses default</span>}
+                    {center.whatsappNumber || (
+                      <span style={styles.inherited} title="Not set for this center; showing the .env or org-wide fallback in use">
+                        {center.effectiveWhatsapp ? `${center.effectiveWhatsapp} (default)` : 'uses default'}
+                      </span>
+                    )}
                   </td>
                   <td style={styles.td}>
                     <span style={center.active ? styles.activePill : styles.inactivePill}>

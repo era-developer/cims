@@ -1,5 +1,6 @@
 const { getDb } = require('./db');
-const { normalizePhone } = require('./settings');
+const settings = require('./settings');
+const { normalizePhone } = settings;
 
 // Centers used to be a hardcoded array in this file, mirrored by hand into
 // frontend/src/centers.js and seeded by scripts/migrate-to-sqlite.js. Adding a
@@ -28,6 +29,11 @@ function rowToCenter(row) {
     active: row.active === 1 || row.active === true,
     notificationEmail: row.notification_email || '',
     whatsappNumber: row.whatsapp_number || '',
+    // What notifications for this center actually go to right now, after the
+    // per-center .env and org-wide fallbacks. Lets the Settings screen show
+    // the real destination instead of a bare "uses default".
+    effectiveEmail: settings.getOrderEmail(row.id, row),
+    effectiveWhatsapp: settings.getWhatsAppAdmin(row.id, row),
     createdAt: row.created_at || null,
     updatedAt: row.updated_at || null,
   };

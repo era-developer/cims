@@ -121,7 +121,7 @@ function getOrgShortName() {
 }
 
 function getOrgTagline() {
-  return resolve(KEYS.ORG_TAGLINE, ['ORG_TAGLINE'], 'Innovation Hub');
+  return resolve(KEYS.ORG_TAGLINE, ['ORG_TAGLINE'], 'Comedkares Innovation Hub');
 }
 
 function getSiteUrl() {
@@ -148,17 +148,32 @@ function centerField(centerRow, camelKey, snakeKey) {
   return String(value || '').trim();
 }
 
+// The pre-Settings way of routing per center: JP_NAGAR_EMAIL=..., or
+// JP_NAGAR_WHATSAPP_ADMIN_TO=..., in backend/.env. The nine-center CIMS .env
+// still carries one hub mailbox per center this way.
+function readCenterEnv(centerId, keySuffix) {
+  if (!centerId) return '';
+  return readEnv(`${String(centerId).toUpperCase().replace(/-/g, '_')}_${keySuffix}`);
+}
+
 // Per-center value wins over the org-wide default, mirroring the env-var
-// precedence ({CENTER_ID}_EMAIL beat CENTER_EMAIL) that this replaces.
+// precedence ({CENTER_ID}_EMAIL beat CENTER_EMAIL) that this replaces. The
+// per-center env var sits between the two: a center's own mailbox from .env
+// must not be shadowed by the org-wide CENTER_EMAIL fallback, or every
+// center's order mail would silently land in one inbox.
 function getOrderEmail(centerId, centerRow = null) {
   const perCenter = centerField(centerRow, 'notificationEmail', 'notification_email');
   if (perCenter) return perCenter;
+  const perCenterEnv = readCenterEnv(centerId, 'EMAIL');
+  if (perCenterEnv) return perCenterEnv;
   return resolve(KEYS.ORDER_EMAIL, ['CENTER_EMAIL', 'SMTP_USER'], '');
 }
 
 function getWhatsAppAdmin(centerId, centerRow = null) {
   const perCenter = centerField(centerRow, 'whatsappNumber', 'whatsapp_number');
   if (perCenter) return perCenter;
+  const perCenterEnv = readCenterEnv(centerId, 'WHATSAPP_ADMIN_TO');
+  if (perCenterEnv) return normalizePhone(perCenterEnv);
   return resolve(KEYS.WHATSAPP_ADMIN, ['N8N_WHATSAPP_ADMIN_TO'], '');
 }
 
@@ -194,5 +209,6 @@ module.exports = {
   getEmailSenderName,
   getOrderEmail,
   getWhatsAppAdmin,
+  readCenterEnv,
   getAllResolved,
 };

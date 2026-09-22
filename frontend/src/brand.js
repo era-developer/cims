@@ -18,7 +18,7 @@ function env(name, fallback) {
 
 export const ORG_NAME = env('REACT_APP_ORG_NAME', 'Comedkares Innovation Hub');
 export const APP_SHORT_NAME = env('REACT_APP_APP_SHORT_NAME', 'CIMS');
-export const APP_SUBTITLE = env('REACT_APP_ORG_TAGLINE', 'Innovation Hub');
+export const APP_SUBTITLE = env('REACT_APP_ORG_TAGLINE', 'Comedkares Innovation Hub');
 
 export const APP_LONG_NAME = env(
   'REACT_APP_APP_LONG_NAME',
