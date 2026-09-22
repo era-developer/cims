@@ -79,7 +79,11 @@ What happens on submit:
 - Order is created with status `Pending`.
 - The requested quantity is reserved from live stock.
 - Admin gets notification for review.
-- A `Send WhatsApp to Admin` button appears so you can notify the center admin directly.
+- A `Send WhatsApp to Admin` button appears so you can notify the center admin
+  directly, and WhatsApp opens by itself after 5 seconds with the message
+  already written (order ID, your name, program and items). If your center has
+  no WhatsApp number configured the button is not shown; the order is still
+  placed and emailed either way.
 
 ## 4) Track order status
 
