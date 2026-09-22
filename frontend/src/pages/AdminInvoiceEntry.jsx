@@ -18,14 +18,36 @@ const EMPTY_LINE_ITEM = {
   unitPrice: '',
   gstPercent: 18,
   purchasedFor: '',
-  isBulk: false,
+  // Asset tags are always generated. Manufacturer serials are opt-in, and QR
+  // labels are opt-out (bulk consumables are never labelled one by one).
+  recordSerials: false,
   serialNumbersText: '',
+  printLabels: true,
+  labelsTouched: false,
   image: '',
   hasWarranty: false,
   warrantyUntil: '',
 };
 
 const EMPTY_EDIT_NEW_LINE_ITEM = { ...EMPTY_LINE_ITEM };
+
+// A line of this many units or more is almost always a reel or a bag, so the
+// "print QR labels" box unticks itself until the admin says otherwise.
+const BULK_QTY_THRESHOLD = 25;
+
+function serialList(li) {
+  return li.recordSerials ? (li.serialNumbersText || '').split(/[,\n]/).map(s => s.trim()).filter(Boolean) : [];
+}
+
+// The quantity is the best signal for "bulk"; follow it until the admin has
+// touched the labels box by hand.
+function withLabelDefault(li, field, value) {
+  const next = { ...li, [field]: value };
+  if (field === 'billQuantity' && !li.labelsTouched) {
+    next.printLabels = !(Number(value) >= BULK_QTY_THRESHOLD);
+  }
+  return next;
+}
 
 function calcLineItem(li) {
   const qty = Number(li.billQuantity) || 0;
@@ -134,7 +156,7 @@ export default function AdminInvoiceEntry() {
   }
 
   function updateLineItem(index, field, value) {
-    setLineItems(items => items.map((li, i) => (i === index ? { ...li, [field]: value } : li)));
+    setLineItems(items => items.map((li, i) => (i === index ? withLabelDefault(li, field, value) : li)));
   }
 
   function addLineItem() {
@@ -172,8 +194,9 @@ export default function AdminInvoiceEntry() {
         unitPrice: Number(li.unitPrice),
         gstPercent: Number(li.gstPercent) || 0,
         purchasedFor: li.purchasedFor.trim(),
-        isBulk: li.isBulk,
-        serialNumbers: li.serialNumbersText.split(/[,\n]/).map(s => s.trim()).filter(Boolean),
+        isBulk: !li.recordSerials,
+        serialNumbers: serialList(li),
+        printLabels: li.printLabels !== false,
         image: li.image.trim(),
         hasWarranty: li.hasWarranty,
         warrantyUntil: li.hasWarranty ? li.warrantyUntil : '',
@@ -184,9 +207,11 @@ export default function AdminInvoiceEntry() {
     try {
       const { data: saved } = await axios.post('/api/invoices', payload);
       const unitCount = (saved.lineItems || []).reduce((n, li) => n + (li.assets || []).length, 0);
-      setJustCreated({ invoiceId: saved.id, invoiceNumber: saved.invoiceNumber, count: unitCount });
+      const labelCount = (saved.lineItems || []).reduce((n, li) => n + (li.assets || []).filter(a => a.needsLabel !== false).length, 0);
+      setJustCreated({ invoiceId: saved.id, invoiceNumber: saved.invoiceNumber, count: labelCount });
       setMsgType('success');
-      setMsg(`Invoice ${saved.invoiceNumber} recorded: ${unitCount} unit${unitCount === 1 ? '' : 's'} added with asset tags.`);
+      setMsg(`Invoice ${saved.invoiceNumber} recorded: ${unitCount} unit${unitCount === 1 ? '' : 's'} added with asset tags`
+        + (labelCount < unitCount ? ` (${unitCount - labelCount} bulk, no labels).` : '.'));
       setHeader({ vendorName: '', invoiceNumber: '', invoiceDate: '', projectName: '', businessHeadName: '', installationCharges: '', freightCharges: '' });
       setOtherProjectName('');
       setLineItems([{ ...EMPTY_LINE_ITEM }]);
@@ -317,7 +342,8 @@ export default function AdminInvoiceEntry() {
       lineItems: selectedInvoice.lineItems.map(li => ({
         isExisting: true, id: li.id, assetName: li.asset_name, billQuantity: li.bill_quantity,
         unitPrice: li.unit_price ?? '', gstPercent: li.gst_percent, purchasedFor: li.purchased_for || '',
-        description: li.description || '', image: li.image || '', isBulk: false, serialNumbersText: '',
+        description: li.description || '', image: li.image || '',
+        recordSerials: false, serialNumbersText: '', printLabels: undefined, labelsTouched: false,
         hasWarranty: !!li.has_warranty, warrantyUntil: li.warranty_until || '',
       })),
     });
@@ -327,7 +353,7 @@ export default function AdminInvoiceEntry() {
   }
 
   function updateEditLineItem(index, field, value) {
-    setEditForm(f => ({ ...f, lineItems: f.lineItems.map((li, i) => (i === index ? { ...li, [field]: value } : li)) }));
+    setEditForm(f => ({ ...f, lineItems: f.lineItems.map((li, i) => (i === index ? withLabelDefault(li, field, value) : li)) }));
   }
 
   function addEditLineItem() {
@@ -353,13 +379,17 @@ export default function AdminInvoiceEntry() {
           id: li.id, billQuantity: Number(li.billQuantity), unitPrice: Number(li.unitPrice),
           gstPercent: Number(li.gstPercent) || 0, purchasedFor: li.purchasedFor,
           description: li.description, image: li.image,
-          isBulk: li.isBulk, serialNumbers: (li.serialNumbersText || '').split(/[,\n]/).map(s => s.trim()).filter(Boolean),
+          isBulk: !li.recordSerials, serialNumbers: serialList(li),
+          // Only sent once the admin has touched the box; otherwise new units
+          // follow the line item's existing ones.
+          ...(li.labelsTouched ? { printLabels: li.printLabels !== false } : {}),
           hasWarranty: li.hasWarranty, warrantyUntil: li.hasWarranty ? li.warrantyUntil : '',
         } : {
           classificationId: Number(li.classificationId), assetName: li.assetName.trim(), description: li.description.trim(),
           billQuantity: Number(li.billQuantity), unit: li.unit || 'pcs', unitPrice: Number(li.unitPrice),
           gstPercent: Number(li.gstPercent) || 0, purchasedFor: li.purchasedFor.trim(),
-          isBulk: li.isBulk, serialNumbers: li.serialNumbersText.split(/[,\n]/).map(s => s.trim()).filter(Boolean),
+          isBulk: !li.recordSerials, serialNumbers: serialList(li),
+          printLabels: li.printLabels !== false,
           image: li.image.trim(),
           hasWarranty: li.hasWarranty, warrantyUntil: li.hasWarranty ? li.warrantyUntil : '',
         })),
@@ -522,15 +552,26 @@ export default function AdminInvoiceEntry() {
                   <Field label="Purchased For">
                     <input style={styles.input} value={li.purchasedFor} onChange={e => updateLineItem(index, 'purchasedFor', e.target.value)} />
                   </Field>
-                  <Field label={li.isBulk
-                    ? 'Batch / Lot Reference (optional, one value applied to all units)'
-                    : 'Serial Numbers (one per unit, comma/newline separated — required for critical electronics like Raspberry Pi / Jetson / ESP32 / Arduino / sensors)'}>
+<Field label="Unit tracking">
                     <label style={styles.bulkCheckboxRow}>
-                      <input type="checkbox" checked={li.isBulk} onChange={e => updateLineItem(index, 'isBulk', e.target.checked)} />
-                      <span>Bulk item — one shared reference for the whole quantity (skip individual serials)</span>
+                      <input type="checkbox" checked={li.printLabels !== false}
+                        onChange={e => { updateLineItem(index, 'printLabels', e.target.checked); updateLineItem(index, 'labelsTouched', true); }} />
+                      <span>Print QR labels for these units</span>
                     </label>
-                    <textarea style={{ ...styles.input, height: '52px' }} value={li.serialNumbersText}
-                      onChange={e => updateLineItem(index, 'serialNumbersText', e.target.value)} />
+                    <div style={styles.fieldHint}>
+                      Untick for bulk consumables (resistors, jumper wires, screws) that are never labelled one by one.
+                      Switches off by itself for quantities of {BULK_QTY_THRESHOLD} or more; change it as needed.
+                    </div>
+                    <label style={{ ...styles.bulkCheckboxRow, marginTop: '8px' }}>
+                      <input type="checkbox" checked={!!li.recordSerials}
+                        onChange={e => updateLineItem(index, 'recordSerials', e.target.checked)} />
+                      <span>Record manufacturer serial numbers (optional)</span>
+                    </label>
+                    {li.recordSerials && (
+                      <textarea style={{ ...styles.input, height: '52px', marginTop: '6px' }} value={li.serialNumbersText}
+                        placeholder="One per unit, in order -- comma or newline separated. Missing ones are left blank."
+                        onChange={e => updateLineItem(index, 'serialNumbersText', e.target.value)} />
+                    )}
                   </Field>
                   <Field label="Warranty">
                     <label style={styles.bulkCheckboxRow}>
@@ -692,16 +733,27 @@ export default function AdminInvoiceEntry() {
                             <textarea style={{ ...styles.input, height: '42px' }} value={li.description}
                               onChange={e => updateEditLineItem(index, 'description', e.target.value)} />
                           </Field>
-                          <Field label={li.isBulk
-                            ? 'Batch / Lot Reference for NEW units only (applied to all new units added by a quantity increase)'
-                            : 'Serial Numbers for NEW units only (used only if you increase Bill Quantity above)'}>
-                            <label style={styles.bulkCheckboxRow}>
-                              <input type="checkbox" checked={li.isBulk} onChange={e => updateEditLineItem(index, 'isBulk', e.target.checked)} />
-                              <span>Bulk item — one shared reference (skip individual serials)</span>
-                            </label>
-                            <textarea style={{ ...styles.input, height: '42px' }} value={li.serialNumbersText}
-                              onChange={e => updateEditLineItem(index, 'serialNumbersText', e.target.value)} />
-                          </Field>
+<Field label="Unit tracking for NEW units added by a quantity increase">
+                    <label style={styles.bulkCheckboxRow}>
+                      <input type="checkbox" checked={li.printLabels !== false}
+                        onChange={e => { updateEditLineItem(index, 'printLabels', e.target.checked); updateEditLineItem(index, 'labelsTouched', true); }} />
+                      <span>Print QR labels for these units</span>
+                    </label>
+                    <div style={styles.fieldHint}>
+                      Untick for bulk consumables (resistors, jumper wires, screws) that are never labelled one by one.
+                      Switches off by itself for quantities of {BULK_QTY_THRESHOLD} or more; change it as needed.
+                    </div>
+                    <label style={{ ...styles.bulkCheckboxRow, marginTop: '8px' }}>
+                      <input type="checkbox" checked={!!li.recordSerials}
+                        onChange={e => updateEditLineItem(index, 'recordSerials', e.target.checked)} />
+                      <span>Record manufacturer serial numbers (optional)</span>
+                    </label>
+                    {li.recordSerials && (
+                      <textarea style={{ ...styles.input, height: '52px', marginTop: '6px' }} value={li.serialNumbersText}
+                        placeholder="One per unit, in order -- comma or newline separated. Missing ones are left blank."
+                        onChange={e => updateEditLineItem(index, 'serialNumbersText', e.target.value)} />
+                    )}
+                  </Field>
                           <Field label="Warranty (applies to this batch's units)">
                             <label style={styles.bulkCheckboxRow}>
                               <input type="checkbox" checked={li.hasWarranty}
@@ -756,16 +808,27 @@ export default function AdminInvoiceEntry() {
                           <Field label="Purchased For">
                             <input style={styles.input} value={li.purchasedFor} onChange={e => updateEditLineItem(index, 'purchasedFor', e.target.value)} />
                           </Field>
-                          <Field label={li.isBulk
-                            ? 'Batch / Lot Reference (optional, applied to all units)'
-                            : 'Serial Numbers (required for critical electronics)'}>
-                            <label style={styles.bulkCheckboxRow}>
-                              <input type="checkbox" checked={li.isBulk} onChange={e => updateEditLineItem(index, 'isBulk', e.target.checked)} />
-                              <span>Bulk item — one shared reference (skip individual serials)</span>
-                            </label>
-                            <textarea style={{ ...styles.input, height: '42px' }} value={li.serialNumbersText}
-                              onChange={e => updateEditLineItem(index, 'serialNumbersText', e.target.value)} />
-                          </Field>
+<Field label="Unit tracking">
+                    <label style={styles.bulkCheckboxRow}>
+                      <input type="checkbox" checked={li.printLabels !== false}
+                        onChange={e => { updateEditLineItem(index, 'printLabels', e.target.checked); updateEditLineItem(index, 'labelsTouched', true); }} />
+                      <span>Print QR labels for these units</span>
+                    </label>
+                    <div style={styles.fieldHint}>
+                      Untick for bulk consumables (resistors, jumper wires, screws) that are never labelled one by one.
+                      Switches off by itself for quantities of {BULK_QTY_THRESHOLD} or more; change it as needed.
+                    </div>
+                    <label style={{ ...styles.bulkCheckboxRow, marginTop: '8px' }}>
+                      <input type="checkbox" checked={!!li.recordSerials}
+                        onChange={e => updateEditLineItem(index, 'recordSerials', e.target.checked)} />
+                      <span>Record manufacturer serial numbers (optional)</span>
+                    </label>
+                    {li.recordSerials && (
+                      <textarea style={{ ...styles.input, height: '52px', marginTop: '6px' }} value={li.serialNumbersText}
+                        placeholder="One per unit, in order -- comma or newline separated. Missing ones are left blank."
+                        onChange={e => updateEditLineItem(index, 'serialNumbersText', e.target.value)} />
+                    )}
+                  </Field>
                           <Field label="Warranty">
                             <label style={styles.bulkCheckboxRow}>
                               <input type="checkbox" checked={li.hasWarranty}
@@ -940,6 +1003,7 @@ const styles = {
   stockHint: { fontSize: '11px', color: '#2e7d32', fontWeight: 600 },
   stockHintNew: { fontSize: '11px', color: '#ef6c00', fontWeight: 600 },
   bulkCheckboxRow: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#374151', fontWeight: 600, marginBottom: '4px', cursor: 'pointer' },
+  fieldHint: { fontSize: '11px', color: '#6b7280', lineHeight: 1.45, marginTop: '2px' },
   lineItemCard: { border: '1.5px solid #eef1f8', borderRadius: '12px', padding: '16px', marginBottom: '12px', background: '#fafbfe' },
   lineItemFooter: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px' },
   lineItemCalc: { fontSize: '12px', color: '#475569', fontWeight: 600 },

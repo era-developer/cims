@@ -9,7 +9,6 @@ const { authMiddleware, adminOnly, superAdminOnly } = require('../middleware/aut
 const { requireCenter, listCenters, getCenterById } = require('../utils/centers');
 const { listBusinessHeads } = require('../utils/businessHeads');
 const { getOrgName, getOrgShortName } = require('../utils/settings');
-const { isCriticalAssetName } = require('../utils/classifications');
 const { createAssetTagGenerator } = require('../utils/assetTag');
 
 const router = express.Router();
@@ -511,8 +510,8 @@ router.post('/', authMiddleware, superAdminOnly, (req, res) => {
       INSERT INTO assets
         (id, asset_tag, center_id, catalog_id, invoice_line_item_id, classification_id, name,
          description, unit, unit_value, serial_number, location, status, is_legacy, active, added_date, image,
-         has_warranty, warranty_until)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'available', 0, 1, ?, ?, ?, ?)
+         has_warranty, warranty_until, needs_label)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'available', 0, 1, ?, ?, ?, ?, ?)
     `);
     const insertEvent = db.prepare(`
       INSERT INTO asset_lifecycle_events (asset_id, event_type, from_status, to_status, center_id, notes, performed_by, occurred_at)
@@ -537,25 +536,25 @@ router.post('/', authMiddleware, superAdminOnly, (req, res) => {
 
       const catalogId = getOrCreateCatalog(db, center.id, li.assetName, li.classificationId, li.unit, li.image, li.description);
       const catalogTagCode = db.prepare('SELECT tag_code FROM product_catalog WHERE id = ?').get(catalogId)?.tag_code;
-      const isCritical = isCriticalAssetName(li.assetName);
+      // Asset tags are always generated; manufacturer serial numbers are
+      // optional and only recorded when the form supplied them (one per
+      // unit, in order). A single shared reference ("bulk") applies to all.
       const isBulk = !!li.isBulk;
       const providedSerials = Array.isArray(li.serialNumbers) ? li.serialNumbers : [];
       const bulkReference = isBulk ? (providedSerials[0] || null) : null;
+      const needsLabel = li.printLabels === false ? 0 : 1;
       const assets = [];
       for (let unitIndex = 0; unitIndex < li.billQuantity; unitIndex += 1) {
         const assetId = crypto.randomUUID();
         const assetTag = nextAssetTag(center.code, center.id, li.classificationId, classification.name, catalogId, catalogTagCode);
         const serialNumber = isBulk ? bulkReference : (providedSerials[unitIndex] || null);
-        if (isCritical && !isBulk && !serialNumber) {
-          throw new Error(`${li.assetName}: serial number required for each unit (critical electronics) -- or check "Bulk item" if individual serials aren't available.`);
-        }
         insertAsset.run(
           assetId, assetTag, center.id, catalogId, lineItemId, li.classificationId, li.assetName,
           null, li.unit || 'pcs', li.unitPrice, serialNumber, null, now, null,
-          li.hasWarranty ? 1 : 0, li.warrantyUntil
+          li.hasWarranty ? 1 : 0, li.warrantyUntil, needsLabel
         );
         insertEvent.run(assetId, center.id, req.user.username, now);
-        assets.push({ id: assetId, assetTag, serialNumber });
+        assets.push({ id: assetId, assetTag, serialNumber, needsLabel: needsLabel === 1 });
       }
       createdLineItems.push({ id: lineItemId, ...li, assets });
     }
@@ -633,10 +632,15 @@ router.put('/:id', authMiddleware, superAdminOnly, (req, res) => {
         if (newQuantity > li.bill_quantity) {
           const toAdd = newQuantity - li.bill_quantity;
           const classification = db.prepare('SELECT id, name FROM classifications WHERE id = ?').get(li.classification_id);
-          const isCritical = isCriticalAssetName(li.asset_name);
           const isBulk = !!update?.isBulk;
           const providedSerials = Array.isArray(update.serialNumbers) ? update.serialNumbers : [];
           const bulkReference = isBulk ? (providedSerials[0] || null) : null;
+          // New units follow the line item's existing units unless the form
+          // says otherwise, so topping up a reel of resistors stays unlabelled.
+          const siblingLabel = db.prepare('SELECT needs_label FROM assets WHERE invoice_line_item_id = ? LIMIT 1').get(li.id);
+          const needsLabel = update.printLabels === undefined
+            ? (siblingLabel ? siblingLabel.needs_label : 1)
+            : (update.printLabels === false ? 0 : 1);
           // Prefer the catalog an existing unit from this SAME line item is
           // already grouped under -- authoritative regardless of any name
           // drift -- and only fall back to a name lookup if this line item
@@ -650,16 +654,13 @@ router.put('/:id', authMiddleware, superAdminOnly, (req, res) => {
             const assetId = crypto.randomUUID();
             const assetTag = nextAssetTag(center.code, center.id, li.classification_id, classification.name, catalogRow?.id, catalogRow?.tag_code);
             const serialNumber = isBulk ? bulkReference : (providedSerials[i] || null);
-            if (isCritical && !isBulk && !serialNumber) {
-              throw new Error(`${li.asset_name}: serial number required for each additional unit (critical electronics) -- or check "Bulk item" if individual serials aren't available.`);
-            }
             db.prepare(`
               INSERT INTO assets
                 (id, asset_tag, center_id, catalog_id, invoice_line_item_id, classification_id, name,
-                 unit, unit_value, serial_number, status, is_legacy, active, added_date, has_warranty, warranty_until)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'available', 0, 1, ?, ?, ?)
+                 unit, unit_value, serial_number, status, is_legacy, active, added_date, has_warranty, warranty_until, needs_label)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'available', 0, 1, ?, ?, ?, ?)
             `).run(assetId, assetTag, center.id, catalogRow?.id || null, li.id, li.classification_id, li.asset_name,
-                   li.unit, unitPrice, serialNumber, new Date().toISOString(), hasWarranty ? 1 : 0, warrantyUntil);
+                   li.unit, unitPrice, serialNumber, new Date().toISOString(), hasWarranty ? 1 : 0, warrantyUntil, needsLabel);
             db.prepare(`
               INSERT INTO asset_lifecycle_events (asset_id, event_type, from_status, to_status, center_id, notes, performed_by)
               VALUES (?, 'procured', NULL, 'available', ?, 'Added via invoice edit (quantity increase)', ?)
@@ -731,25 +732,22 @@ router.put('/:id', authMiddleware, superAdminOnly, (req, res) => {
 
       const catalogId = getOrCreateCatalog(db, center.id, li.assetName, Number(li.classificationId), li.unit, li.image, li.description);
       const catalogTagCode = db.prepare('SELECT tag_code FROM product_catalog WHERE id = ?').get(catalogId)?.tag_code;
-      const isCritical = isCriticalAssetName(li.assetName);
       const isBulk = !!li.isBulk;
       const providedSerials = Array.isArray(li.serialNumbers) ? li.serialNumbers : [];
       const bulkReference = isBulk ? (providedSerials[0] || null) : null;
+      const needsLabel = li.printLabels === false ? 0 : 1;
       const now = new Date().toISOString();
       for (let i = 0; i < billQuantity; i += 1) {
         const assetId = crypto.randomUUID();
         const assetTag = nextAssetTag(center.code, center.id, Number(li.classificationId), classification.name, catalogId, catalogTagCode);
         const serialNumber = isBulk ? bulkReference : (providedSerials[i] || null);
-        if (isCritical && !isBulk && !serialNumber) {
-          throw new Error(`${li.assetName}: serial number required for each unit (critical electronics) -- or check "Bulk item" if individual serials aren't available.`);
-        }
         db.prepare(`
           INSERT INTO assets
             (id, asset_tag, center_id, catalog_id, invoice_line_item_id, classification_id, name,
-             unit, unit_value, serial_number, status, is_legacy, active, added_date, has_warranty, warranty_until)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'available', 0, 1, ?, ?, ?)
+             unit, unit_value, serial_number, status, is_legacy, active, added_date, has_warranty, warranty_until, needs_label)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'available', 0, 1, ?, ?, ?, ?)
         `).run(assetId, assetTag, center.id, catalogId, lineItemId, Number(li.classificationId), li.assetName,
-               li.unit || 'pcs', unitPrice, serialNumber, now, hasWarranty ? 1 : 0, warrantyUntil);
+               li.unit || 'pcs', unitPrice, serialNumber, now, hasWarranty ? 1 : 0, warrantyUntil, needsLabel);
         db.prepare(`
           INSERT INTO asset_lifecycle_events (asset_id, event_type, from_status, to_status, center_id, notes, performed_by, occurred_at)
           VALUES (?, 'procured', NULL, 'available', ?, 'Added via invoice edit (new line item)', ?, ?)

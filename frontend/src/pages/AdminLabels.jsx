@@ -32,6 +32,9 @@ export default function AdminLabels() {
   const [error, setError] = useState('');
   const [size, setSize] = useState('medium');
   const [statusFilter, setStatusFilter] = useState('all');
+  // Units whose invoice line was marked "no QR labels" (bulk consumables) are
+  // hidden until asked for, so a reel of resistors does not swamp the list.
+  const [includeBulk, setIncludeBulk] = useState(false);
   const [selected, setSelected] = useState(() => new Set());
 
   useEffect(() => {
@@ -55,7 +58,7 @@ export default function AdminLabels() {
         }
         rows.sort((a, b) => String(a.asset_tag).localeCompare(String(b.asset_tag), undefined, { numeric: true }));
         setAssets(rows);
-        setSelected(new Set(rows.filter(r => r.status !== 'disposed').map(r => r.id)));
+        setSelected(new Set(rows.filter(r => r.status !== 'disposed' && r.needs_label !== 0).map(r => r.id)));
       } catch (err) {
         setError(err?.response?.data?.message || 'Unable to load units');
       } finally {
@@ -65,9 +68,10 @@ export default function AdminLabels() {
     load();
   }, [params, user]);
 
+  const bulkCount = useMemo(() => assets.filter(a => a.needs_label === 0).length, [assets]);
   const visible = useMemo(
-    () => assets.filter(a => statusFilter === 'all' || a.status === statusFilter),
-    [assets, statusFilter]
+    () => assets.filter(a => (statusFilter === 'all' || a.status === statusFilter) && (includeBulk || a.needs_label !== 0)),
+    [assets, statusFilter, includeBulk]
   );
   const toPrint = visible.filter(a => selected.has(a.id));
   const s = SIZES[size];
@@ -126,6 +130,12 @@ export default function AdminLabels() {
               <option value="damaged">Damaged</option>
             </select>
           </label>
+          {bulkCount > 0 && (
+            <label style={{ ...styles.control, flexDirection: 'row', alignItems: 'center', gap: '6px' }}>
+              <input type="checkbox" checked={includeBulk} onChange={e => setIncludeBulk(e.target.checked)} />
+              Include {bulkCount} bulk unit{bulkCount === 1 ? '' : 's'} (no labels by default)
+            </label>
+          )}
           <button type="button" style={styles.secondaryBtn} onClick={() => setSelected(new Set(visible.map(a => a.id)))}>Select all</button>
           <button type="button" style={styles.secondaryBtn} onClick={() => setSelected(new Set())}>Clear</button>
           <button type="button" style={styles.primaryBtn} onClick={() => window.print()} disabled={!toPrint.length}>Print {toPrint.length} label{toPrint.length === 1 ? '' : 's'}</button>

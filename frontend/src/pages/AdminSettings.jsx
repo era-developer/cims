@@ -36,7 +36,7 @@ export default function AdminSettings() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
-  const [notifyForm, setNotifyForm] = useState({ orderEmail: '', whatsappAdmin: '' });
+  const [notifyForm, setNotifyForm] = useState({ orderEmail: '', whatsappAdmin: '', superAdminEmail: '', supportEmail: '', supportWhatsapp: '' });
   const [savingNotify, setSavingNotify] = useState(false);
   const [testing, setTesting] = useState(''); // 'email' | 'whatsapp' | ''
   const [testResult, setTestResult] = useState(null); // { ok, text }
@@ -67,6 +67,9 @@ export default function AdminSettings() {
       setNotifyForm({
         orderEmail: settingsRes.data.orderEmail || '',
         whatsappAdmin: settingsRes.data.whatsappAdmin || '',
+        superAdminEmail: settingsRes.data.superAdminEmail || '',
+        supportEmail: settingsRes.data.supportEmail || '',
+        supportWhatsapp: settingsRes.data.supportWhatsapp || '',
       });
       setCenters(Array.isArray(centersRes.data) ? centersRes.data : []);
       setHeads(Array.isArray(headsRes.data) ? headsRes.data : []);
@@ -94,7 +97,10 @@ export default function AdminSettings() {
       setSettings(data);
       // Echo back what the server stored: it normalises phone numbers, so the
       // field should show the saved form, not what was typed.
-      setNotifyForm({ orderEmail: data.orderEmail || '', whatsappAdmin: data.whatsappAdmin || '' });
+      setNotifyForm({
+        orderEmail: data.orderEmail || '', whatsappAdmin: data.whatsappAdmin || '',
+        superAdminEmail: data.superAdminEmail || '', supportEmail: data.supportEmail || '', supportWhatsapp: data.supportWhatsapp || '',
+      });
       flash('Notification settings saved.');
     } catch (err) {
       setError(err?.response?.data?.message || 'Unable to save settings');
@@ -105,13 +111,15 @@ export default function AdminSettings() {
 
   // Sends a test to whatever is currently typed in the field -- not the saved
   // value -- so a new address or number can be checked before committing it.
-  async function sendTest(kind) {
-    setTesting(kind);
+  // `field` names which input is being tested, so each button shows its own
+  // "Sending..." state.
+  async function sendTest(kind, field) {
+    setTesting(field);
     setTestResult(null);
     try {
       const { data } = kind === 'email'
-        ? await axios.post('/api/admin/settings/test-email', { to: notifyForm.orderEmail })
-        : await axios.post('/api/admin/settings/test-whatsapp', { to: notifyForm.whatsappAdmin });
+        ? await axios.post('/api/admin/settings/test-email', { to: notifyForm[field] })
+        : await axios.post('/api/admin/settings/test-whatsapp', { to: notifyForm[field] });
       setTestResult({ ok: true, text: data.message });
     } catch (err) {
       setTestResult({ ok: false, text: err?.response?.data?.message || `Unable to send test ${kind}` });
@@ -323,13 +331,16 @@ Continue?`;
 
       {/* ---------- Notification contacts ---------- */}
       <div style={styles.card}>
-        <h2 style={styles.cardTitle}>Order notifications</h2>
+        <h2 style={styles.cardTitle}>Notification contacts</h2>
         <p style={styles.cardHint}>
-          Where new order alerts are sent when a center has no contact of its own.
-          Changes take effect immediately -- no restart needed.
+          <strong>Each center has its own order email and WhatsApp number</strong> -- set them per center
+          with <em>Edit</em> in the Centers table below; they take priority for that center's orders.
+          The org-wide values here are the fallback for any center without one, plus the super admin
+          and support contacts. Changes take effect immediately -- no restart needed.
         </p>
 
         <form onSubmit={saveNotify}>
+          <div style={styles.subheading}>Fallback for centers without their own contact</div>
           <div style={{ ...styles.formGrid, ...(isMobile ? styles.formGridMobile : {}) }}>
             <Field
               label="Order notification email"
@@ -337,9 +348,10 @@ Continue?`;
               onChange={value => setNotifyForm(current => ({ ...current, orderEmail: value }))}
               placeholder="orders@example.org"
               type="email"
+              hint="New student orders for a center that has no email of its own."
               action={{
-                label: testing === 'email' ? 'Sending...' : 'Send test email',
-                onClick: () => sendTest('email'),
+                label: testing === 'orderEmail' ? 'Sending...' : 'Send test email',
+                onClick: () => sendTest('email', 'orderEmail'),
                 disabled: !!testing || !notifyForm.orderEmail,
               }}
             />
@@ -348,11 +360,55 @@ Continue?`;
               value={notifyForm.whatsappAdmin}
               onChange={value => setNotifyForm(current => ({ ...current, whatsappAdmin: value }))}
               placeholder="9686737460"
-              hint="10 digits assumes +91; include a country code for anything else."
+              hint="Students are handed to this number after ordering when their center has none. 10 digits assumes +91."
               action={{
-                label: testing === 'whatsapp' ? 'Sending...' : 'Send test message',
-                onClick: () => sendTest('whatsapp'),
+                label: testing === 'whatsappAdmin' ? 'Sending...' : 'Send test message',
+                onClick: () => sendTest('whatsapp', 'whatsappAdmin'),
                 disabled: !!testing || !notifyForm.whatsappAdmin,
+              }}
+            />
+          </div>
+
+          <div style={styles.subheading}>Super admin</div>
+          <div style={{ ...styles.formGrid, ...(isMobile ? styles.formGridMobile : {}) }}>
+            <Field
+              label="Super admin email"
+              value={notifyForm.superAdminEmail}
+              onChange={value => setNotifyForm(current => ({ ...current, superAdminEmail: value }))}
+              placeholder="superadmin@example.org"
+              type="email"
+              hint="Receives center-to-center transfer requests and component (procurement) requests raised by centers."
+              action={{
+                label: testing === 'superAdminEmail' ? 'Sending...' : 'Send test email',
+                onClick: () => sendTest('email', 'superAdminEmail'),
+                disabled: !!testing || !notifyForm.superAdminEmail,
+              }}
+            />
+          </div>
+
+          <div style={styles.subheading}>Support contact (shown to students under Help)</div>
+          <div style={{ ...styles.formGrid, ...(isMobile ? styles.formGridMobile : {}) }}>
+            <Field
+              label="Support email"
+              value={notifyForm.supportEmail}
+              onChange={value => setNotifyForm(current => ({ ...current, supportEmail: value }))}
+              placeholder="Leave blank to use the super admin email"
+              type="email"
+              action={{
+                label: testing === 'supportEmail' ? 'Sending...' : 'Send test email',
+                onClick: () => sendTest('email', 'supportEmail'),
+                disabled: !!testing || !notifyForm.supportEmail,
+              }}
+            />
+            <Field
+              label="Support WhatsApp number"
+              value={notifyForm.supportWhatsapp}
+              onChange={value => setNotifyForm(current => ({ ...current, supportWhatsapp: value }))}
+              placeholder="Leave blank to use the admin WhatsApp number"
+              action={{
+                label: testing === 'supportWhatsapp' ? 'Sending...' : 'Send test message',
+                onClick: () => sendTest('whatsapp', 'supportWhatsapp'),
+                disabled: !!testing || !notifyForm.supportWhatsapp,
               }}
             />
           </div>
@@ -612,6 +668,7 @@ const styles = {
   subCardTitle: { fontSize: '15px', fontWeight: 700, color: '#1a1a2e', margin: '0 0 12px' },
   cardHint: { color: '#6b7280', fontSize: '13px', margin: '0 0 18px', lineHeight: 1.5 },
   formGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px', marginBottom: '18px' },
+  subheading: { fontSize: '12px', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#2d2a6e', margin: '4px 0 10px' },
   formGridMobile: { gridTemplateColumns: '1fr' },
   field: { display: 'flex', flexDirection: 'column' },
   label: { fontSize: '12px', fontWeight: 700, color: '#374151', marginBottom: '6px' },

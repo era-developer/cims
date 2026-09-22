@@ -153,6 +153,9 @@ export default function AdminInventory() {
   const [returnMsg, setReturnMsg] = useState('');
   const [internalTagInput, setInternalTagInput] = useState('');
   const [internalTagBusy, setInternalTagBusy] = useState(false);
+  // Available units per catalog id, for the "pick a unit" dropdown under each
+  // component row. Loaded on demand the first time a row needs it.
+  const [internalUnitOptions, setInternalUnitOptions] = useState({});
   const [correctionPrompt, setCorrectionPrompt] = useState(null);
   const [correctionReason, setCorrectionReason] = useState('');
   const [correctionSaving, setCorrectionSaving] = useState(false);
@@ -531,6 +534,7 @@ export default function AdminInventory() {
   async function openInternalUseModal() {
     setInternalUseForm({ takenBy: '', projectId: '', otherProgramName: '', reason: '', studentCount: '', teamCount: '', instituteName: '' });
     setInternalUseRows([{ name: '', qty: '' }]);
+    setInternalUnitOptions({}); // stock may have changed since the last pull
     setInternalUseMsg('');
     setInternalUseOpen(true);
     try {
@@ -619,6 +623,45 @@ export default function AdminInventory() {
 
   function removeInternalUseRow(index) {
     setInternalUseRows(prev => prev.filter((_, i) => i !== index));
+  }
+
+  // The catalog entry a component row refers to, once its name matches one
+  // exactly (the datalist fills the full name on pick).
+  function internalRowCatalogId(row) {
+    const name = String(row.name || '').trim().toLowerCase();
+    if (!name) return null;
+    const match = items.find(item => String(item.name || '').trim().toLowerCase() === name);
+    return match ? match.catalog_id : null;
+  }
+
+  async function loadInternalUnitOptions(catalogId) {
+    if (!catalogId || internalUnitOptions[catalogId]) return;
+    setInternalUnitOptions(prev => ({ ...prev, [catalogId]: { loading: true, units: [] } }));
+    try {
+      const { data } = await axios.get('/api/assets', { params: { catalogId, centerId, status: 'available' } });
+      const units = (Array.isArray(data) ? data : [])
+        .map(a => ({ id: a.id, assetTag: a.asset_tag, serialNumber: a.serial_number || '' }))
+        .sort((a, b) => String(a.assetTag).localeCompare(String(b.assetTag), undefined, { numeric: true }));
+      setInternalUnitOptions(prev => ({ ...prev, [catalogId]: { loading: false, units } }));
+    } catch {
+      setInternalUnitOptions(prev => ({ ...prev, [catalogId]: { loading: false, units: [] } }));
+    }
+  }
+
+  // Dropdown pick: same effect as scanning that unit's label, but targeted at
+  // this row rather than matched by component name.
+  function pinInternalUnitFromList(index, unit) {
+    if (!unit) return;
+    setInternalUseRows(prev => {
+      if (prev.some(r => (r.assetIds || []).includes(unit.id))) return prev;
+      return prev.map((row, i) => {
+        if (i !== index) return row;
+        const assetIds = [...(row.assetIds || []), unit.id];
+        const tags = [...(row.tags || []), unit.assetTag];
+        return { ...row, assetIds, tags, qty: String(Math.max(Number(row.qty) || 0, assetIds.length)) };
+      });
+    });
+    setInternalScanNote(`Added ${unit.assetTag}.`);
   }
 
   async function handleInternalUseSubmit(event) {
@@ -1456,18 +1499,56 @@ export default function AdminInventory() {
                 <datalist id="internal-use-catalog-options">
                   {items.map(item => <option key={item.catalog_id} value={item.name} />)}
                 </datalist>
-                {internalUseRows.map((row, index) => (
-                  <div key={index} style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                    <input style={{ ...styles.bulkSelect2, flex: 2 }} list="internal-use-catalog-options"
-                      placeholder="Start typing a component name..." value={row.name}
-                      onChange={e => updateInternalUseRow(index, 'name', e.target.value)} />
-                    <input style={{ ...styles.bulkSelect2, flex: 1 }} type="number" min="1" placeholder="Qty"
-                      value={row.qty} onChange={e => updateInternalUseRow(index, 'qty', e.target.value)} />
-                    {internalUseRows.length > 1 && (
-                      <button type="button" style={styles.docDeleteBtn} onClick={() => removeInternalUseRow(index)}>Remove</button>
-                    )}
-                  </div>
-                ))}
+                {internalUseRows.map((row, index) => {
+                  const rowCatalogId = internalRowCatalogId(row);
+                  const options = rowCatalogId ? internalUnitOptions[rowCatalogId] : null;
+                  const pinnedIds = new Set(row.assetIds || []);
+                  const pickable = options ? options.units.filter(u => !pinnedIds.has(u.id)) : [];
+                  return (
+                    <div key={index} style={{ marginBottom: '10px' }}>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <input style={{ ...styles.bulkSelect2, flex: 2 }} list="internal-use-catalog-options"
+                          placeholder="Start typing a component name..." value={row.name}
+                          onChange={e => updateInternalUseRow(index, 'name', e.target.value)} />
+                        <input style={{ ...styles.bulkSelect2, flex: 1 }} type="number" min="1" placeholder="Qty"
+                          value={row.qty} onChange={e => updateInternalUseRow(index, 'qty', e.target.value)} />
+                        {internalUseRows.length > 1 && (
+                          <button type="button" style={styles.docDeleteBtn} onClick={() => removeInternalUseRow(index)}>Remove</button>
+                        )}
+                      </div>
+                      {rowCatalogId && (
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '6px', flexWrap: 'wrap' }}>
+                          <select
+                            style={{ ...styles.bulkSelect2, flex: '1 1 240px', fontFamily: "'DM Mono', Consolas, monospace", fontSize: '12px' }}
+                            value=""
+                            onFocus={() => loadInternalUnitOptions(rowCatalogId)}
+                            onMouseDown={() => loadInternalUnitOptions(rowCatalogId)}
+                            onChange={e => {
+                              const unit = pickable.find(u => String(u.id) === e.target.value);
+                              pinInternalUnitFromList(index, unit);
+                            }}
+                          >
+                            <option value="">
+                              {options?.loading
+                                ? 'Loading units…'
+                                : options
+                                  ? (pickable.length ? `Pick a specific unit… (${pickable.length} available)` : 'No more available units')
+                                  : 'Pick a specific unit… (optional)'}
+                            </option>
+                            {pickable.map(u => (
+                              <option key={u.id} value={u.id}>{u.assetTag}{u.serialNumber ? ` · SN ${u.serialNumber}` : ''}</option>
+                            ))}
+                          </select>
+                          <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>
+                            {(row.assetIds || []).length
+                              ? `${row.assetIds.length} unit${row.assetIds.length === 1 ? '' : 's'} chosen`
+                              : 'or leave it and the quantity is filled from stock'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
                 {internalUseRows.some(r => (r.tags || []).length > 0) && (
                   <div style={styles.pinnedWrap}>
                     {internalUseRows.map((row, index) => (row.tags || []).map((tag, k) => (
@@ -1476,7 +1557,7 @@ export default function AdminInventory() {
                         <button type="button" style={styles.pinnedRemove} onClick={() => unpinInternalUnit(index, row.assetIds[k])} aria-label={`Remove ${tag}`}>✕</button>
                       </span>
                     )))}
-                    <span style={styles.pinnedHint}>Scanned units are issued exactly; any extra quantity is filled from available stock.</span>
+                    <span style={styles.pinnedHint}>Chosen units (scanned, typed or picked) are issued exactly; any extra quantity is filled from available stock.</span>
                   </div>
                 )}
                 <button type="button" style={styles.addBtnSecondary} onClick={addInternalUseRow}>+ Add another component</button>

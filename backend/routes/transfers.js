@@ -13,8 +13,10 @@ const router = express.Router();
 // changing the responsible admin in the UI takes effect without a restart.
 function superAdminRecipients() {
   const settings = require('../utils/settings');
-  const fromSettings = settings.getOrderEmail(null);
-  return [...new Set([fromSettings, process.env.ADMIN_EMAIL].filter(Boolean))];
+  // The super admin's mailbox (Settings, else ADMIN_EMAIL) plus the org-wide
+  // order address, deduplicated -- the same two inboxes the env-only setup
+  // reached, now with the first one editable from the UI.
+  return [...new Set([settings.getSuperAdminEmail(), settings.getOrderEmail(null)].filter(Boolean))];
 }
 
 function loadTransferRow(db, code) {

@@ -57,8 +57,11 @@ When adding/updating component, keep:
 
 - Print: `Inventory` -> `QR labels` on the component -> tick units -> Print.
 - New stock: save the invoice -> `Print N QR labels now` (or `QR labels for
-  this invoice` on the invoice later).
-- Internal use: `Scan QR code` or type the tag -> **Add unit** to pick exact units; Program is optional. History: **Orders -> Internal use** tab.
+  this invoice` on the invoice later). Per invoice line, *Unit tracking*:
+  untick `Print QR labels` for bulk consumables (auto-unticks at 25+); tick
+  `Record serial numbers` only when you want the maker's serials on file.
+- Internal use: `Scan QR code`, type the tag -> **Add unit**, or **pick from the
+  dropdown** under the component row; Program is optional. History: **Orders -> Internal use** tab.
 - Look up any unit: `Scan` in the top bar.
 - Returns: `Scan returned unit` marks it Good; tap `Damaged` for the rest.
 - Swap: `Scan` inside the Swap dialog picks the unit in hand.
@@ -78,8 +81,10 @@ When adding/updating component, keep:
 ## 6) Settings (super admin)
 
 From `Settings`:
-- Change the order-notification email / admin WhatsApp number when the
-  responsible admin changes. Effective immediately.
+- Per-center order email / WhatsApp: `Edit` on the center's row. Org-wide
+  fallbacks, the super admin email (transfer + procurement requests) and the
+  student support contact are in the Notification contacts card. Effective
+  immediately.
 - Add a new center: enter the name, check the suggested code, create.
   It appears in login and every dropdown at once.
 - A center with records is deactivated, never deleted.

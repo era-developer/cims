@@ -16,6 +16,13 @@ const KEYS = {
   EMAIL_SENDER_NAME: 'notify.email_sender_name',
   ORDER_EMAIL: 'notify.order_email',
   WHATSAPP_ADMIN: 'notify.whatsapp_admin',
+  // The super admin's own mailbox: transfer requests, procurement requests
+  // from centers, and anything else that is org-level rather than one
+  // center's business. Was only ever the ADMIN_EMAIL env var.
+  SUPER_ADMIN_EMAIL: 'notify.super_admin_email',
+  // What students are shown under Help for a quick question.
+  SUPPORT_EMAIL: 'support.email',
+  SUPPORT_WHATSAPP: 'support.whatsapp',
 };
 
 // Only these may be written through the settings API. Anything else a client
@@ -177,6 +184,23 @@ function getWhatsAppAdmin(centerId, centerRow = null) {
   return resolve(KEYS.WHATSAPP_ADMIN, ['N8N_WHATSAPP_ADMIN_TO'], '');
 }
 
+// Org-level recipient for transfer and procurement requests. Falls back to
+// the ADMIN_EMAIL env var this replaces, then to the order email so the
+// request is never silently dropped.
+function getSuperAdminEmail() {
+  return resolve(KEYS.SUPER_ADMIN_EMAIL, ['ADMIN_EMAIL'], '') || getOrderEmail(null);
+}
+
+// Support contact shown to students. Defaults to the super admin mailbox and
+// the org-wide WhatsApp number so the Help panel always has somewhere to point.
+function getSupportEmail() {
+  return resolve(KEYS.SUPPORT_EMAIL, [], '') || getSuperAdminEmail();
+}
+
+function getSupportWhatsApp() {
+  return resolve(KEYS.SUPPORT_WHATSAPP, [], '') || getWhatsAppAdmin(null);
+}
+
 // Everything the settings screen renders, with the resolved value plus where
 // it came from so the UI can show "inherited from .env" vs "set here".
 function getAllResolved() {
@@ -188,6 +212,9 @@ function getAllResolved() {
     emailSenderName: getEmailSenderName(),
     orderEmail: getOrderEmail(null),
     whatsappAdmin: getWhatsAppAdmin(null),
+    superAdminEmail: getSuperAdminEmail(),
+    supportEmail: getSupportEmail(),
+    supportWhatsapp: getSupportWhatsApp(),
     stored: Object.fromEntries(
       Object.values(KEYS).map(key => [key, getSetting(key)])
     ),
@@ -209,6 +236,9 @@ module.exports = {
   getEmailSenderName,
   getOrderEmail,
   getWhatsAppAdmin,
+  getSuperAdminEmail,
+  getSupportEmail,
+  getSupportWhatsApp,
   readCenterEnv,
   getAllResolved,
 };

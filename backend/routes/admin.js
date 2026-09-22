@@ -451,6 +451,27 @@ router.put('/settings', authMiddleware, superAdminOnly, async (req, res) => {
       }
       patch[settings.KEYS.WHATSAPP_ADMIN] = phone;
     }
+    if (body.superAdminEmail !== undefined) {
+      const email = String(body.superAdminEmail || '').trim();
+      if (email && !isValidEmail(email)) {
+        return res.status(400).json({ message: `"${email}" is not a valid email address` });
+      }
+      patch[settings.KEYS.SUPER_ADMIN_EMAIL] = email;
+    }
+    if (body.supportEmail !== undefined) {
+      const email = String(body.supportEmail || '').trim();
+      if (email && !isValidEmail(email)) {
+        return res.status(400).json({ message: `"${email}" is not a valid email address` });
+      }
+      patch[settings.KEYS.SUPPORT_EMAIL] = email;
+    }
+    if (body.supportWhatsapp !== undefined) {
+      const phone = settings.normalizePhone(body.supportWhatsapp);
+      if (body.supportWhatsapp && !phone) {
+        return res.status(400).json({ message: 'Support WhatsApp number must contain digits' });
+      }
+      patch[settings.KEYS.SUPPORT_WHATSAPP] = phone;
+    }
     if (body.orgName !== undefined) patch[settings.KEYS.ORG_NAME] = body.orgName;
     if (body.orgShortName !== undefined) patch[settings.KEYS.ORG_SHORT_NAME] = body.orgShortName;
     if (body.orgTagline !== undefined) patch[settings.KEYS.ORG_TAGLINE] = body.orgTagline;

@@ -1,6 +1,6 @@
 const express = require('express');
 const { listCenters, getCenterById } = require('../utils/centers');
-const { getOrgName, getOrgShortName, getOrgTagline, getWhatsAppAdmin } = require('../utils/settings');
+const { getOrgName, getOrgShortName, getOrgTagline, getWhatsAppAdmin, getSupportEmail, getSupportWhatsApp } = require('../utils/settings');
 const { authMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
@@ -34,6 +34,9 @@ router.get('/branding', (req, res) => {
       orgName: getOrgName(),
       orgShortName: getOrgShortName(),
       orgTagline: getOrgTagline(),
+      // Public on purpose: this is the contact students are told to use.
+      supportEmail: getSupportEmail(),
+      supportWhatsapp: getSupportWhatsApp(),
     });
   } catch (error) {
     console.error('Branding lookup failed:', error.message);

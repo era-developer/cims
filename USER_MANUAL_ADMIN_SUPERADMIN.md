@@ -140,11 +140,29 @@ Inside workflows:
 available later from the invoice's detail view (`QR labels for this invoice`).
 Stick the labels on before shelving.
 
+**Which units get labels** is decided per invoice line under *Unit tracking*:
+- `Print QR labels for these units` is ticked by default and **unticks itself
+  for quantities of 25 or more** (a reel of resistors, a bag of jumper wires).
+  Change it either way. Unticked units still get asset tags and still count
+  as stock; they are simply left out of the label prompt and hidden on the
+  Labels page until you tick *Include bulk units*.
+- `Record manufacturer serial numbers` is off by default -- asset tags are
+  always generated automatically. Tick it only when you want the maker's
+  serials on file (Raspberry Pi, Jetson, laptops), then paste them one per
+  unit, in order.
+
 ## 4.4 Internal use (staff pulling components)
 `Inventory` -> `Internal Use`: who is taking them, an optional **Program**,
-the reason, optional session details, and the components -- scan units, type
-tags, or just enter a quantity. Stock reduces immediately. Return them from
-`Orders` -> **Internal use** tab (or `Inventory` -> `Return`).
+the reason, optional session details, and the components. For each component
+you can choose the exact units three ways, and they all feed the same list:
+- **Scan QR code** on the label as you pick it off the shelf;
+- **type the asset tag** and press *Add unit*;
+- **pick from the dropdown** that appears under the component row once its
+  name matches -- it lists that component's available units at your center
+  (tag and serial number) and shrinks as you choose.
+Or just enter a quantity and the units are filled from stock. Stock reduces
+immediately. Return them from `Orders` -> **Internal use** tab (or
+`Inventory` -> `Return`).
 
 ## 5) Student registration approval and user management
 
@@ -306,11 +324,20 @@ Stock movement on return:
 
 Open `Settings`. Changes take effect immediately - no restart, no developer.
 
-### 8.1 Order notifications
-- `Order notification email`: where new-order alerts go when a center has no
-  address of its own.
-- `Admin WhatsApp number`: the number students are handed to after placing an
-  order, when the center has none of its own. Entering 10 digits assumes `+91`.
+### 8.1 Notification contacts
+**Every center has its own order email and WhatsApp number** -- set them with
+`Edit` on the center's row in the Centers table (8.3); they take priority for
+that center's orders. The org-wide fields in this card are:
+
+- `Order notification email` / `Admin WhatsApp number`: the fallback for any
+  center without its own contact. The WhatsApp number is the one students are
+  handed to after placing an order. Entering 10 digits assumes `+91`.
+- `Super admin email`: receives center-to-center transfer requests and
+  component (procurement) requests raised by centers. Replaces the old
+  `ADMIN_EMAIL` line in `.env`, which is still the fallback.
+- `Support email` / `Support WhatsApp number`: the contact shown to students
+  for a quick question. Blank means the super admin email and the admin
+  WhatsApp number are used.
 
 Each field has a **Send test** button. It sends to whatever is typed in the
 box (saved or not), so you can confirm a new address or number works before
