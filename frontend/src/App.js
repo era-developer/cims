@@ -26,6 +26,8 @@ import AdminSettings from './pages/AdminSettings';
 import AdminLabels from './pages/AdminLabels';
 import UnitPage from './pages/UnitPage';
 import Notifications from './pages/Notifications';
+import AdminSupport from './pages/AdminSupport';
+import HelpWidget from './components/HelpWidget';
 
 function PrivateRoute({ children, role }) {
   const { user, loading } = useAuth();
@@ -48,6 +50,7 @@ function AppLayout({ children }) {
   return <>
     <Navbar />
     {children}
+    <HelpWidget />
   </>;
 }
 
@@ -126,6 +129,11 @@ export default function App() {
             <Route path="/admin/labels" element={
               <PrivateRoute role={['admin', 'super_admin']}>
                 <AppLayout><AdminLabels /></AppLayout>
+              </PrivateRoute>
+            } />
+            <Route path="/admin/support" element={
+              <PrivateRoute role={['admin', 'super_admin']}>
+                <AppLayout><AdminSupport /></AppLayout>
               </PrivateRoute>
             } />
             <Route path="/admin/settings" element={

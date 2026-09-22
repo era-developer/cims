@@ -326,6 +326,45 @@ async function notifyTransfer(transfer, type, { excludeUserId } = {}) {
   }
 }
 
+// ---- help / support threads ---------------------------------------------------
+
+function supportUrl(threadId, isAdmin) {
+  return isAdmin ? `/admin/support?thread=${threadId}` : `/dashboard?help=${threadId}`;
+}
+
+function snippet(text, max = 110) {
+  const flat = String(text || '').replace(/\s+/g, ' ').trim();
+  return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
+}
+
+// Someone asked (or wrote again): the center's admins and super admins hear.
+async function notifySupportQuestion({ threadId, subject, body, centerId, askerName, isFollowUp }, { excludeUserId } = {}) {
+  try {
+    await deliver(notifications.centerAdminIds(centerId, { excludeUserId }), {
+      kind: 'support_question',
+      title: isFollowUp ? `${askerName} wrote again (#${threadId})` : `Question from ${askerName}`,
+      body: subject ? `${subject} — ${snippet(body, 80)}` : snippet(body),
+      url: supportUrl(threadId, true), ref: `support-${threadId}`,
+    });
+  } catch (err) {
+    console.error('[push] support question notice failed:', err.message);
+  }
+}
+
+// An admin replied: the person who asked hears, wherever they are.
+async function notifySupportReply({ threadId, subject, body, ownerUserId, ownerIsAdmin, replierName }) {
+  try {
+    await deliver([ownerUserId], {
+      kind: 'support_reply',
+      title: `Reply from ${replierName || 'your center'}${subject ? `: ${subject}` : ''}`,
+      body: snippet(body),
+      url: supportUrl(threadId, ownerIsAdmin), ref: `support-${threadId}`,
+    });
+  } catch (err) {
+    console.error('[push] support reply notice failed:', err.message);
+  }
+}
+
 // The student's first entry in the bell: waiting for them at first sign-in.
 async function notifyAccountApproved(user) {
   try {
@@ -348,4 +387,5 @@ module.exports = {
   notifyStudentOrderStatus, notifyStudentOrderPlaced, notifyStudentReturnReminder,
   notifyAdminsNewOrder, notifyAdminsReturnRequested, notifyAdminsNewRegistration, notifyAccountApproved,
   notifyTransfer,
+  notifySupportQuestion, notifySupportReply,
 };

@@ -58,8 +58,8 @@ cims/
 |   |-- .env                   Port, DB path, JWT secret, SMTP, per-center emails, VAPID (not in git)
 |   |-- db/migrations/         Schema, applied automatically at startup
 |   |-- routes/                auth, centers, components, orders, transfers, admin, invoices,
-|   |                          assets, units, push, notifications, programs, procurement,
-|   |                          internal-issues, webhooks
+|   |                          assets, units, push, notifications, support, programs,
+|   |                          procurement, internal-issues, webhooks
 |   |-- utils/                 centers.js, settings.js, email.js, push.js, notifications.js,
 |   |                          whatsapp.js, storage.js, db.js ...
 |   |-- scripts/
@@ -248,6 +248,7 @@ Stock is not a stored number: it is the count of `assets` with status `available
 - Track orders, request returns, keep profile updated
 - Scan any unit's QR label to see the component and their own history with it
 - Installable as an app; bell + push notifications for order updates and return reminders
+- Help bubble on every page: quick answers, ask the center admin, support contact
 - WhatsApp handoff to the center admin after ordering (when configured)
 
 ### Admin portal
@@ -264,6 +265,7 @@ Stock is not a stored number: it is the count of `assets` with status `available
 - Programs and per-program history (orders, internal use, transfers, procurement)
 - My Center: procurement requests to the super admin, and **component transfers from
   other centers** with a return flow
+- Support inbox: answer questions asked from the Help bubble
 - Excel exports: inventory, orders, transfers, users, internal use, activity logs
 
 ### Super admin only

@@ -1171,8 +1171,81 @@ async function sendTestEmail({ to, requestedBy = '' }) {
   return { ...(result || {}), to };
 }
 
+// ---------- Help / support threads ----------
+
+function supportThreadUrl(threadId, forAdmin) {
+  const siteUrl = getSiteUrl();
+  if (!siteUrl) return '';
+  const base = siteUrl.replace(/\/+$/, '');
+  return forAdmin ? `${base}/admin/support?thread=${threadId}` : `${base}/dashboard?help=${threadId}`;
+}
+
+function messageBlock(body) {
+  return `<div style="margin:0 0 14px;padding:12px 14px;background:#f6f7ff;border-left:3px solid #2d2a6e;border-radius:6px;white-space:pre-wrap;color:#1a1a2e;">${escapeHtml(body)}</div>`;
+}
+
+// A student (or admin) asked a question from the Help bubble, or wrote again
+// on an existing one. Goes to the center's admin mailbox.
+async function sendSupportQuestionEmail({ to, thread, message, asker, centerName, isFollowUp = false }) {
+  if (!to) return { ok: false, message: 'No recipient' };
+  if (!(await ensureEmailReady(`Support question #${thread.id}`))) return { ok: false };
+  const config = getSmtpConfig();
+  const transporter = createTransporter();
+  const org = getOrgShortName();
+  const subject = thread.subject ? `: ${thread.subject}` : '';
+  const link = supportThreadUrl(thread.id, true);
+  return sendMessage(transporter, {
+    from: `"${getSenderName()}" <${config.user}>`,
+    to,
+    replyTo: buildReplyTo(asker.email || '', config.user),
+    subject: `[${org}] ${isFollowUp ? 'Reply on support question' : 'Support question'} #${thread.id}${subject}`,
+    html: wrapEmail(
+      isFollowUp ? `${asker.name} wrote again` : `New question from ${asker.name}`,
+      `${centerName || 'No center'} · question #${thread.id}`,
+      `
+        ${thread.subject ? `<p style="margin:0 0 8px;font-weight:700;color:#1a1a2e;">${escapeHtml(thread.subject)}</p>` : ''}
+        ${messageBlock(message)}
+        <p style="margin:0 0 6px;color:#475569;font-size:13px;">From <strong>${escapeHtml(asker.name)}</strong>${asker.username ? ` (${escapeHtml(asker.username)})` : ''}${asker.email ? ` &middot; <a href="mailto:${escapeHtml(asker.email)}" style="color:#2d2a6e;">${escapeHtml(asker.email)}</a>` : ''}${asker.mobile ? ` &middot; ${escapeHtml(asker.mobile)}` : ''}</p>
+        ${link ? `<p style="margin:12px 0 0;"><a href="${escapeHtml(link)}" style="color:#2d2a6e;font-weight:700;text-decoration:underline;">Reply in ${escapeHtml(org)} &rarr;</a></p>` : ''}
+        <p style="margin:12px 0 0;color:#94a3b8;font-size:12px;">Replies made in the portal reach the person in their Help panel, bell and email.</p>
+      `,
+    ),
+  });
+}
+
+// An admin answered; the asker gets the reply by email as well as in the
+// portal, since many students never enable push.
+async function sendSupportReplyEmail({ to, thread, message, replier, centerName }) {
+  if (!to) return { ok: false, message: 'No recipient' };
+  if (!(await ensureEmailReady(`Support reply #${thread.id}`))) return { ok: false };
+  const config = getSmtpConfig();
+  const transporter = createTransporter();
+  const org = getOrgShortName();
+  const subject = thread.subject ? `: ${thread.subject}` : '';
+  const link = supportThreadUrl(thread.id, false);
+  return sendMessage(transporter, {
+    from: `"${getSenderName()}" <${config.user}>`,
+    to,
+    replyTo: buildReplyTo(config.user, ''),
+    subject: `[${org}] Reply to your question #${thread.id}${subject}`,
+    html: wrapEmail(
+      'You have a reply',
+      `${centerName || org} · question #${thread.id}`,
+      `
+        ${thread.subject ? `<p style="margin:0 0 8px;font-weight:700;color:#1a1a2e;">${escapeHtml(thread.subject)}</p>` : ''}
+        ${messageBlock(message)}
+        <p style="margin:0;color:#475569;font-size:13px;">&mdash; ${escapeHtml(replier || 'Center admin')}</p>
+        ${link ? `<p style="margin:12px 0 0;"><a href="${escapeHtml(link)}" style="color:#2d2a6e;font-weight:700;text-decoration:underline;">Continue in ${escapeHtml(org)} &rarr;</a></p>` : ''}
+        <p style="margin:12px 0 0;color:#94a3b8;font-size:12px;">To write back, open the Help bubble in the portal rather than replying to this email.</p>
+      `,
+    ),
+  });
+}
+
 module.exports = {
   sendTestEmail,
+  sendSupportQuestionEmail,
+  sendSupportReplyEmail,
   sendRegistrationSubmitted,
   sendAccountApproved,
   sendAccountCreated,

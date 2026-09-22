@@ -52,6 +52,8 @@ app.use('/api/assets', require('./routes/assets'));
 app.use('/api/units', require('./routes/units'));
 app.use('/api/push', require('./routes/push'));
 app.use('/api/notifications', require('./routes/notifications'));
+// Help bubble questions and the admin Support inbox.
+app.use('/api/support', require('./routes/support'));
 app.use('/api/programs', require('./routes/programs'));
 app.use('/api/internal-issues', require('./routes/internal-issues'));
 app.use('/api/procurement', require('./routes/procurement'));

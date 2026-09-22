@@ -31,6 +31,7 @@ export default function Navbar() {
           { path: '/admin/procurement', label: 'Requests' },
           { path: '/admin/my-center', label: 'My Center' },
           { path: '/admin/users', label: 'Users' },
+          { path: '/admin/support', label: 'Support' },
           { path: '/admin/settings', label: 'Settings' },
         ]
       : [
@@ -40,6 +41,7 @@ export default function Navbar() {
           { path: '/admin/orders', label: 'Orders' },
           { path: '/admin/my-center', label: 'My Center' },
           { path: '/admin/users', label: 'Users' },
+          { path: '/admin/support', label: 'Support' },
         ])
     : [
         { path: '/dashboard', label: 'Browse' },
@@ -56,6 +58,9 @@ export default function Navbar() {
     if (isAdmin) {
       if (location.pathname.startsWith('/admin/users')) {
         return { path: '/admin/users', placeholder: 'Search users...' };
+      }
+      if (location.pathname.startsWith('/admin/support')) {
+        return { path: '/admin/support', placeholder: 'Search questions...' };
       }
       if (location.pathname.startsWith('/admin/transfers')) {
         return { path: '/admin/transfers', placeholder: 'Search transfers...' };

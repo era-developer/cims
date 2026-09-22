@@ -179,3 +179,17 @@ Check required fields in cart details, especially expected return date and purpo
 
 ### No components visible
 Your center inventory may have no active components; contact admin.
+
+## 8) Need help? The Help bubble
+
+Every page has a **Help** button at the bottom right.
+- **Quick answers**: how to order, what happens next, how to return, what
+  the statuses mean, QR labels, phone notifications, forgotten passwords.
+- **Ask us**: type a question for your center admin (add the order ID if it
+  is about an order). The admin replies in the portal; you get a bell
+  notification and an email, and the reply appears under **Ask us**. Write
+  back on the same question, or **Mark resolved** when done.
+- For anything urgent, the panel shows the support email and a **WhatsApp
+  support** link.
+
+If you cannot sign in at all, the sign-in page shows the support email.

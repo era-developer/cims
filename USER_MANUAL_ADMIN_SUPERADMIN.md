@@ -49,10 +49,12 @@ Top navigation:
 - `Requests` (super admin only) - procurement requests raised by centers
 - `My Center`
 - `Users`
+- `Support` - questions asked from the Help bubble (own center; super admin: all)
 - `Settings` (super admin only) - centers, business heads, notification contacts
 
 Top bar (all roles): search box for the current page, **Scan QR code**, the
-notification **bell**, and your profile.
+notification **bell**, and your profile. Bottom-right on every page: the
+**Help** bubble (section 8.6).
 
 ## 3) Dashboard usage
 
@@ -409,6 +411,8 @@ Comedkares logo. Who receives what:
 | Transfer approved | - | Supplying and requesting centers |
 | Transfer return requested | - | Supplying center and super admins |
 | Transfer returned | - | Supplying and requesting centers |
+| Help bubble question / follow-up | - | Center mailbox (super admin / support mailbox if no center) |
+| Admin replies to a question | Reply | - |
 
 Admin emails go to the center's own notification email if set in
 `Settings`, otherwise the center's `.env` hub mailbox, otherwise the org-wide
@@ -440,10 +444,32 @@ opted in.
 | Transfer approved | - | Both centers' admins + super admins |
 | Transfer return requested | - | Supplying center's admins + super admins |
 | Transfer returned | - | Both centers' admins + super admins |
+| Help bubble question / follow-up | - | That center's admins + super admins |
+| Admin replies to a question | Reply (opens the Help panel on that question) | - |
 
 The admin who performs an action never receives their own notification.
 Tapping a notification opens the order or transfer on the right page (super
 admins land on `Transfers`, center admins on `My Center`).
+
+### 8.6 The Help bubble and the Support inbox
+Every signed-in page has a **Help** button at the bottom right. It opens a
+small panel with:
+- **Quick answers** -- the common "how do I" questions for that role, each
+  with a link to the right page.
+- **Ask us** -- a question to the person's center admins. It arrives in
+  `Support`, in the center's order mailbox, and in the admins' bell / push.
+- The **support contact** (email and WhatsApp) from Settings, for anything
+  urgent.
+
+Answer questions from **`Support`** in the top navigation. A center admin
+sees their own center's questions; the super admin sees every center's, with
+a center filter. *Needs attention* lists open and answered questions; a reply
+goes to the asker's Help panel, bell, push and email. **Close question** marks
+it resolved; a new message from either side reopens it. The navbar search on
+this page filters by name, subject, center or `#id`.
+
+Admins can ask too: their questions from the Help bubble go to the super
+admins (and the support mailbox).
 
 **Enabling:** a yellow bar on the dashboard offers **Enable** while a device is
 not yet enabled. The full switch (**Enable / Turn off / Send me a test**, plus

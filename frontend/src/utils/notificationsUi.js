@@ -36,6 +36,8 @@ const ICONS = {
   'transfer_return-request': '🔁',
   transfer_approved: '🚚',
   transfer_returned: '📦',
+  support_question: '💬',
+  support_reply: '💬',
 };
 
 export function kindIcon(kind) {
@@ -57,4 +59,6 @@ export const KIND_LABELS = {
   'transfer_return-request': 'Transfer return',
   transfer_approved: 'Transfer approved',
   transfer_returned: 'Transfer returned',
+  support_question: 'Support',
+  support_reply: 'Support reply',
 };

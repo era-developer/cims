@@ -47,6 +47,11 @@
 - Manage or test: `My Profile` → Notifications on this device.
 - iPhone: add CIMS to Home Screen first.
 
+## 4b) Help bubble
+- Bottom-right **Help** button on every page: quick answers, or **Ask us** to
+  message your center admin. Replies come to your bell, email and the panel.
+- Urgent: the panel shows the support email / WhatsApp link.
+
 ## 5) Return process
 
 1. Open approved order in `My Orders`.

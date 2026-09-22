@@ -64,6 +64,15 @@ export default function Login() {
   const isIos = typeof navigator !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent);
   const canOfferInstall = !isStandalone && (!!installPrompt || isIos);
 
+  // Public support contact (Settings -> Support contact) for people who
+  // cannot get past this screen.
+  const [supportContact, setSupportContact] = useState({ email: '', whatsapp: '' });
+  useEffect(() => {
+    axios.get('/api/centers/branding')
+      .then(({ data }) => setSupportContact({ email: data?.supportEmail || '', whatsapp: data?.supportWhatsapp || '' }))
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     const onPrompt = event => { event.preventDefault(); setInstallPrompt(event); };
     const onInstalled = () => { setInstallPrompt(null); setInstallDialog(false); rememberInstallChoice('installed'); };
@@ -421,6 +430,14 @@ export default function Login() {
                   On iPhone: tap the <strong>Share</strong> button in Safari, then <strong>Add to Home Screen</strong>.
                 </div>
               )}
+              {supportContact.email && (
+                <div style={styles.supportLine}>
+                  Trouble signing in? Email <a href={`mailto:${supportContact.email}`} style={styles.supportLink}>{supportContact.email}</a>
+                  {supportContact.whatsapp && (
+                    <> or <a href={`https://wa.me/${supportContact.whatsapp.replace(/[^\d]/g, '')}`} target="_blank" rel="noreferrer" style={styles.supportLink}>WhatsApp support</a></>
+                  )}.
+                </div>
+              )}
             </form>
           ) : mode === 'forgot' ? (
             forgotStep === 'request' ? (
@@ -665,6 +682,8 @@ const styles = {
   passwordContainer: { position: 'relative', display: 'flex', alignItems: 'center' },
   togglePasswordBtn: { position: 'absolute', right: '10px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', padding: '4px 8px', color: '#1a237e', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px', transition: 'all 0.2s ease' },
   primaryBtn: { width: '100%', padding: '14px', background: 'linear-gradient(135deg, #1a237e, #234d81)', border: 'none', borderRadius: '12px', color: '#fff', fontFamily: "'DM Sans', sans-serif", fontSize: '15px', fontWeight: 800, cursor: 'pointer', marginTop: '8px' },
+  supportLine: { marginTop: '14px', fontSize: '12.5px', color: '#6b7280', textAlign: 'center', lineHeight: 1.5 },
+  supportLink: { color: '#1a237e', fontWeight: 700, textDecoration: 'none' },
   forgotLink: { display: 'block', width: '100%', textAlign: 'center', background: 'none', border: 'none', color: '#1a237e', fontSize: '13px', fontWeight: 700, cursor: 'pointer', marginTop: '14px', padding: '4px', fontFamily: "'DM Sans', sans-serif" },
   installBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', width: '100%', padding: '12px 14px', marginTop: '12px', borderRadius: '12px', border: '1.5px solid #dbe3f0', background: '#f6f8fc', color: '#1a237e', fontFamily: "'DM Sans', sans-serif", fontSize: '14px', fontWeight: 700, cursor: 'pointer', boxSizing: 'border-box' },
   installIcon: { fontSize: '16px', lineHeight: 1 },

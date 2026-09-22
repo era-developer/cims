@@ -99,6 +99,12 @@ From `Settings`:
 - Manage / test: **My Center** (admin) or **Settings** (super admin).
 - You never get a notification for an action you took yourself.
 
+## 6b) Support inbox
+- `Support` in the nav: questions students asked from the Help bubble (own
+  center; super admin: all centers). Reply there -- the student gets it in
+  their Help panel, bell, push and email. **Close question** when resolved.
+- New questions also land in the center mailbox and your bell.
+
 ## 7) Downloads for reporting
 
 From dashboard:
