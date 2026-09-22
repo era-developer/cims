@@ -332,8 +332,14 @@ Open `Settings`. Changes take effect immediately - no restart, no developer.
 that center's orders. The org-wide fields in this card are:
 
 - `Order notification email` / `Admin WhatsApp number`: the fallback for any
-  center without its own contact. The WhatsApp number is the one students are
-  handed to after placing an order. Entering 10 digits assumes `+91`.
+  center without its own contact. Entering 10 digits assumes `+91`.
+  The WhatsApp number drives the **post-order handoff**: on the "Request
+  Submitted" screen a student sees a green **Send WhatsApp to Admin** button
+  and is opened into WhatsApp automatically after 5 seconds, with the order
+  ID, their name, the program and the item list already typed in. If no
+  number is set for the center **and** none org-wide, the button and the
+  redirect simply do not appear - Settings shows a warning when that is the
+  case, and the Centers table marks those centers *not set - handoff off*.
 - `Super admin email`: receives center-to-center transfer requests and
   component (procurement) requests raised by centers. Replaces the old
   `ADMIN_EMAIL` line in `.env`, which is still the fallback.

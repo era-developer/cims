@@ -81,7 +81,9 @@ When adding/updating component, keep:
 ## 6) Settings (super admin)
 
 From `Settings`:
-- Per-center order email / WhatsApp: `Edit` on the center's row. Org-wide
+- Per-center order email / WhatsApp: `Edit` on the center's row. The WhatsApp
+  number is what the student's **Send WhatsApp to Admin** button (5s auto-open)
+  after placing an order points at; no number anywhere = no button. Org-wide
   fallbacks, the super admin email (transfer + procurement requests) and the
   student support contact are in the Notification contacts card. Effective
   immediately.

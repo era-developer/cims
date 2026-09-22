@@ -339,6 +339,14 @@ Continue?`;
           and support contacts. Changes take effect immediately -- no restart needed.
         </p>
 
+        {!notifyForm.whatsappAdmin && !centers.some(c => c.effectiveWhatsapp) && (
+          <div style={styles.warnBanner}>
+            <strong>WhatsApp handoff is off.</strong> No WhatsApp number is set org-wide or for any center,
+            so after placing an order a student sees no <em>Send WhatsApp to Admin</em> button and is not
+            redirected. Set a number below (or per center in the Centers table) to switch it on.
+          </div>
+        )}
+
         <form onSubmit={saveNotify}>
           <div style={styles.subheading}>Fallback for centers without their own contact</div>
           <div style={{ ...styles.formGrid, ...(isMobile ? styles.formGridMobile : {}) }}>
@@ -360,7 +368,7 @@ Continue?`;
               value={notifyForm.whatsappAdmin}
               onChange={value => setNotifyForm(current => ({ ...current, whatsappAdmin: value }))}
               placeholder="9686737460"
-              hint="Students are handed to this number after ordering when their center has none. 10 digits assumes +91."
+              hint="After placing an order a student gets a Send WhatsApp to Admin button (and is redirected after 5 seconds) pointing at this number, for any center without its own. 10 digits assumes +91."
               action={{
                 label: testing === 'whatsappAdmin' ? 'Sending...' : 'Send test message',
                 onClick: () => sendTest('whatsapp', 'whatsappAdmin'),
@@ -534,9 +542,15 @@ Continue?`;
                   </td>
                   <td style={styles.td}>
                     {center.whatsappNumber || (
-                      <span style={styles.inherited} title="Not set for this center; showing the .env or org-wide fallback in use">
-                        {center.effectiveWhatsapp ? `${center.effectiveWhatsapp} (default)` : 'uses default'}
-                      </span>
+                      center.effectiveWhatsapp ? (
+                        <span style={styles.inherited} title="Not set for this center; showing the org-wide fallback in use">
+                          {center.effectiveWhatsapp} (default)
+                        </span>
+                      ) : (
+                        <span style={styles.missing} title="No number for this center and no org-wide fallback: the post-order WhatsApp handoff is off for this center">
+                          not set - handoff off
+                        </span>
+                      )
                     )}
                   </td>
                   <td style={styles.td}>
@@ -694,6 +708,8 @@ const styles = {
   centerId: { fontSize: '11px', color: '#9097a6', marginTop: '2px' },
   codePill: { background: '#eef2ff', color: '#3730a3', padding: '3px 9px', borderRadius: '6px', fontWeight: 700, fontSize: '11px' },
   inherited: { color: '#9097a6', fontStyle: 'italic', fontSize: '12px' },
+  missing: { color: '#b45309', fontWeight: 700, fontSize: '12px' },
+  warnBanner: { background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412', padding: '11px 13px', borderRadius: '10px', fontSize: '13px', lineHeight: 1.5, marginBottom: '16px' },
   activePill: { background: '#ecfdf5', color: '#047857', padding: '3px 9px', borderRadius: '999px', fontSize: '11px', fontWeight: 700 },
   inactivePill: { background: '#f3f4f6', color: '#6b7280', padding: '3px 9px', borderRadius: '999px', fontSize: '11px', fontWeight: 700 },
   actions: { display: 'flex', gap: '10px', flexWrap: 'wrap' },
