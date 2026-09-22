@@ -1,4 +1,4 @@
-/* KIMS service worker.
+/* CIMS service worker.
  *
  * Makes the portal installable and lets the app shell open instantly (and
  * offline). Strategy, by request type:
@@ -13,7 +13,7 @@
  * CACHE_VERSION is bumped by the build (see index.js registration) so an old
  * shell never lingers after a deploy.
  */
-const CACHE_VERSION = 'kims-v1';
+const CACHE_VERSION = 'cims-v1';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const IMAGE_CACHE = `${CACHE_VERSION}-images`;
 const IMAGE_CACHE_LIMIT = 300;
@@ -98,7 +98,7 @@ self.addEventListener('fetch', event => {
 self.addEventListener('push', event => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch (e) { data = { body: event.data && event.data.text() }; }
-  const title = data.title || 'KIMS';
+  const title = data.title || 'CIMS';
   const options = {
     body: data.body || '',
     icon: data.icon || '/icons/icon-192.png',

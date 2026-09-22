@@ -17,7 +17,7 @@
 // "Resistor 47K" are different parts and are never merged.
 //
 // Usage:
-//   node dedupe-catalog.js [--db ../data/kims.db] [--apply]
+//   node dedupe-catalog.js [--db ../data/cims.db] [--apply]
 // Dry run prints the plan; --apply takes a snapshot of the database first.
 
 const path = require('path');
@@ -25,7 +25,7 @@ const fs = require('fs');
 const { DatabaseSync } = require('node:sqlite');
 
 function parseArgs(argv) {
-  const args = { db: path.join(__dirname, '..', 'data', 'kims.db'), apply: false };
+  const args = { db: path.join(__dirname, '..', 'data', 'cims.db'), apply: false };
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === '--db') args.db = argv[++i];
     else if (argv[i] === '--apply') args.apply = true;
@@ -129,7 +129,7 @@ function main() {
   }
 
   // Consistent snapshot even while the service has the file open.
-  const backup = path.join(require('../utils/storage').BACKUPS_DIR, `kims-before-dedupe-${new Date().toISOString().replace(/[:.]/g, '-')}.db`);
+  const backup = path.join(require('../utils/storage').BACKUPS_DIR, `cims-before-dedupe-${new Date().toISOString().replace(/[:.]/g, '-')}.db`);
   db.exec(`VACUUM INTO '${backup.replace(/'/g, "''")}'`);
   console.log(`\nSnapshot: ${backup}`);
 

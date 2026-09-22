@@ -7,15 +7,15 @@ const path = require('path');
 // can navigate without the database:
 //
 //   data/
-//     kims.db                      the database
+//     cims.db                      the database
 //     backups/                     nightly snapshots (see scripts/backup-db.js)
 //     components/                  one photo per component, named after it
 //       arduino-uno-r3.webp
 //     invoices/                    vendor invoice scans
-//       AKTU/2026/INV-0042/        <center code>/<year>/<invoice number>/
+//       JPN/2026/INV-0042/         <center code>/<year>/<invoice number>/
 //         Project Details.pdf        the file keeps its original name
 //
-// Paths recorded in the database are RELATIVE to data/ ("invoices/AKTU/..."),
+// Paths recorded in the database are RELATIVE to data/ ("invoices/JPN/..."),
 // so the whole folder can be moved or restored elsewhere and every link still
 // resolves. Absolute paths from before this module are still accepted when
 // reading, so nothing already uploaded breaks.

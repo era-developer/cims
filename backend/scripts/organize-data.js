@@ -8,7 +8,7 @@
 // Every database path is rewritten to the new relative form. Safe to re-run:
 // anything already in place is left alone. Takes a database snapshot first.
 //
-// Usage: node organize-data.js [--db ../data/kims.db] [--apply]
+// Usage: node organize-data.js [--db ../data/cims.db] [--apply]
 
 const fs = require('fs');
 const path = require('path');
@@ -16,7 +16,7 @@ const { DatabaseSync } = require('node:sqlite');
 const storage = require('../utils/storage');
 
 function parseArgs(argv) {
-  const args = { db: path.join(storage.DATA_ROOT, 'kims.db'), apply: false };
+  const args = { db: path.join(storage.DATA_ROOT, 'cims.db'), apply: false };
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === '--db') args.db = argv[++i];
     else if (argv[i] === '--apply') args.apply = true;
@@ -106,7 +106,7 @@ function main() {
   if (!args.apply) { console.log('\nDry run. Re-run with --apply.'); db.close(); return; }
 
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  db.exec(`VACUUM INTO '${path.join(storage.BACKUPS_DIR, `kims-before-organize-${stamp}.db`).replace(/'/g, "''")}'`);
+  db.exec(`VACUUM INTO '${path.join(storage.BACKUPS_DIR, `cims-before-organize-${stamp}.db`).replace(/'/g, "''")}'`);
 
   // One file, one database update, committed together -- a rename on disk is
   // not transactional, so a single big transaction could roll the database

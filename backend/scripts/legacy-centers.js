@@ -10,7 +10,7 @@
 // them at the live centers table would make a replay of a historical migration
 // depend on today's center list -- and on the wrong database. They read from
 // this frozen copy instead, so their behaviour is reproducible and they cannot
-// touch a KIMS deployment's centers.
+// touch the live `centers` table, which a super admin now edits from Settings.
 //
 // Do not add new centers here. Add them through the Centers admin screen.
 

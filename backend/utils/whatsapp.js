@@ -59,7 +59,7 @@ function getStudentRecipient(order) {
 }
 
 function extractOrderId(text = '') {
-  // Order ids are <ORG>-<base36>, e.g. KIMS-M1ABCD; older CIMS-... ids still match.
+  // Order ids are <ORG>-<base36>, e.g. CIMS-M1ABCD.
   const match = String(text || '').match(/\b[A-Z]{2,8}-[A-Z0-9]{4,}\b/i);
   return match ? match[0].toUpperCase() : '';
 }

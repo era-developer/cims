@@ -41,6 +41,9 @@ frontend/build/
 backend/data_v1_snapshot_for_migration_dryrun/
 data_v1_snapshot_for_migration_dryrun/
 
+# Debug/scratch dumps
+backend/classification_dump.txt
+
 # Backend runtime data
 backend/data/*.xlsx
 backend/data/*/
@@ -62,8 +65,10 @@ coverage/
 .vscode/
 .idea/
 
-# Syncthing folder marker (copied over from D:\cims; KIMS is not a synced folder)
+# Syncthing folder marker and in-flight temp files
 .stfolder/
+**/~syncthing~*
+**/*.tmp
 
-# Vendored NSSM binaries used by install-kims-service.ps1
+# Vendored NSSM binaries used by install-cims-service.ps1
 nssm-2.24/

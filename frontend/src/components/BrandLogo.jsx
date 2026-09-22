@@ -14,7 +14,7 @@ import {
 // Previously this drew a hand-built SVG mark and the literal words
 // "COMED"/"KARES", which meant the component could only ever show one
 // organisation's brand. It now renders whatever LOGO_URL points at. Logos that
-// already include the organisation's wordmark (Kalam Pragati's does) suppress
+// already include the organisation's wordmark (Comedkares' does) suppress
 // the text wordmark via LOGO_HAS_WORDMARK so it is not printed twice.
 export default function BrandLogo({ compact = false, dark = false, showSystemName = true }) {
   const gray = dark ? 'rgba(255,255,255,0.82)' : '#6b7280';

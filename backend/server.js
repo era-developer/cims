@@ -12,7 +12,7 @@ if (!fs.existsSync(path.join(__dirname, 'data'))) mkdirSync(path.join(__dirname,
 
 // Read from the environment rather than utils/settings so the banner and the
 // health endpoint never depend on the database being open.
-const APP_SHORT_NAME = process.env.ORG_SHORT_NAME || 'KIMS';
+const APP_SHORT_NAME = process.env.ORG_SHORT_NAME || 'CIMS';
 
 // A missing JWT_SECRET used to fall back to a hardcoded default shared by
 // every deployment of this codebase -- so a token from one portal would have
@@ -197,7 +197,7 @@ if (fs.existsSync(frontendIndex)) {
     </div>
     <div class="section">
       <p>Build the frontend, then restart the backend:</p>
-      <div class="code">cd KIMS/frontend
+      <div class="code">cd cims/frontend
 npm install
 npm run build</div>
     </div>

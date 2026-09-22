@@ -83,7 +83,7 @@ function normalizeCode(value) {
   return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
 }
 
-// Derives "AKTU, Lucknow" -> "AKTUL". Only used to prefill the form; a super
+// Derives "J P Nagar, Bengaluru" -> "JPNB". Only used to prefill the form; a super
 // admin can always override it, since asset tags carry the code and a center's
 // tags should stay stable once printed.
 function suggestCode(name) {

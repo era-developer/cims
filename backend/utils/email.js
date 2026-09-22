@@ -77,7 +77,7 @@ function createTransporter() {
     host: useAddress ? resolvedSmtp.address : config.host,
     port: config.port,
     secure: config.secure,
-    name: 'kims.local',
+    name: 'cims.local',
     tls: useAddress ? { servername: config.host } : undefined,
     connectionTimeout: 15000,
     greetingTimeout: 15000,
@@ -175,7 +175,7 @@ function getSenderName() {
   } catch {
     // Fall through to env below.
   }
-  return readEnv('EMAIL_SENDER_NAME') || 'Kalam Pragati - KIMS';
+  return readEnv('EMAIL_SENDER_NAME') || 'Comedkares Innovation Hub - CIMS';
 }
 
 function getOrgName() {
@@ -185,7 +185,7 @@ function getOrgName() {
   } catch {
     // Fall through to env below.
   }
-  return readEnv('ORG_NAME') || 'Kalam Pragati';
+  return readEnv('ORG_NAME') || 'Comedkares Innovation Hub';
 }
 
 function getOrgShortName() {
@@ -195,7 +195,7 @@ function getOrgShortName() {
   } catch {
     // Fall through to env below.
   }
-  return readEnv('ORG_SHORT_NAME') || 'KIMS';
+  return readEnv('ORG_SHORT_NAME') || 'CIMS';
 }
 
 function buildReplyTo(primary, fallback) {

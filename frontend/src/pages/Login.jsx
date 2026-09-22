@@ -622,7 +622,7 @@ const orbPos = [
 
 // Per-device memory of the install offer. Never again after installing;
 // a month after "Not now".
-const INSTALL_KEY = 'kims.installOffer';
+const INSTALL_KEY = 'cims.installOffer';
 function shouldOfferInstall() {
   try {
     const raw = localStorage.getItem(INSTALL_KEY);

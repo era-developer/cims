@@ -1,7 +1,7 @@
 // What a QR label encodes, and how to read one back.
 //
 // Labels carry a link to the portal with the tag as a query parameter
-// (https://kalampragati.s.gy/kims?unit=AKTU-ELEC-00001) so that ANY phone
+// (https://comedkares.s.gy/cims?unit=JPN-ELEC-00001) so that ANY phone
 // camera -- a student's, with no app open -- lands on the unit's page. The
 // in-app scanner accepts that link, a /unit/<tag> path, or a bare tag.
 

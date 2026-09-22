@@ -17,14 +17,14 @@
 // with a single id is just a rename.
 //
 // Usage:
-//   node merge-catalog.js --plan merge-plan.json [--db ../data/kims.db] [--apply]
+//   node merge-catalog.js --plan merge-plan.json [--db ../data/cims.db] [--apply]
 
 const path = require('path');
 const fs = require('fs');
 const { DatabaseSync } = require('node:sqlite');
 
 function parseArgs(argv) {
-  const args = { db: path.join(__dirname, '..', 'data', 'kims.db'), plan: '', apply: false };
+  const args = { db: path.join(__dirname, '..', 'data', 'cims.db'), plan: '', apply: false };
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === '--db') args.db = argv[++i];
     else if (argv[i] === '--plan') args.plan = argv[++i];
@@ -130,7 +130,7 @@ function main() {
     return;
   }
 
-  const backup = path.join(require('../utils/storage').BACKUPS_DIR, `kims-before-merge-${new Date().toISOString().replace(/[:.]/g, '-')}.db`);
+  const backup = path.join(require('../utils/storage').BACKUPS_DIR, `cims-before-merge-${new Date().toISOString().replace(/[:.]/g, '-')}.db`);
   db.exec(`VACUUM INTO '${backup.replace(/'/g, "''")}'`);
   console.log(`Snapshot: ${backup}`);
 

@@ -113,15 +113,15 @@ function resolve(key, envNames = [], fallback = '') {
 // ---------- Branding ----------
 
 function getOrgName() {
-  return resolve(KEYS.ORG_NAME, ['ORG_NAME'], 'Kalam Pragati');
+  return resolve(KEYS.ORG_NAME, ['ORG_NAME'], 'Comedkares Innovation Hub');
 }
 
 function getOrgShortName() {
-  return resolve(KEYS.ORG_SHORT_NAME, ['ORG_SHORT_NAME'], 'KIMS');
+  return resolve(KEYS.ORG_SHORT_NAME, ['ORG_SHORT_NAME'], 'CIMS');
 }
 
 function getOrgTagline() {
-  return resolve(KEYS.ORG_TAGLINE, ['ORG_TAGLINE'], 'Empowering Engineers with Skills for Success');
+  return resolve(KEYS.ORG_TAGLINE, ['ORG_TAGLINE'], 'Innovation Hub');
 }
 
 function getSiteUrl() {

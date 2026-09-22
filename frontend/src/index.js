@@ -6,7 +6,7 @@ import App from './App';
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(<React.StrictMode><App /></React.StrictMode>);
 
-// Service worker: makes KIMS installable ("Add to Home Screen") and lets the
+// Service worker: makes CIMS installable ("Add to Home Screen") and lets the
 // app shell open instantly and offline. Production only -- in development it
 // would serve stale bundles and fight the dev server.
 if (process.env.NODE_ENV === 'production' && 'serviceWorker' in navigator) {

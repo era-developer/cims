@@ -1,10 +1,10 @@
--- KIMS: make org-level settings and per-center contacts editable at runtime.
+-- Make org-level settings and per-center contacts editable at runtime.
 --
 -- Before this migration the order-notification email and the WhatsApp admin
 -- number could only be changed by editing backend/.env and restarting the
 -- service ({CENTER_ID}_EMAIL / {CENTER_ID}_WHATSAPP_ADMIN_TO). That is fine
--- for a deployment whose centers never change, but Kalam Pragati needs a
--- super admin to re-point notifications when the responsible admin changes,
+-- for a deployment whose centers never change, but a super admin needs to
+-- re-point notifications when the responsible admin at a center changes,
 -- and to onboard a new center without a code deploy. Both now live in the
 -- database; the env vars remain as a fallback so existing deployments keep
 -- working untouched.

@@ -303,7 +303,7 @@ router.post('/', authMiddleware, async (req, res) => {
     // traceability/reporting via project_id. Project Name is separate,
     // free-text, student-entered context -- not mandatory, no FK.
     const projectId = getOrCreateProject(db, centerId, studentDetails.programName);
-    // Prefixed with the org short name (KIMS-...), so an order id says
+    // Prefixed with the org short name (CIMS-...), so an order id says
     // which portal it came from when both programmes share a WhatsApp inbox.
     orderId = `${require('../utils/settings').getOrgShortName()}-${Date.now().toString(36).toUpperCase()}`;
     const now = new Date().toISOString();

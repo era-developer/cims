@@ -1423,7 +1423,7 @@ export default function AdminInventory() {
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '8px' }}>
                   <input
                     style={{ ...styles.bulkSelect2, flex: '1 1 180px', fontFamily: "'DM Mono', Consolas, monospace" }}
-                    placeholder="Type an asset tag, e.g. AKTU-ELEC-00008"
+                    placeholder="Type an asset tag, e.g. JPN-ELEC-00008"
                     value={internalTagInput}
                     onChange={e => setInternalTagInput(e.target.value.toUpperCase())}
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleInternalTagAdd(); } }}

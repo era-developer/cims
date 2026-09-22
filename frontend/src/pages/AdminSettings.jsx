@@ -510,14 +510,14 @@ Continue?`;
               value={centerForm.name}
               onChange={value => setCenterForm(current => ({ ...current, name: value }))}
               onBlur={() => suggestFromName(centerForm.name)}
-              placeholder="AKTU, Lucknow"
+              placeholder="Davangere"
               required
             />
             <Field
               label="Center code"
               value={centerForm.code}
               onChange={value => setCenterForm(current => ({ ...current, code: value.toUpperCase() }))}
-              placeholder="AKTU"
+              placeholder="DVG"
               hint="Printed on asset tags. Keep it stable once tags exist."
               required
             />
@@ -526,7 +526,7 @@ Continue?`;
                 label="Center ID"
                 value={centerForm.id}
                 onChange={value => setCenterForm(current => ({ ...current, id: value }))}
-                placeholder="aktu_lucknow"
+                placeholder="davangere"
                 hint="Permanent. Derived from the name if left blank."
               />
             )}

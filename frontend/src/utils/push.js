@@ -5,7 +5,7 @@ import axios from 'axios';
 // Everything here is best-effort -- a browser without push support just
 // reports `supported: false` and the UI hides itself.
 
-const DISMISS_KEY = 'kims.pushPromptDismissedAt';
+const DISMISS_KEY = 'cims.pushPromptDismissedAt';
 const DISMISS_DAYS = 7;
 
 export function isPushSupported() {

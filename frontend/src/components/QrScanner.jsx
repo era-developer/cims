@@ -182,7 +182,7 @@ export default function QrScanner({
             style={styles.manualInput}
             value={manual}
             onChange={e => setManual(e.target.value)}
-            placeholder="or type the tag, e.g. AKTU-ELEC-00012"
+            placeholder="or type the tag, e.g. JPN-ELEC-00012"
             autoComplete="off"
             autoCapitalize="characters"
           />

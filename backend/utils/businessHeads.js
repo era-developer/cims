@@ -3,9 +3,9 @@ const { getDb } = require('./db');
 // Business heads are the funding entities an invoice is booked against
 // ("ERA Foundation", and for Comedkare also "ComedK"). The table has existed
 // since 001_init.sql, but its rows were only ever inserted by migration
-// scripts, and the dashboard hardcoded the two Comedkare names. KIMS launches
-// with ERA Foundation only and needs a super admin to be able to add more
-// from Settings, so this module owns the table and the UI reads it.
+// scripts, and the dashboard hardcoded the two Comedkare names. A super admin
+// can now add more from Settings, so this module owns the table and the UI
+// reads it.
 
 // Sentinel row name used by legacy reports for invoices with no head. Never
 // offered in forms and never editable.
