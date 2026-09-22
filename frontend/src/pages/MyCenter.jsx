@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import ProgramSelect, { OTHER_PROGRAM } from '../components/ProgramSelect';
+import ProgramSelect, { resolveProgramName, OTHER_PROGRAM } from '../components/ProgramSelect';
 import { useCenters } from '../context/CentersContext';
 import NotificationsCard from '../components/NotificationsCard';
 
@@ -33,13 +33,51 @@ const PROCUREMENT_STATUS_META = {
   Received: { background: '#eef2ff', color: '#4338ca' },
 };
 
+const FLOW_STEPS = [
+  'List the exact components and quantities you need, picking from the existing inventory items.',
+  'Provide program details, responsible person, and why your center requires these parts.',
+  'Submit the transfer request so super admin can review, select a supply center, and approve.',
+  'The requested components are reserved, redistributed, and the stock is adjusted at both centers automatically.',
+];
+
+function createRow() {
+  return {
+    id: `row-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,
+    componentId: '',
+    name: '',
+    link: '',
+    qty: '',
+    unit: 'pcs',
+    available: 0,
+  };
+}
+
 export default function MyCenter() {
   const { centers } = useCenters();
   const { user } = useAuth();
   const navigate = useNavigate();
   const isSuperAdmin = user?.role === 'super_admin';
   const [centerId, setCenterId] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [rows, setRows] = useState([createRow()]);
   const [inventory, setInventory] = useState([]);
+  const [loadingInventory, setLoadingInventory] = useState(true);
+  const [processing, setProcessing] = useState(false);
+  const [pageMessage, setPageMessage] = useState('');
+  const [requests, setRequests] = useState([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+  const [viewMode, setViewMode] = useState('requested');
+  const [returnModal, setReturnModal] = useState({ open: false, requestId: '', details: { courierName: '', trackingId: '', notes: '' } });
+  const [formDetails, setFormDetails] = useState({
+    programName: '',
+    responsiblePerson: '',
+    responsibleEmail: '',
+    purpose: '',
+    desiredReturnDate: '',
+    notes: '',
+  });
+  const [error, setError] = useState('');
+  const [submissionStatus, setSubmissionStatus] = useState('');
   const [programs, setPrograms] = useState([]);
   const [programModalOpen, setProgramModalOpen] = useState(false);
   const [editingProgramId, setEditingProgramId] = useState(null);
@@ -47,8 +85,9 @@ export default function MyCenter() {
     name: '', handledBy: '', startDate: '', expectedEndDate: '', instituteName: '', notes: '', completionDate: '', status: 'planning',
   });
   const [programSaving, setProgramSaving] = useState(false);
-  const [showAllPrograms, setShowAllPrograms] = useState(false);
   const [programMsg, setProgramMsg] = useState('');
+  const [otherProgramName, setOtherProgramName] = useState('');
+  const [showAllPrograms, setShowAllPrograms] = useState(false);
   const [procurementRequests, setProcurementRequests] = useState([]);
   const [loadingProcurement, setLoadingProcurement] = useState(false);
   const [procurementFormOpen, setProcurementFormOpen] = useState(false);
@@ -70,17 +109,43 @@ export default function MyCenter() {
 
   useEffect(() => {
     let cancel = false;
+    setLoadingInventory(true);
     axios
       .get('/api/components')
       .then(response => {
         if (cancel) return;
         setInventory(Array.isArray(response.data) ? response.data : []);
       })
-      .catch(() => { /* suggestions are a convenience; the form still works */ });
+      .catch(() => {
+        if (cancel) return;
+        setPageMessage('Unable to load your inventory right now. Please refresh.');
+      })
+      .finally(() => {
+        if (cancel) return;
+        setLoadingInventory(false);
+      });
     return () => {
       cancel = true;
     };
   }, []);
+
+  const fetchRequests = useCallback(async () => {
+    if (!centerId) return;
+    setLoadingRequests(true);
+    try {
+      const { data } = await axios.get('/api/transfers', { params: { centerId } });
+      setRequests(data);
+    } catch (err) {
+      console.error('Unable to load transfer history', err);
+    } finally {
+      setLoadingRequests(false);
+    }
+  }, [centerId]);
+
+  useEffect(() => {
+    if (!centerId) return;
+    fetchRequests();
+  }, [centerId, fetchRequests]);
 
   const fetchProcurement = useCallback(async () => {
     if (!centerId) return;
@@ -250,6 +315,140 @@ export default function MyCenter() {
   }, [programs]);
   const recentPrograms = sortedPrograms.slice(0, 5);
 
+  const filteredRequests = useMemo(() => {
+    if (!centerId) return [];
+    if (viewMode === 'sent') {
+      return requests.filter(request => request.supplyCenterId === centerId);
+    }
+    return requests.filter(request => request.requestingCenterId === centerId);
+  }, [requests, viewMode, centerId]);
+
+  function openReturnModal(requestId) {
+    setReturnModal({ open: true, requestId, details: { courierName: '', trackingId: '', notes: '' } });
+  }
+
+  function closeReturnModal() {
+    setReturnModal(prev => ({ ...prev, open: false }));
+  }
+
+  function handleReturnChange(field, value) {
+    setReturnModal(prev => ({
+      ...prev,
+      details: { ...prev.details, [field]: value },
+    }));
+  }
+
+  async function submitReturn() {
+    if (!returnModal.requestId) return;
+    try {
+      setProcessing(true);
+      await axios.post(`/api/transfers/${returnModal.requestId}/return-request`, returnModal.details);
+      setPageMessage('Return request submitted; super admin will confirm receipt.');
+      closeReturnModal();
+      fetchRequests();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Unable to submit return request.');
+    } finally {
+      setProcessing(false);
+    }
+  }
+
+  const suggestionsMap = useMemo(() => {
+    const map = {};
+    rows.forEach(row => {
+      // Once a suggestion is picked (componentId set), don't keep matching
+      // the now-exact name against itself -- that left the dropdown open
+      // right after the click that was meant to close it.
+      if (!row.name.trim() || row.componentId) return;
+      const query = row.name.trim().toLowerCase();
+      map[row.id] = inventory
+        .filter(item => item.name?.toLowerCase().includes(query))
+        .slice(0, 6);
+    });
+    return map;
+  }, [inventory, rows]);
+
+  function updateRow(rowId, changes) {
+    setRows(current => current.map(row => (row.id === rowId ? { ...row, ...changes } : row)));
+  }
+
+  function handleNameChange(rowId, value) {
+    updateRow(rowId, { name: value, componentId: '', available: 0, unit: 'pcs' });
+    setSubmissionStatus('');
+  }
+
+  function handleSuggestionSelect(rowId, item) {
+    updateRow(rowId, {
+      componentId: item.id,
+      name: item.name,
+      available: Number(item.stock || 0),
+      unit: item.unit || 'pcs',
+      link: item.image || item.imageUrl || '',
+    });
+  }
+
+  function handleQtyChange(rowId, rawValue) {
+    const value = Math.max(0, Number(rawValue) || 0);
+    setRows(current => current.map(row => (row.id === rowId ? { ...row, qty: value } : row)));
+  }
+
+  function addRow() {
+    setRows(current => [...current, createRow()]);
+  }
+
+  function removeRow(rowId) {
+    setRows(current => (current.length === 1 ? current : current.filter(row => row.id !== rowId)));
+  }
+
+  function handleDetailChange(field, value) {
+    setFormDetails(current => ({ ...current, [field]: value }));
+    setSubmissionStatus('');
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setError('');
+    setPageMessage('');
+    const validRows = rows
+      .map((row, index) => ({ ...row, qty: Number(row.qty) || 0, index: index + 1 }))
+      .filter(row => row.componentId && row.qty > 0);
+    if (!validRows.length) {
+      setError('Select at least one existing component and enter a quantity.');
+      return;
+    }
+    const payload = {
+      programName: resolveProgramName(formDetails.programName, otherProgramName),
+      responsiblePerson: formDetails.responsiblePerson.trim(),
+      responsibleEmail: formDetails.responsibleEmail.trim(),
+      purpose: formDetails.purpose.trim(),
+      desiredReturnDate: formDetails.desiredReturnDate,
+      notes: formDetails.notes.trim(),
+      components: validRows.map(row => ({
+        id: row.componentId,
+        name: row.name,
+        qty: row.qty,
+        link: row.link,
+        unit: row.unit,
+      })),
+    };
+
+    setProcessing(true);
+    try {
+      const { data } = await axios.post('/api/transfers', payload);
+      setPageMessage(`Transfer request ${data.id} submitted. Super admin will assign a supply center shortly.`);
+      setSubmissionStatus('waiting');
+      setRows([createRow()]);
+      setFormDetails({ programName: '', responsiblePerson: '', responsibleEmail: '', purpose: '', desiredReturnDate: '', notes: '' });
+      setOtherProgramName('');
+      fetchRequests();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Unable to submit the request right now.');
+      setSubmissionStatus('');
+    } finally {
+      setProcessing(false);
+    }
+  }
+
   const centerName = isSuperAdmin
     ? (centers.find(c => c.id === centerId)?.name || 'Select a center')
     : (user?.centerName || 'your center');
@@ -305,7 +504,7 @@ export default function MyCenter() {
             <div style={{ ...styles.sectionHeading, marginBottom: 6 }}>Request New Components — {centerName}</div>
             <p style={styles.helperText}>
               For components your center doesn't have yet (or needs more of) for a prototype or program. Goes to the
-              super admin for approval and procurement.
+              super admin for approval and procurement -- different from requesting existing stock from another center below.
             </p>
           </div>
           <button type="button" onClick={() => { setProcurementFormOpen(true); setProcurementMsg(''); }} style={styles.primarySmallBtn}>
@@ -410,6 +609,313 @@ export default function MyCenter() {
           </div>
         )}
       </section>
+
+      <div style={styles.hero}>
+        <div>
+          <p style={styles.label}>My Center — {centerName}</p>
+          <h1 style={styles.title}>Request components from another center</h1>
+          <p style={styles.subtitle}>
+            When units within your center are busy or a project needs temporary additional parts, ask the super admin to
+            allocate stock from another lab. All activity is tracked in the transfer register so nothing slips through the cracks.
+          </p>
+        </div>
+        <div style={styles.actionRow}>
+          <button
+            type="button"
+            onClick={() => setShowForm(true)}
+            style={styles.requestBtn}
+          >
+            {showForm ? 'Update request details below' : 'Request components from another center'}
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/admin/inventory')}
+            style={styles.ghostBtn}
+          >
+            Add component to inventory
+          </button>
+        </div>
+      </div>
+
+      {showForm && (
+        <form onSubmit={handleSubmit} style={styles.card}>
+          <div style={{ ...styles.section, marginBottom: 24 }}>
+            <div style={styles.sectionHeading}>Components required</div>
+            <div style={styles.tableHeader}>
+              <span style={{ flex: '0 0 40px' }}>S no</span>
+              <span style={{ flex: 1 }}>Component name</span>
+              <span style={{ flex: '0 0 160px' }}>Link (optional)</span>
+              <span style={{ flex: '0 0 120px' }}>Quantity</span>
+              <span style={{ flex: '0 0 50px' }} />
+            </div>
+            {rows.map((row, index) => (
+              <div key={row.id} style={styles.tableRow}>
+                <span style={{ flex: '0 0 40px', ...styles.serial }}>{index + 1}</span>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <input
+                    value={row.name}
+                    onChange={event => handleNameChange(row.id, event.target.value)}
+                    placeholder="Type to search inventory"
+                    style={styles.input}
+                  />
+                  {row.componentId ? (
+                    <span style={styles.helperText}>Available stock: {row.available} {row.unit}</span>
+                  ) : (row.name.trim() && (
+                    <span style={styles.helperTextError}>Select a listed component or add it via Inventory first.</span>
+                  ))}
+                  {suggestionsMap[row.id]?.length ? (
+                    <div style={styles.suggestionList}>
+                      {suggestionsMap[row.id].map(item => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          style={styles.suggestionItem}
+                          onMouseDown={event => event.preventDefault()}
+                          onClick={() => handleSuggestionSelect(row.id, item)}
+                        >
+                          <span style={styles.suggestionName}>{item.name}</span>
+                          <span style={styles.suggestionMeta}>{item.stock || 0} pcs · {item.category || 'Inventory'}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+                <input
+                  value={row.link}
+                  onChange={event => updateRow(row.id, { link: event.target.value })}
+                  placeholder="Optional link (docs/photo)"
+                  style={{ ...styles.input, flex: '0 0 160px' }}
+                />
+                <input
+                  type="number"
+                  min="0"
+                  value={row.qty}
+                  onChange={event => handleQtyChange(row.id, event.target.value)}
+                  placeholder="Qty"
+                  style={{ ...styles.input, flex: '0 0 120px' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => removeRow(row.id)}
+                  style={styles.removeRowBtn}
+                  disabled={rows.length === 1}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+            <button type="button" onClick={addRow} style={styles.addRowBtn}>+ Add another component</button>
+          </div>
+
+          <div style={styles.section}>
+            <div style={styles.sectionHeading}>Project & contact details</div>
+            <div style={styles.detailGrid}>
+              <div style={styles.fieldLabel}>
+                <ProgramSelect
+                  programs={programs} mode="name" label="Program / project name"
+                  value={formDetails.programName} otherValue={otherProgramName}
+                  onChange={value => handleDetailChange('programName', value)}
+                  onOtherChange={setOtherProgramName}
+                />
+              </div>
+              <label style={styles.fieldLabel}>
+                <span style={styles.labelText}>Responsible person</span>
+                <input
+                  value={formDetails.responsiblePerson}
+                  onChange={event => handleDetailChange('responsiblePerson', event.target.value)}
+                  style={styles.input}
+                />
+              </label>
+              <label style={styles.fieldLabel}>
+                <span style={styles.labelText}>Responsible email</span>
+                <input
+                  type="email"
+                  value={formDetails.responsibleEmail}
+                  onChange={event => handleDetailChange('responsibleEmail', event.target.value)}
+                  style={styles.input}
+                />
+              </label>
+              <label style={styles.fieldLabel}>
+                <span style={styles.labelText}>Purpose / justification</span>
+                <textarea
+                  value={formDetails.purpose}
+                  onChange={event => handleDetailChange('purpose', event.target.value)}
+                  style={{ ...styles.input, minHeight: 70 }}
+                />
+              </label>
+              <label style={styles.fieldLabel}>
+                <span style={styles.labelText}>Desired return date</span>
+                <input
+                  type="date"
+                  value={formDetails.desiredReturnDate}
+                  onChange={event => handleDetailChange('desiredReturnDate', event.target.value)}
+                  style={styles.input}
+                />
+              </label>
+              <label style={styles.fieldLabel}>
+                <span style={styles.labelText}>Additional notes</span>
+                <textarea
+                  value={formDetails.notes}
+                  onChange={event => handleDetailChange('notes', event.target.value)}
+                  style={{ ...styles.input, minHeight: 70 }}
+                />
+              </label>
+            </div>
+          </div>
+
+          {error && <div style={styles.error}>{error}</div>}
+          {pageMessage && <div style={styles.message}>{pageMessage}</div>}
+
+          <div style={styles.footerRow}>
+            <button
+              type="submit"
+              style={styles.submitBtn}
+              disabled={processing || submissionStatus === 'waiting'}
+            >
+              {submissionStatus === 'waiting' ? 'Waiting for super admin approval' : processing ? 'Submitting…' : 'Submit request'}
+            </button>
+            <span style={styles.helperNote}>
+              Requests go to the super admin for approval. The supply center is chosen there and stock updates occur for both centers.
+            </span>
+          </div>
+        </form>
+      )}
+
+      <section style={styles.card}>
+        <div style={styles.sectionHeading}>Process flow</div>
+        <ol style={styles.flowList}>
+          {FLOW_STEPS.map(step => (
+            <li key={step} style={styles.flowItem}>{step}</li>
+          ))}
+        </ol>
+        <p style={styles.helperText}>You can revisit this page anytime to track what you requested. Notifications are also emailed to the super admin automatically.</p>
+        {loadingInventory && <span style={styles.helperText}>Loading inventory list for suggestions…</span>}
+        {!loadingInventory && !inventory.length && (
+          <span style={styles.helperTextError}>
+            Your inventory looks empty—add components first so you can request them for other centers.
+          </span>
+        )}
+      </section>
+
+          <section style={styles.card}>
+            <div style={styles.sectionHeading}>Request history</div>
+            <div style={styles.filterRow}>
+              <button
+                type="button"
+                onClick={() => setViewMode('requested')}
+                style={viewMode === 'requested' ? styles.filterActive : styles.filterBtn}
+              >
+                Requested
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('sent')}
+                style={viewMode === 'sent' ? styles.filterActive : styles.filterBtn}
+              >
+                Sent
+              </button>
+            </div>
+            {loadingRequests ? (
+              <p style={styles.helperText}>Loading your transfer requests…</p>
+            ) : !filteredRequests.length ? (
+              <p style={styles.helperText}>
+                {viewMode === 'requested'
+                  ? 'No center-to-center requests submitted yet.'
+                  : 'No sent transfers are recorded for this center yet.'}
+              </p>
+            ) : (
+              <div style={styles.historyList}>
+                {filteredRequests.map(request => {
+                  const isRequested = viewMode === 'requested';
+                  const counterpartName = isRequested
+                    ? request.supplyCenterName || 'Waiting for supply center'
+                    : request.requestingCenterName || user?.centerName;
+                  const counterpartLabel = isRequested ? 'Supply center' : 'Requested center';
+                  return (
+                    <div key={request.id} style={styles.historyItem}>
+                      <div style={styles.historyRow}>
+                        <span style={styles.historyTitle}>{request.id}</span>
+                        <span style={styles.historyStatus}>{request.status || 'Pending'}</span>
+                      </div>
+                      <div style={styles.historyRow}>
+                        <span>{request.programName || 'Program not provided'}</span>
+                        <span>Requested on {new Date(request.requestDate || Date.now()).toLocaleString()}</span>
+                      </div>
+                      <div style={styles.historyRow}>
+                        <span>{counterpartLabel}: {counterpartName}</span>
+                        <span>Responsible: {request.responsiblePerson || 'N/A'}</span>
+                      </div>
+                      <div style={styles.historyRow}>
+                        <span>{request.responsibleEmail || 'Email not provided'}</span>
+                      </div>
+                      <div style={styles.componentList}>
+                        {(request.components || []).map(component => (
+                          <span key={`${request.id}-${component.id}`} style={styles.componentPill}>
+                            {component.name || component.id} × {component.qty || 0}
+                          </span>
+                        ))}
+                      </div>
+                      {request.status === 'Approved' && viewMode === 'requested' && (
+                        <div style={styles.returnButtonRow}>
+                          <button
+                            type="button"
+                            style={styles.secondaryBtn}
+                            onClick={() => openReturnModal(request.id)}
+                          >
+                            Return components
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+      {returnModal.open && (
+        <div style={styles.modalOverlay} onClick={closeReturnModal}>
+          <div style={styles.modal} onClick={event => event.stopPropagation()}>
+            <h3 style={styles.modalTitle}>Confirm return details</h3>
+            <p style={styles.modalText}>Add courier/tracking info if available; fields are optional.</p>
+            <label style={styles.modalLabel}>
+              Courier / transporter
+              <input
+                value={returnModal.details.courierName}
+                onChange={event => handleReturnChange('courierName', event.target.value)}
+                style={styles.modalInput}
+                placeholder="Courier name (optional)"
+              />
+            </label>
+            <label style={styles.modalLabel}>
+              Tracking ID
+              <input
+                value={returnModal.details.trackingId}
+                onChange={event => handleReturnChange('trackingId', event.target.value)}
+                style={styles.modalInput}
+                placeholder="Tracking number (optional)"
+              />
+            </label>
+            <label style={styles.modalLabel}>
+              Notes
+              <textarea
+                value={returnModal.details.notes}
+                onChange={event => handleReturnChange('notes', event.target.value)}
+                style={{ ...styles.modalInput, minHeight: 80 }}
+                placeholder="Add extra context (optional)"
+              />
+            </label>
+            <div style={styles.modalActions}>
+              <button type="button" style={styles.modalCancelBtn} onClick={closeReturnModal} disabled={processing}>
+                Cancel
+              </button>
+              <button type="button" style={styles.primaryBtn} onClick={submitReturn} disabled={processing}>
+                {processing ? 'Sending…' : 'Send return info'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {programModalOpen && (
         <div style={styles.modalOverlay} onClick={() => setProgramModalOpen(false)}>
@@ -734,16 +1240,6 @@ const styles = {
     borderRadius: 20,
     padding: '28px',
     width: 'min(480px, 90%)',
-    boxShadow: '0 20px 40px rgba(15,23,42,0.25)',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 12,
-  },
-  modalWide: {
-    background: '#fff',
-    borderRadius: 20,
-    padding: '28px',
-    width: 'min(700px, 92%)',
     boxShadow: '0 20px 40px rgba(15,23,42,0.25)',
     display: 'flex',
     flexDirection: 'column',

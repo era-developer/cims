@@ -263,6 +263,69 @@ async function notifyAdminsNewRegistration({ centerId, fullName, username }) {
   }
 }
 
+// ---- center-to-center transfers ---------------------------------------------
+// Audience follows the e-mail: super admins hear about new requests; the two
+// centers' admins hear about approval and return. The person acting is left
+// out, since they already know.
+
+function superAdminIds({ excludeUserId } = {}) {
+  return getDb().prepare(`
+    SELECT id FROM users WHERE active = 1 AND role = 'super_admin' AND (? IS NULL OR id <> ?)
+  `).all(excludeUserId || null, excludeUserId || null).map(r => r.id);
+}
+
+function transferUrl(transferId, isSuperAdmin) {
+  return `${isSuperAdmin ? '/admin/transfers' : '/admin/my-center'}?q=${encodeURIComponent(transferId)}`;
+}
+
+async function notifyTransfer(transfer, type, { excludeUserId } = {}) {
+  try {
+    const items = summarizeItems(transfer.components);
+    const from = transfer.requestingCenterName || transfer.requestingCenterId;
+    const supply = transfer.supplyCenterName || transfer.supplyCenterId;
+    let audience = [];
+    let title = '';
+    let body = '';
+    let superAudience = false;
+    if (type === 'request') {
+      audience = superAdminIds({ excludeUserId });
+      superAudience = true;
+      title = `Transfer request ${transfer.id}`;
+      body = `${from} asked for ${items}.`;
+    } else if (type === 'approved') {
+      audience = [
+        ...notifications.centerAdminIds(transfer.requestingCenterId, { excludeUserId }),
+        ...notifications.centerAdminIds(transfer.supplyCenterId, { excludeUserId }),
+      ];
+      title = `Transfer ${transfer.id} approved`;
+      body = `${supply} will supply ${items} to ${from}.`;
+    } else if (type === 'return-request') {
+      audience = notifications.centerAdminIds(transfer.supplyCenterId, { excludeUserId });
+      title = `Return on its way: ${transfer.id}`;
+      body = `${from} is sending ${items} back to ${supply}.`;
+    } else if (type === 'returned') {
+      audience = [
+        ...notifications.centerAdminIds(transfer.requestingCenterId, { excludeUserId }),
+        ...notifications.centerAdminIds(transfer.supplyCenterId, { excludeUserId }),
+      ];
+      title = `Transfer ${transfer.id} returned`;
+      body = `${items} are back at ${supply}.`;
+    } else {
+      return;
+    }
+    // centerAdminIds already includes super admins; they land on the
+    // super-admin transfers page, center admins on My Center.
+    const superIds = new Set(superAdminIds());
+    const ids = [...new Set(audience)];
+    await deliver(ids.filter(id => superIds.has(id)), { kind: `transfer_${type}`, title, body, url: transferUrl(transfer.id, true), ref: transfer.id });
+    if (!superAudience) {
+      await deliver(ids.filter(id => !superIds.has(id)), { kind: `transfer_${type}`, title, body, url: transferUrl(transfer.id, false), ref: transfer.id });
+    }
+  } catch (err) {
+    console.error(`[push] transfer ${type} notice failed:`, err.message);
+  }
+}
+
 // The student's first entry in the bell: waiting for them at first sign-in.
 async function notifyAccountApproved(user) {
   try {
@@ -284,4 +347,5 @@ module.exports = {
   sendToUser, deliver,
   notifyStudentOrderStatus, notifyStudentOrderPlaced, notifyStudentReturnReminder,
   notifyAdminsNewOrder, notifyAdminsReturnRequested, notifyAdminsNewRegistration, notifyAccountApproved,
+  notifyTransfer,
 };

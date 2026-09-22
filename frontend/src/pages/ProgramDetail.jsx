@@ -80,7 +80,7 @@ export default function ProgramDetail() {
     );
   }
 
-  const { program, invoices, damagedAssets, studentOrders, internalIssues, procurementRequests, totals } = report;
+  const { program, invoices, damagedAssets, studentOrders, transfers, internalIssues, procurementRequests, totals } = report;
   const meta = STATUS_META[program.status] || STATUS_META.planning;
 
   return (
@@ -121,6 +121,10 @@ export default function ProgramDetail() {
         <div style={styles.statCard}>
           <span style={styles.statLabel}>Student orders</span>
           <span style={styles.statValue}>{totals.studentOrderCount}</span>
+        </div>
+        <div style={styles.statCard}>
+          <span style={styles.statLabel}>Transfer requests</span>
+          <span style={styles.statValue}>{totals.transferCount}</span>
         </div>
         <div style={styles.statCard}>
           <span style={styles.statLabel}>Internal component issues</span>
@@ -347,6 +351,30 @@ export default function ProgramDetail() {
         )}
       </section>
 
+      <section style={styles.card}>
+        <div style={styles.sectionHeading}>Center-to-center transfer requests</div>
+        {!transfers.length ? (
+          <p style={styles.helperText}>No transfer requests recorded under this program yet.</p>
+        ) : (
+          <div style={styles.historyList}>
+            {transfers.map(t => (
+              <div key={t.id} style={styles.historyItem}>
+                <div style={styles.historyRow}>
+                  <span style={styles.historyTitle}>{t.id}</span>
+                  <span>{t.status}</span>
+                </div>
+                <div style={styles.historyRow}>
+                  <span>Supply center: {t.supplyCenterName || 'Not yet assigned'}</span>
+                  <span>{formatDate(t.requestDate)}</span>
+                </div>
+                <div style={styles.historyRow}>
+                  <span>Responsible: {t.responsiblePerson || 'N/A'}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

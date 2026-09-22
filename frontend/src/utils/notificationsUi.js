@@ -32,6 +32,10 @@ const ICONS = {
   new_order: '🛒',
   new_registration: '🧑‍🎓',
   account_approved: '🎉',
+  transfer_request: '🔁',
+  'transfer_return-request': '🔁',
+  transfer_approved: '🚚',
+  transfer_returned: '📦',
 };
 
 export function kindIcon(kind) {
@@ -49,4 +53,8 @@ export const KIND_LABELS = {
   new_order: 'New order',
   new_registration: 'Registration',
   account_approved: 'Account',
+  transfer_request: 'Transfer request',
+  'transfer_return-request': 'Transfer return',
+  transfer_approved: 'Transfer approved',
+  transfer_returned: 'Transfer returned',
 };

@@ -5,6 +5,7 @@ const { listCenters, getCenterById, requireCenter } = require('../utils/centers'
 const { getAdminRecipient, sendTransferNotification } = require('../utils/email');
 const { logActivity } = require('../utils/logsDb');
 const { swapAsset } = require('../utils/assetSwap');
+const push = require('../utils/push');
 
 const router = express.Router();
 // Super-admin recipients for org-level events. Resolved at send time from
@@ -170,6 +171,7 @@ router.post('/', authMiddleware, adminOnly, async (req, res) => {
 
     await logActivity('TRANSFER_REQUEST', req.user.username, { role: req.user.role, centerId, info: `Requested ${components.length} components (Transfer ${transfer.id})` });
     await sendTransferNotification({ transfer, type: 'request', recipients: superAdminRecipients() });
+    push.notifyTransfer(transfer, 'request', { excludeUserId: req.user.id });
     res.status(201).json(transfer);
   } catch (err) {
     console.error('Transfer POST error:', err.message);
@@ -204,6 +206,7 @@ router.post('/:id/return-request', authMiddleware, adminOnly, async (req, res) =
     await logActivity('TRANSFER_RETURN_REQUESTED', req.user.username, { role: req.user.role, centerId: row.requesting_center_id, info: `Return requested for ${req.params.id}` });
     const recipients = [getAdminRecipient(row.supply_center_id), ...superAdminRecipients()].filter(Boolean);
     await sendTransferNotification({ transfer: updated, type: 'return-request', recipients });
+    push.notifyTransfer(updated, 'return-request', { excludeUserId: req.user.id });
     res.json(updated);
   } catch (err) {
     console.error('Return request error:', err.message);
@@ -288,6 +291,7 @@ router.put('/:id', authMiddleware, adminOnly, async (req, res) => {
       ]);
       const recipients = [getAdminRecipient(supplyCenterId), getAdminRecipient(row.requesting_center_id)].filter(Boolean);
       await sendTransferNotification({ transfer: updated, type: 'approved', recipients });
+      push.notifyTransfer(updated, 'approved', { excludeUserId: req.user.id });
       return res.json(updated);
     }
 
@@ -342,6 +346,7 @@ router.put('/:id', authMiddleware, adminOnly, async (req, res) => {
       ]);
       const recipients = [getAdminRecipient(row.supply_center_id), getAdminRecipient(row.requesting_center_id)].filter(Boolean);
       await sendTransferNotification({ transfer: updated, type: 'returned', recipients });
+      push.notifyTransfer(updated, 'returned', { excludeUserId: req.user.id });
       return res.json(updated);
     }
 

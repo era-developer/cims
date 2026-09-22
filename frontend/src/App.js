@@ -17,6 +17,7 @@ import AdminOrders from './pages/AdminOrders';
 import AdminUsers from './pages/AdminUsers';
 import AdminAnalytics from './pages/AdminAnalytics';
 import AdminInvoiceEntry from './pages/AdminInvoiceEntry';
+import AdminTransfers from './pages/AdminTransfers';
 import AdminProcurement from './pages/AdminProcurement';
 import MyCenter from './pages/MyCenter';
 import ProgramDetail from './pages/ProgramDetail';
@@ -105,6 +106,11 @@ export default function App() {
             <Route path="/admin/orders" element={
               <PrivateRoute role={['admin', 'super_admin']}>
                 <AppLayout><AdminOrders /></AppLayout>
+              </PrivateRoute>
+            } />
+            <Route path="/admin/transfers" element={
+              <PrivateRoute role="super_admin">
+                <AppLayout><AdminTransfers /></AppLayout>
               </PrivateRoute>
             } />
             <Route path="/admin/procurement" element={
