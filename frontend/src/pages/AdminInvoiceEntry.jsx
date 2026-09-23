@@ -84,6 +84,11 @@ export default function AdminInvoiceEntry() {
   const [invoiceDetailLoading, setInvoiceDetailLoading] = useState(false);
   const [invoiceDocuments, setInvoiceDocuments] = useState([]);
   const [docUploading, setDocUploading] = useState(false);
+  // Scans picked while filling in a NEW invoice. The upload endpoint needs an
+  // invoice id, which does not exist until it is saved, so they are held here
+  // and sent immediately afterwards.
+  const [pendingDocs, setPendingDocs] = useState([]);
+  const [pendingDocMsg, setPendingDocMsg] = useState('');
   const [docMsg, setDocMsg] = useState('');
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [invoiceSearch, setInvoiceSearch] = useState('');
@@ -208,10 +213,16 @@ export default function AdminInvoiceEntry() {
       const { data: saved } = await axios.post('/api/invoices', payload);
       const unitCount = (saved.lineItems || []).reduce((n, li) => n + (li.assets || []).length, 0);
       const labelCount = (saved.lineItems || []).reduce((n, li) => n + (li.assets || []).filter(a => a.needsLabel !== false).length, 0);
+      const docResult = await uploadPendingDocs(saved.id);
       setJustCreated({ invoiceId: saved.id, invoiceNumber: saved.invoiceNumber, count: labelCount });
-      setMsgType('success');
+      setMsgType(docResult.ok ? 'success' : 'error');
       setMsg(`Invoice ${saved.invoiceNumber} recorded: ${unitCount} unit${unitCount === 1 ? '' : 's'} added with asset tags`
-        + (labelCount < unitCount ? ` (${unitCount - labelCount} bulk, no labels).` : '.'));
+        + (labelCount < unitCount ? ` (${unitCount - labelCount} bulk, no labels)` : '')
+        + (docResult.ok
+          ? (docResult.count ? `, ${docResult.count} document${docResult.count === 1 ? '' : 's'} attached.` : '.')
+          : `. The invoice was saved but the documents were not attached (${docResult.message}) -- open it below and use Upload.`));
+      setPendingDocs([]);
+      setPendingDocMsg('');
       setHeader({ vendorName: '', invoiceNumber: '', invoiceDate: '', projectName: '', businessHeadName: '', installationCharges: '', freightCharges: '' });
       setOtherProjectName('');
       setLineItems([{ ...EMPTY_LINE_ITEM }]);
@@ -253,6 +264,56 @@ export default function AdminInvoiceEntry() {
       setInvoiceDocuments(data);
     } catch {
       // detail view still usable without the document list
+    }
+  }
+
+  const MAX_DOC_MB = 15;
+  const MAX_DOCS = 10;
+  const ALLOWED_DOC_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'application/pdf'];
+
+  // Same rules the server enforces, checked here so a bad file is caught
+  // before the invoice is saved rather than after.
+  function addPendingDocs(event) {
+    const picked = Array.from(event.target.files || []);
+    event.target.value = '';
+    if (!picked.length) return;
+    const rejected = [];
+    const accepted = [];
+    for (const file of picked) {
+      if (!ALLOWED_DOC_TYPES.includes(file.type)) {
+        rejected.push(`${file.name} (only JPEG/PNG/WEBP/HEIC or PDF)`);
+      } else if (file.size > MAX_DOC_MB * 1024 * 1024) {
+        rejected.push(`${file.name} (over ${MAX_DOC_MB} MB)`);
+      } else {
+        accepted.push(file);
+      }
+    }
+    setPendingDocs(current => {
+      const room = MAX_DOCS - current.length;
+      if (accepted.length > room) rejected.push(`only ${MAX_DOCS} files can be attached at once`);
+      return [...current, ...accepted.slice(0, Math.max(room, 0))];
+    });
+    setPendingDocMsg(rejected.length ? `Not attached: ${rejected.join('; ')}` : '');
+  }
+
+  function removePendingDoc(index) {
+    setPendingDocs(current => current.filter((_, i) => i !== index));
+  }
+
+  // Sends the held scans once the invoice exists. A failure here must not read
+  // as "the invoice failed" -- it is already saved, so say what is missing and
+  // where to add it.
+  async function uploadPendingDocs(invoiceId) {
+    if (!pendingDocs.length) return { ok: true, count: 0 };
+    const formData = new FormData();
+    pendingDocs.forEach(file => formData.append('files', file));
+    try {
+      await axios.post(`/api/invoices/${invoiceId}/documents`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      return { ok: true, count: pendingDocs.length };
+    } catch (err) {
+      return { ok: false, count: 0, message: err.response?.data?.message || 'the upload failed' };
     }
   }
 
@@ -606,6 +667,33 @@ export default function AdminInvoiceEntry() {
             <div>GST Value: <strong>{formatInr(totals.gst)}</strong></div>
             <div>Installation + Freight: <strong>{formatInr(installation + freight)}</strong></div>
             <div style={styles.grandTotal}>Total Bill Value: <strong>{formatInr(grandTotal)}</strong></div>
+          </div>
+
+          <div style={styles.docsBox}>
+            <div style={styles.docsHeader}>
+              <span style={{ ...styles.sectionTitle, margin: 0 }}>Invoice Photocopy / Documents</span>
+              <label style={styles.docUploadBtn}>
+                + Attach files
+                <input type="file" accept="image/*,application/pdf" multiple style={{ display: 'none' }} onChange={addPendingDocs} />
+              </label>
+            </div>
+            <p style={styles.sub}>
+              Scan or photograph the supplier's invoice and attach it here -- it is saved with this invoice
+              when you press Save. JPEG/PNG/WEBP/HEIC or PDF, up to {MAX_DOC_MB} MB each, {MAX_DOCS} files max.
+              You can also attach or remove them later from the invoice below.
+            </p>
+            {pendingDocMsg && <div style={{ ...styles.pageMsg, ...styles.pageMsgError }}>{pendingDocMsg}</div>}
+            {pendingDocs.length > 0 && (
+              <div style={styles.docsList}>
+                {pendingDocs.map((file, index) => (
+                  <div key={`${file.name}-${index}`} style={styles.docRow}>
+                    <span style={styles.docPendingName}>{file.name}</span>
+                    <span style={styles.docMeta}>{(file.size / 1024).toFixed(0)} KB</span>
+                    <button type="button" style={styles.docDeleteBtn} onClick={() => removePendingDoc(index)}>Remove</button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div style={{ display: 'flex', gap: '10px' }}>
@@ -1038,6 +1126,7 @@ const styles = {
   docsList: { display: 'flex', flexDirection: 'column', gap: '6px' },
   docRow: { display: 'flex', alignItems: 'center', gap: '10px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px 12px' },
   docLink: { background: 'transparent', border: 'none', color: '#1565c0', fontWeight: 600, fontSize: '13px', cursor: 'pointer', padding: 0, textAlign: 'left', flex: 1, textDecoration: 'underline' },
+  docPendingName: { flex: 1, minWidth: 0, fontSize: '13px', color: '#1f2937', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   docMeta: { fontSize: '11px', color: '#94a3b8', flexShrink: 0 },
   docDeleteBtn: { background: 'transparent', border: 'none', color: '#c62828', fontWeight: 700, fontSize: '12px', cursor: 'pointer', flexShrink: 0 },
 };

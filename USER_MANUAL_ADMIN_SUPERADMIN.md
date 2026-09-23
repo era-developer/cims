@@ -181,6 +181,15 @@ Stick the labels on before shelving.
   serials on file (Raspberry Pi, Jetson, laptops), then paste them one per
   unit, in order.
 
+**Attach the supplier's invoice.** At the bottom of the New Invoice form,
+under *Invoice Photocopy / Documents*, press **+ Attach files** and pick the
+scan or photo of the paper invoice. The files are listed while you finish the
+form and are uploaded the moment you press Save. JPEG/PNG/WEBP/HEIC or PDF, up
+to 15 MB each, 10 files at most. You can also attach or delete documents later
+by opening the invoice from the list below and using **+ Upload** there. If the
+invoice saves but an attachment fails, the message says so -- the invoice is
+still recorded and you can attach it from the invoice view.
+
 ## 4.4 Internal use (staff pulling components)
 `Inventory` -> `Internal Use`: who is taking them, an optional **Program**,
 the reason, optional session details, and the components. For each component

@@ -50,7 +50,8 @@ When adding/updating component, keep:
 - component name (consistent)
 - category/unit/location
 - stock and procured values
-- invoice number
+- invoice number (attach the invoice scan with **+ Attach files** at the bottom
+  of the form -- or later from the saved invoice)
 - vendor name
 - project/purpose
 - purchased for (for example `ERA Foundation` or `ComedK`)
