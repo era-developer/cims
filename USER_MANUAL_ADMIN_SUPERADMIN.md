@@ -110,8 +110,26 @@ Rules:
 ## 4.3 QR labels and scanning
 
 **Print labels:** `Inventory` -> `QR labels` on a component row. Tick the units,
-pick a label size (38x21, 50x30 or 70x40 mm), and `Print`. Each label carries a
-QR code, the asset tag (for example `JPN-ELEC-00012`) and the component name.
+pick a label size, and `Print`. Five sizes, smallest first:
+
+| Size | Per row | What is printed |
+|---|---|---|
+| 20 x 20 mm | 8 | QR with the asset tag under it |
+| 25 x 15 mm | 7 | QR with the asset tag beside it |
+| 38 x 21 mm | 5 | QR, tag, component name, org/serial |
+| 50 x 30 mm | 4 | same, larger |
+| 70 x 40 mm | 3 | same, largest |
+
+The two smallest are for components too small to carry a normal label -- a
+sensor, an IC, a connector, or the bag or bin it lives in. They drop the
+component name and org line because only the QR and the tag (for example
+`JPN-ELEC-00012`) fit; the QR still opens the same unit page, which names the
+component anyway.
+
+Print at **100% scale** (turn off "fit to page" / "shrink to fit" in the print
+dialog), or the millimetre sizes come out wrong. Print one test sheet and scan
+a label from it before running off a whole batch -- how small you can go
+depends on your printer and the phones in use.
 
 **The QR is a link.** Any phone camera -- no app needed -- opens the unit's
 page in CIMS. Whoever scans it signs in (if not already) and sees what their

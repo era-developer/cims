@@ -58,6 +58,8 @@ When adding/updating component, keep:
 ## 5b) QR labels and scanning
 
 - Print: `Inventory` -> `QR labels` on the component -> tick units -> Print.
+  Five sizes: 20x20 and 25x15 mm (QR + tag only, for small components),
+  38x21, 50x30, 70x40 mm. Print at 100% scale and test-scan one first.
 - New stock: save the invoice -> `Print N QR labels now` (or `QR labels for
   this invoice` on the invoice later). Per invoice line, *Unit tracking*:
   untick `Print QR labels` for bulk consumables (auto-unticks at 25+); tick

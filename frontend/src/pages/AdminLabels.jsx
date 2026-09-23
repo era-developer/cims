@@ -18,7 +18,16 @@ import BackBar from '../components/BackBar';
 // The QR encodes a link (~60 chars), so it needs a little more area than a
 // bare tag would; the tag text is the one thing that must never be cut off,
 // so it gets its own, smaller monospace size and is allowed to wrap.
+// Label stock, smallest first. `qr` is the code's printed side in mm -- the
+// thing that decides whether a phone can read it. A ~47-character unit URL is
+// a 33x33-module QR at error level M, so 11 mm is about 0.33 mm per module:
+// readable close up, and the floor for these presets. On the two smallest the
+// component name and org line are dropped and the padding tightened, because
+// only the QR and the asset tag actually fit; `stack` puts the tag under the
+// code instead of beside it.
 const SIZES = {
+  micro: { w: 20, h: 20, qr: 14, font: 3.8, tagFont: 3.8, cols: 8, pad: 0.8, gap: 0.5, stack: true, showName: false, showOrg: false, label: '20 × 20 mm — QR + tag (8 per row)' },
+  tiny: { w: 25, h: 15, qr: 11.5, font: 4.6, tagFont: 4.6, cols: 7, pad: 1, gap: 1.2, showName: false, showOrg: false, label: '25 × 15 mm — QR + tag (7 per row)' },
   small: { w: 38, h: 21, qr: 16, font: 6, tagFont: 5.2, cols: 5, label: '38 × 21 mm (5 per row)' },
   medium: { w: 50, h: 30, qr: 22, font: 7.5, tagFont: 6.8, cols: 4, label: '50 × 30 mm (4 per row)' },
   large: { w: 70, h: 40, qr: 30, font: 10, tagFont: 9, cols: 3, label: '70 × 40 mm (3 per row)' },
@@ -111,6 +120,10 @@ export default function AdminLabels() {
         <div>
           <h1 style={styles.title}>QR labels{componentName ? ` — ${componentName}` : ''}</h1>
           <p style={styles.sub}>{toPrint.length} of {assets.length} units selected. Each QR is a link to the unit's page in {APP_SHORT_NAME} — any phone camera opens it; staff and students see what their role allows.</p>
+          <p style={styles.sub}>
+            Small components? The 20 × 20 and 25 × 15 mm labels carry the QR and asset tag only.
+            Print a test sheet at 100% scale (no "fit to page") and scan one before doing a whole batch.
+          </p>
         </div>
         <div style={styles.controls}>
           <label style={styles.control}>
@@ -156,14 +169,28 @@ export default function AdminLabels() {
 
       <div className="label-sheet" style={{ ...styles.sheet, gridTemplateColumns: `repeat(${s.cols}, ${s.w}mm)` }}>
         {toPrint.map(a => (
-          <div key={a.id} className="label" style={{ ...styles.label, width: `${s.w}mm`, height: `${s.h}mm` }}>
+          <div
+            key={a.id}
+            className="label"
+            style={{
+              ...styles.label,
+              width: `${s.w}mm`,
+              height: `${s.h}mm`,
+              padding: `${s.pad ?? 1.5}mm`,
+              gap: `${s.gap ?? 2}mm`,
+              flexDirection: s.stack ? 'column' : 'row',
+              justifyContent: s.stack ? 'center' : 'flex-start',
+            }}
+          >
             <div style={{ width: `${s.qr}mm`, height: `${s.qr}mm`, flexShrink: 0 }}>
               <QRCode value={unitLabelUrl(a.asset_tag)} size={256} style={{ width: '100%', height: '100%' }} level="M" />
             </div>
-            <div style={{ ...styles.labelText, fontSize: `${s.font}pt` }}>
+            <div style={{ ...styles.labelText, fontSize: `${s.font}pt`, ...(s.stack ? styles.labelTextStacked : {}) }}>
               <div style={{ ...styles.labelTag, fontSize: `${s.tagFont}pt` }}>{a.asset_tag}</div>
-              <div style={styles.labelName}>{a.name}</div>
-              <div style={styles.labelOrg}>{APP_SHORT_NAME}{a.serial_number ? ` · SN ${a.serial_number}` : ''}</div>
+              {s.showName !== false && <div style={styles.labelName}>{a.name}</div>}
+              {s.showOrg !== false && (
+                <div style={styles.labelOrg}>{APP_SHORT_NAME}{a.serial_number ? ` · SN ${a.serial_number}` : ''}</div>
+              )}
             </div>
           </div>
         ))}
@@ -189,6 +216,7 @@ const styles = {
   sheet: { display: 'grid', gap: '3mm', padding: '6mm', background: '#fff', border: '1px solid #e3e8f2', borderRadius: '12px', justifyContent: 'start' },
   label: { display: 'flex', alignItems: 'center', gap: '2mm', padding: '1.5mm', border: '1px dashed #cbd5e1', borderRadius: '1.5mm', boxSizing: 'border-box', overflow: 'hidden', background: '#fff' },
   labelText: { display: 'flex', flexDirection: 'column', minWidth: 0, lineHeight: 1.25, color: '#111' },
+  labelTextStacked: { alignItems: 'center', textAlign: 'center', width: '100%' },
   labelTag: { fontFamily: "'DM Mono', Consolas, monospace", fontWeight: 800, wordBreak: 'break-all', lineHeight: 1.15, letterSpacing: '-0.01em' },
   labelName: { fontWeight: 600, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' },
   labelOrg: { color: '#555', fontSize: '0.85em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
