@@ -202,7 +202,23 @@ Registration flow:
 
 ## 6) Student order workflow
 
-Open `Orders`.
+Open `Orders`. Orders are listed in a **table**: order ID, student (with
+mobile, college and department), center, program/project, item count, status,
+when it was placed and the date it is due back. Click any column heading to
+sort by it, and click a row to expand the full details underneath (components,
+return tracking, purpose, remarks) with the action buttons.
+
+Above the table:
+- **Status tabs** with a live count each, plus the separate *Internal use* tab.
+- **Search** by student, order ID, college or project.
+- **Date filter**: a quick range (Today, Last 7 / 30 / 90 days) or an explicit
+  **From** / **To** pair, applied to when the order was placed. *Clear* resets
+  it. The line above the table shows how many of the total are on screen.
+- A **Review** or **Record return** button appears in the row itself for
+  orders that need one, so the common actions need no expanding.
+
+A **Return by** date shown in red and marked *overdue* means the student still
+has components past the date they promised to return them.
 
 ### 6.1 Status definitions
 - `Pending`

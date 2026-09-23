@@ -27,9 +27,11 @@ Super Admin:
 
 ## 3) Orders workflow (student requests)
 
-From `Orders`:
+From `Orders` (a sortable table -- click a heading to sort, a row to expand):
 - `Pending` -> `Approved` / `Rejected`
 - `Approved` -> `Return Requested` -> `Partially Returned` / `Returned`
+- Filter by status tab, by search, and by date (Today / 7 / 30 / 90 days, or
+  From-To). Red *overdue* in Return by = still out past the promised date.
 
 Approve = checkout: set the issuing quantity per component, then **scan** or
 **tick** exactly those units. Confirm is enabled only when every component
