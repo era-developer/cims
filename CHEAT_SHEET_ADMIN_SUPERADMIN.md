@@ -62,7 +62,9 @@ When adding/updating component, keep:
   `Record serial numbers` only when you want the maker's serials on file.
 - Internal use: `Scan QR code`, type the tag -> **Add unit**, or **pick from the
   dropdown** under the component row; Program is optional. History: **Orders -> Internal use** tab.
-- Look up any unit: `Scan` in the top bar.
+- Look up any unit: `Scan` in the top bar. More than one camera on the PC?
+  Use the **Camera** dropdown in the scanner (a virtual camera like DroidCam
+  shows a frozen image and never scans); **Retry** restarts it.
 - Returns: `Scan returned unit` marks it Good; tap `Damaged` for the rest.
 - Swap: `Scan` inside the Swap dialog picks the unit in hand.
 

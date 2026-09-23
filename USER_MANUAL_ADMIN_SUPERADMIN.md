@@ -126,6 +126,16 @@ role allows:
 **Scan button** (top bar, all roles): opens the camera inside the portal and
 goes to the same unit page. Type the tag if the camera is unavailable.
 
+**Choosing the camera.** When the PC or phone has more than one camera, a
+**Camera** dropdown appears at the top of the scanner window. This matters on
+a PC with a virtual camera installed (DroidCam, Iriun, OBS): the browser often
+hands the portal that virtual device, which shows a frozen "Start DroidCam"
+picture that never scans. Pick the real webcam from the dropdown and it is
+remembered on that computer. **Retry** restarts the camera -- use it after
+starting a phone-camera app or plugging a webcam in. If the chosen camera is
+later unplugged or busy in another app, the scanner says so and falls back to
+the default instead of staying blank.
+
 Inside workflows:
 - **Recording a return** (`Orders`, internal use): a single `Scan QR code`
   for the whole return; each scanned unit appears in the scanner window with
